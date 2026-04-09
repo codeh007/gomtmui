@@ -27,6 +27,8 @@ npm run build
 
 Deployments run from `.github/workflows/deploy.yml` on every push to `main` and on manual dispatch.
 
+Live demo: `https://gomtmui.roland007.workers.dev`
+
 Required GitHub Secrets:
 
 - `CLOUDFLARE_API_TOKEN`
