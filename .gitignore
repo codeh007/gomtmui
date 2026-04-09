@@ -10,6 +10,7 @@
 /bin/gomtm
 .vercel
 .turbo
+.open-next/
 .pytest_cache
 /har
 **/__pycache__
