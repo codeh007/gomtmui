@@ -1,0 +1,25 @@
+{
+  "name": "gomtmui",
+  "private": false,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "lint": "tsc --noEmit",
+    "deploy": "opennextjs-cloudflare build && wrangler deploy"
+  },
+  "dependencies": {
+    "next": "15.1.12",
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "@cloudflare/workers-types": "^4.20260117.0",
+    "@opennextjs/cloudflare": "^1.18.0",
+    "typescript": "^5.9.0",
+    "wrangler": "^4.80.0"
+  }
+}
