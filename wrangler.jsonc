@@ -2,6 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "gomtmui",
   "main": ".open-next/worker.js",
+  "workers_dev": true,
   "compatibility_date": "2025-11-17",
   "compatibility_flags": ["nodejs_compat"],
   "assets": {
