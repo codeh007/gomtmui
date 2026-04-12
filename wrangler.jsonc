@@ -3,6 +3,12 @@
   "name": "gomtmui",
   "main": ".open-next/worker.js",
   "workers_dev": true,
+  "routes": [
+    {
+      "pattern": "gomtmui-dev.yuepa8.com",
+      "custom_domain": true
+    }
+  ],
   "compatibility_date": "2025-11-17",
   "compatibility_flags": ["nodejs_compat"],
   "assets": {
