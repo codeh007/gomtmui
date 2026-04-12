@@ -11,7 +11,7 @@
 
 ## Migration Status
 
-- 公开仓仍在迁移中，但当前最小验收链已经收敛为可重复执行的 `lint -> build -> OpenNext build`。
+- 公开仓仍在迁移中，但当前最小验收链已经收敛为可重复执行的 `typecheck -> build -> build:worker`。
 - 构建是否通过取决于是否显式注入当前仓实际需要的 public env；仓库代码本身不再伪造占位公开配置。
 - README 只记录已经验证过的命令链与环境边界，不把未验证通过的状态表述成既成事实。
 - 仓库入口以 `src/app/` 为准，不再使用旧的根级 `app/` 目录。
@@ -20,13 +20,15 @@
 
 ```bash
 cp .env.example .env.local
-npm install
-npm run lint
-npm run build
-npm run build:worker
+bun install
+bun run typecheck
+bun run build
+bun run build:worker
 ```
 
-`cp .env.example .env.local` 是本地运行的前置步骤；示例文件只保留变量名，不包含任何真实凭据。复制后必须填写 `.env.local` 中当前构建实际需要的变量，至少包括 `NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_ANON_KEY`，以及至少一种服务端基地址来源：`NEXT_PUBLIC_SITE_URL`、`NEXT_PUBLIC_BASE_URL`、`BASE_URL`，或 `CODESPACE_NAME` + `PORT` 组合。构建期不会在代码中伪造这些值，缺少必需 env 时 `npm run build` 与 `npm run build:worker` 会直接失败。
+`cp .env.example .env.local` 是本地运行的前置步骤；示例文件只保留变量名，不包含任何真实凭据。复制后必须填写 `.env.local` 中当前构建实际需要的变量，至少包括 `NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_ANON_KEY`，以及至少一种服务端基地址来源：`NEXT_PUBLIC_SITE_URL`、`NEXT_PUBLIC_BASE_URL`、`BASE_URL`，或 `CODESPACE_NAME` + `PORT` 组合。构建期不会在代码中伪造这些值，缺少必需 env 时 `bun run build` 与 `bun run build:worker` 会直接失败。
+
+公开仓当前采用 `bun` 作为包管理器，并使用 `bun run tsgo --noEmit` 作为显式类型检查入口。`next build` 已关闭重复的内建类型校验，避免在大体量依赖图上重复做第二次类型检查；因此标准验收顺序必须先跑 `bun run typecheck`，再跑 `bun run build`。
 
 ## Sensitive Secrets
 
@@ -87,8 +89,8 @@ wrangler secret put CLOUDFLARE_API_TOKEN
 
 ## Verification
 
-- 本地最小验收链：`npm ci`、`npm run lint`、`npm run build`、`npx opennextjs-cloudflare build --skipNextBuild`
-- GitHub Actions `CI` 会按同样顺序执行 checkout、setup-node、`npm ci`、lint、Next build 与 `opennextjs-cloudflare build --skipNextBuild`
+- 本地最小验收链：`bun install --frozen-lockfile`、`bun run typecheck`、`bun run build`、`bun run build:worker`
+- GitHub Actions `CI` 会按同样顺序执行 checkout、setup-node、setup-bun、`bun install --frozen-lockfile`、typecheck、Next build 与 `opennextjs-cloudflare build --skipNextBuild`
 - GitHub Actions `Deploy` 在上述校验链通过后，继续执行 `wrangler deploy --secrets-file ... --var ...`
 - 部署工作流中的敏感值来自 GitHub Secrets，公开运行时配置与 Cloudflare 标识符来自 GitHub Variables
 
