@@ -75,11 +75,11 @@ wrangler secret put CLOUDFLARE_API_TOKEN
 
 `BASE_URL` 用于显式指定服务端基地址；若未提供，则只有在同时提供 `CODESPACE_NAME` 与 `PORT` 时才会自动拼出 Codespaces URL，否则运行时会直接报错。`.env.example` 仅包含当前仓库实际读取且需要由开发者显式提供的环境变量；像 `CODESPACE_NAME` 这类平台注入变量不放入示例文件，但仍由运行时代码处理。
 
-## Vendored SDK
+## SDK Dependency
 
-- 当前仓库临时通过 `vendor/mtmsdk/` 挂载 `mtmsdk`，原因是上游公开包 `mtmsdk@0.0.52` 仍包含 `catalog:` 依赖，无法被 `npm install` 直接消费。
-- `vendor/mtmsdk/` 来自 `mtmsdk-0.0.52.tgz` 的最小可安装重打包，只保留当前公开仓实际需要的 `dist/` 产物与最小 `package.json`。
-- 后续若上游公开包修复 `catalog:` 依赖，可优先移除 `vendor/mtmsdk/`，回归正常 npm 依赖。
+- 当前公开仓直接使用 npm 发布版 `mtmsdk`。
+- `mtmsdk` 需要先在主仓 `/workspace/gomtm` 中通过 `gomtm publish --filter mtmsdk` 完成正式发布，再由公开仓按普通 npm 版本安装。
+- 遇到类似共享包依赖问题时，优先修正主仓发布真相并重新发布，而不是回退到 `file:` 或 vendored 本地包方案。
 
 ## Deployment Note
 
