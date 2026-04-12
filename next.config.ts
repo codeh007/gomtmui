@@ -1,20 +1,13 @@
 import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
 import type { NextConfig } from "next";
 
+const mode = process.env.BUILD_MODE ?? "standalone";
 const distDir = process.env.NEXT_BUILD_OUTPUT ?? ".next";
 const isNextDev = process.argv.slice(2).includes("dev");
 
 const nextConfig: NextConfig = {
-  reactStrictMode: true,
   distDir,
-  output: "standalone",
-  transpilePackages: ["mtmsdk", "mtxuilib"],
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-  typescript: {
-    ignoreBuildErrors: true,
-  },
+  output: mode === "standalone" ? "standalone" : undefined,
   webpack: (config, { isServer }) => {
     if (!isServer) {
       config.resolve.fallback = {
