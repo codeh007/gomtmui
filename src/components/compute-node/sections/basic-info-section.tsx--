@@ -1,0 +1,67 @@
+"use client";
+
+import { Box, Laptop, Server } from "lucide-react";
+import { Field, FieldError, FieldLabel } from "mtxuilib/ui/field";
+import { Input } from "mtxuilib/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "mtxuilib/ui/select";
+import type { ComputeNodeFormApi, HostUpsertReq } from "../schema";
+
+interface BasicInfoSectionProps {
+  form: ComputeNodeFormApi;
+}
+
+/**
+ * 基础信息部分：节点名称和资源类型选择
+ */
+export function BasicInfoSection({ form }: BasicInfoSectionProps) {
+  return (
+    <div className="space-y-4">
+      <form.Field name="name">
+        {(field) => (
+          <Field>
+            <FieldLabel>节点名称 (标识)</FieldLabel>
+            <Input
+              placeholder="My-Server-Instance"
+              name={field.name}
+              value={field.state.value}
+              onBlur={field.handleBlur}
+              onChange={(e) => field.handleChange(e.target.value)}
+            />
+            <FieldError errors={field.state.meta.errors} />
+          </Field>
+        )}
+      </form.Field>
+
+      <form.Field name="provider">
+        {(field) => (
+          <Field>
+            <FieldLabel>资源类型</FieldLabel>
+            <Select value={field.state.value} onValueChange={(v) => field.handleChange(v as HostUpsertReq["provider"])}>
+              <SelectTrigger>
+                <SelectValue placeholder="选择类型" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ssh">
+                  <div className="flex items-center gap-2">
+                    <Server className="size-4" /> VPS (SSH)
+                  </div>
+                </SelectItem>
+                <SelectItem value="huggingface">
+                  <div className="flex items-center gap-2">
+                    <Box className="size-4" /> HuggingFace Space
+                  </div>
+                </SelectItem>
+                <SelectItem value="local">
+                  <div className="flex items-center gap-2">
+                    <Laptop className="size-4" /> Local Machine
+                  </div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <FieldError errors={field.state.meta.errors} />
+          </Field>
+        )}
+      </form.Field>
+    </div>
+  );
+}

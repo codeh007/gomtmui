@@ -1,0 +1,38 @@
+"use client";
+
+import { useQueryClient } from "@tanstack/react-query";
+import { useSupabaseBrowser } from "mtmsdk/supabase/context";
+import { getRpcQueryKey } from "mtmsdk/supabase/use-sb-query/use-rpc-query";
+import { useEffect } from "react";
+
+export function useCloudAccountSubscription() {
+  const sb = useSupabaseBrowser();
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const channel = sb
+      .channel("cloud_account_changes")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "cloud_accounts",
+        },
+        (_payload) => {
+          // Invalidate list query and single item queries
+          void queryClient.invalidateQueries({
+            queryKey: getRpcQueryKey("cloud_account_list_cursor"),
+          });
+          void queryClient.invalidateQueries({
+            queryKey: getRpcQueryKey("cloud_account_get"),
+          });
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void sb.removeChannel(channel);
+    };
+  }, [sb, queryClient]);
+}

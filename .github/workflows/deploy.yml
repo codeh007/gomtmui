@@ -20,7 +20,18 @@ jobs:
     environment: production
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_ZONE_ID: ${{ vars.CLOUDFLARE_ZONE_ID }}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+      NEXT_PUBLIC_SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL }}
+      NEXT_PUBLIC_BASE_URL: ${{ vars.NEXT_PUBLIC_BASE_URL }}
+      NEXT_PUBLIC_GITHUB_CLIENT_ID: ${{ vars.NEXT_PUBLIC_GITHUB_CLIENT_ID }}
+      NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${{ vars.NEXT_PUBLIC_GOOGLE_CLIENT_ID }}
+      NEXT_PUBLIC_QWEN_CLIENT_ID: ${{ vars.NEXT_PUBLIC_QWEN_CLIENT_ID }}
+      NEXT_PUBLIC_LANGFUSE_BASE_URL: ${{ vars.NEXT_PUBLIC_LANGFUSE_BASE_URL }}
+      BASE_URL: ${{ vars.BASE_URL }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -41,10 +52,35 @@ jobs:
         run: npm run build
 
       - name: Build OpenNext worker bundle
-        run: npx opennextjs-cloudflare build
+        run: npx opennextjs-cloudflare build --skipNextBuild
+
+      - name: Prepare runtime secrets file
+        run: |
+          cat <<EOF > .wrangler-secrets.env
+          SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+          CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN}
+          EOF
 
       - name: Deploy to Cloudflare Workers
-        run: npx wrangler deploy
+        run: >-
+          npx wrangler deploy
+          --secrets-file .wrangler-secrets.env
+          --var NEXT_PUBLIC_SUPABASE_URL:${NEXT_PUBLIC_SUPABASE_URL}
+          --var NEXT_PUBLIC_SUPABASE_ANON_KEY:${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+          --var NEXT_PUBLIC_SITE_URL:${NEXT_PUBLIC_SITE_URL}
+          --var NEXT_PUBLIC_BASE_URL:${NEXT_PUBLIC_BASE_URL}
+          --var NEXT_PUBLIC_GITHUB_CLIENT_ID:${NEXT_PUBLIC_GITHUB_CLIENT_ID}
+          --var NEXT_PUBLIC_GOOGLE_CLIENT_ID:${NEXT_PUBLIC_GOOGLE_CLIENT_ID}
+          --var NEXT_PUBLIC_QWEN_CLIENT_ID:${NEXT_PUBLIC_QWEN_CLIENT_ID}
+          --var NEXT_PUBLIC_LANGFUSE_BASE_URL:${NEXT_PUBLIC_LANGFUSE_BASE_URL}
+          --var BASE_URL:${BASE_URL}
+          --var CLOUDFLARE_ACCOUNT_ID:${CLOUDFLARE_ACCOUNT_ID}
+          --var CLOUDFLARE_ZONE_ID:${CLOUDFLARE_ZONE_ID}
+          --keep-vars
+
+      - name: Remove runtime secrets file
+        if: always()
+        run: rm -f .wrangler-secrets.env
 
       - name: Write deployment summary
         run: |
@@ -54,5 +90,6 @@ jobs:
             echo '- Worker: `gomtmui`'
             echo '- Trigger: `${{ github.event_name }}`'
             echo '- Branch: `${{ github.ref_name }}`'
-            echo '- Credentials source: `GitHub Secrets`'
+            echo '- Runtime secrets delivery: `wrangler deploy --secrets-file` from GitHub Secrets'
+            echo '- Public runtime config source: `wrangler deploy --var` from GitHub Variables'
           } >> "$GITHUB_STEP_SUMMARY"

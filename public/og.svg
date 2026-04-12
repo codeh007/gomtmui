@@ -1,0 +1,18 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="630" fill="#09090B"/>
+  <path d="M0 0H1200V630H0V0Z" fill="url(#paint0_radial)"/>
+  <g opacity="0.4">
+    <circle cx="1100" cy="100" r="200" fill="#F97316" filter="blur(100px)"/>
+    <circle cx="100" cy="530" r="200" fill="#EA580C" filter="blur(100px)"/>
+  </g>
+  <rect x="540" y="255" width="120" height="120" rx="24" fill="#F97316"/>
+  <path d="M620 320H590V330H610V340H560V290H620V320Z" fill="white"/>
+  <text x="600" y="450" text-anchor="middle" fill="white" font-family="sans-serif" font-size="48" font-weight="bold">GoMTM</text>
+  <text x="600" y="500" text-anchor="middle" fill="#71717A" font-family="sans-serif" font-size="24">Modular Multi-tenant AI Agent Platform</text>
+  <defs>
+    <radialGradient id="paint0_radial" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" transform="translate(600 315) rotate(90) scale(400 800)">
+      <stop stop-color="#18181B"/>
+      <stop offset="1" stop-color="#09090B"/>
+    </radialGradient>
+  </defs>
+</svg>

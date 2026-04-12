@@ -1,0 +1,78 @@
+import type { ReactFormExtendedApi } from "@tanstack/react-form";
+import { z } from "zod";
+
+/**
+ * 共享的 Zod Schema 定义
+ * 用于 compute-node-form 及其子组件的验证
+ */
+
+// 基础字段验证
+export const nodeNameSchema = z.string().min(2, "名称至少 2 个字符");
+export const providerSchema = z.enum(["ssh", "huggingface", "local"]);
+
+// SSH 字段验证
+export const sshHostSchema = z.string().min(1, "SSH 模式下必须填写主机名/IP");
+export const sshPortSchema = z.number().min(1, "端口必须 ≥ 1").max(65535, "端口必须 ≤ 65535");
+export const sshUsernameSchema = z.string().min(1, "用户名不能为空");
+export const sshAuthSecretSchema = z.string().optional();
+
+// HuggingFace 字段验证
+export const hfSpaceIdSchema = z.string().min(1, "请输入 Space ID (如 user/repo)");
+export const hfTokenSchema = z.string().optional();
+
+// 完整表单 Schema（带条件验证）
+export const hostUpsertSchema = z
+  .object({
+    id: z.string().optional(),
+    name: nodeNameSchema,
+    provider: providerSchema,
+    host: z.string().optional().nullable(),
+    port: sshPortSchema,
+    username: sshUsernameSchema,
+    auth_secret: sshAuthSecretSchema,
+    hf_space_id: z.string().optional(),
+    hf_token: hfTokenSchema,
+  })
+  .superRefine((data, ctx) => {
+    if (data.provider === "ssh") {
+      if (!data.host) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "SSH 模式下必须填写主机名/IP",
+          path: ["host"],
+        });
+      }
+      // 新建节点时必须提供认证凭据
+      if (!data.id && (!data.auth_secret || data.auth_secret.trim() === "")) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "新建节点必须提供密码或私钥",
+          path: ["auth_secret"],
+        });
+      }
+    }
+    if (data.provider === "huggingface") {
+      if (!data.hf_space_id) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "请输入 Space ID (如 user/repo)",
+          path: ["hf_space_id"],
+        });
+      }
+    }
+  });
+
+export function detectAuthType(authSecret: string | undefined): "key" | "password" {
+  if (!authSecret) return "password";
+  if (authSecret.includes("BEGIN") && authSecret.includes("PRIVATE KEY")) {
+    return "key";
+  }
+  return "password";
+}
+
+export type HostUpsertReq = z.infer<typeof hostUpsertSchema>;
+
+export type ComputeNodeFormApi = Pick<
+  ReactFormExtendedApi<HostUpsertReq, any, any, any, any, any, any, any, any, any, any, any>,
+  "Field" | "Subscribe"
+>;

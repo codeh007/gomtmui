@@ -1,0 +1,91 @@
+"use client";
+
+import { PasswordInput } from "mtxuilib/mt/inputs/password-input";
+import { Field, FieldError, FieldLabel } from "mtxuilib/ui/field";
+import { Input } from "mtxuilib/ui/input";
+import type { ComputeNodeFormApi } from "../schema";
+
+interface SshConfigSectionProps {
+  form: ComputeNodeFormApi;
+}
+
+/**
+ * SSH 配置部分：主机、端口、用户名、认证凭据
+ */
+export function SshConfigSection({ form }: SshConfigSectionProps) {
+  return (
+    <div className="space-y-4 rounded-lg border p-4 shadow-sm bg-card/50">
+      <div className="flex flex-col md:flex-row gap-4">
+        <form.Field name="host">
+          {(field) => (
+            <Field className="flex-1">
+              <FieldLabel>Host (IP/Domain)</FieldLabel>
+              <Input
+                placeholder="1.2.3.4 or example.com"
+                name={field.name}
+                value={field.state.value || ""}
+                onBlur={field.handleBlur}
+                onChange={(e) => field.handleChange(e.target.value)}
+              />
+              <FieldError errors={field.state.meta.errors} />
+            </Field>
+          )}
+        </form.Field>
+
+        <form.Field name="port">
+          {(field) => (
+            <Field className="w-full md:w-32">
+              <FieldLabel>端口</FieldLabel>
+              <Input
+                type="number"
+                name={field.name}
+                value={field.state.value}
+                onBlur={field.handleBlur}
+                onChange={(e) => field.handleChange(Number(e.target.value))}
+              />
+              <FieldError errors={field.state.meta.errors} />
+            </Field>
+          )}
+        </form.Field>
+      </div>
+
+      <form.Field name="username">
+        {(field) => (
+          <Field>
+            <FieldLabel>SSH 用户名</FieldLabel>
+            <Input
+              placeholder="root"
+              name={field.name}
+              value={field.state.value || ""}
+              onBlur={field.handleBlur}
+              onChange={(e) => field.handleChange(e.target.value)}
+            />
+            <FieldError errors={field.state.meta.errors} />
+          </Field>
+        )}
+      </form.Field>
+
+      <form.Field name="auth_secret">
+        {(field) => (
+          <Field>
+            <FieldLabel>认证凭据 (密码 或 私钥)</FieldLabel>
+            <PasswordInput
+              isTextarea={true}
+              placeholder="输入密码，如果不需要修改请保持 dummy_password"
+              className="font-mono text-xs min-h-[5rem] max-h-64 leading-relaxed resize-y w-full break-all"
+              name={field.name}
+              value={field.state.value || ""}
+              onBlur={field.handleBlur}
+              onChange={(e) => field.handleChange(e.target.value)}
+            />
+            <p className="text-[11px] text-muted-foreground mt-1 text-balance">
+              您可以输入密码。由于无法直接显示之前保存的密码，所以默认显示 <code>dummy_password</code>
+              。如更换为私钥请直接粘贴内容。
+            </p>
+            <FieldError errors={field.state.meta.errors} />
+          </Field>
+        )}
+      </form.Field>
+    </div>
+  );
+}

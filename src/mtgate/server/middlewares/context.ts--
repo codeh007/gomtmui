@@ -1,0 +1,11 @@
+import type { Hono } from "hono";
+import type { AppContext } from "../../types";
+import { setCfCtx, setCfEnv } from "../context";
+
+export function configureContextMiddleware(app: Hono<AppContext>) {
+  app.use(async (c, next) => {
+    setCfCtx(c as any);
+    setCfEnv(c.env);
+    await next();
+  });
+}

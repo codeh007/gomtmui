@@ -1,0 +1,81 @@
+"use client";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools/production";
+import { ReactQueryStreamedHydration } from "@tanstack/react-query-next-experimental";
+import { client } from "mtmsdk/sbmng/client.gen";
+import { useRpcQuery } from "mtmsdk/supabase/use-sb-query/use-rpc-query";
+import { OnlyDebug } from "mtxuilib/mt/DebugValue";
+import { createContext, type PropsWithChildren, useContext, useEffect, useState } from "react";
+import { z } from "zod";
+import { CardSkeleton } from "@/components/common/list-skeleton";
+import { tunnelFetch } from "@/lib/tunnel-fetch";
+import { getQueryClient } from "../lib/get-query-client";
+
+type SupabaseMngContextType = {
+  pat: string;
+  setPat: (pat: string) => void;
+};
+
+const SupabaseMngContext = createContext<SupabaseMngContextType | null>(null);
+
+interface SupabaseMngProviderProps extends PropsWithChildren {}
+
+const zSysConfigValue = z.string().nullable();
+
+export const SupabaseMngProvider = ({ children }: SupabaseMngProviderProps) => {
+  const queryClient = getQueryClient();
+
+  const rpcQuery = useRpcQuery("sys_config_get", { p_key: "supabase_pat" }, { schema: zSysConfigValue });
+
+  const [localPat, setLocalPat] = useState("");
+
+  useEffect(() => {
+    if (rpcQuery.data) {
+      setLocalPat(rpcQuery.data as string);
+    }
+  }, [rpcQuery.data]);
+
+  useEffect(() => {
+    if (localPat) {
+      client.setConfig({
+        baseUrl: "https://api.supabase.com",
+        headers: {
+          Authorization: `Bearer ${localPat}`,
+        },
+        fetch: tunnelFetch,
+      });
+    }
+  }, [localPat]);
+
+  if (rpcQuery.isLoading) {
+    return (
+      <div className="container mx-auto p-6 space-y-6">
+        <div className="flex flex-col space-y-2 mb-8">
+          <div className="h-8 w-48 bg-slate-100 dark:bg-slate-800 rounded animate-pulse" />
+          <div className="h-4 w-96 bg-slate-100 dark:bg-slate-800 rounded animate-pulse" />
+        </div>
+        <CardSkeleton />
+        <CardSkeleton />
+        <CardSkeleton />
+      </div>
+    );
+  }
+  return (
+    <SupabaseMngContext.Provider value={{ pat: localPat, setPat: setLocalPat }}>
+      <QueryClientProvider client={queryClient}>
+        <ReactQueryStreamedHydration>{children}</ReactQueryStreamedHydration>
+        <OnlyDebug>
+          <ReactQueryDevtools />
+        </OnlyDebug>
+      </QueryClientProvider>
+    </SupabaseMngContext.Provider>
+  );
+};
+
+export function useSupabaseMng() {
+  const context = useContext(SupabaseMngContext);
+  if (!context) {
+    throw new Error("useSupabaseMng must be used within a SupabaseMngProvider");
+  }
+  return context;
+}

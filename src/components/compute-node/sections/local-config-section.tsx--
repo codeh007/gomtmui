@@ -1,0 +1,25 @@
+"use client";
+
+/**
+ * 本地节点配置说明部分
+ */
+export function LocalConfigSection() {
+  return (
+    <div className="p-4 text-sm text-muted-foreground bg-card rounded-lg border border-dashed border-primary/20">
+      <p className="font-semibold text-primary mb-2 text-xs">本地节点配置说明：</p>
+      <div className="space-y-2 text-xs">
+        <p>请在你的本地机器执行以下步骤：</p>
+        <ol className="list-decimal list-inside space-y-1 ml-2">
+          <li>安装 gomtm 命令行工具</li>
+          <li>
+            运行启动命令：
+            <code className="block mt-1 bg-black/5 dark:bg-white/5 p-2 rounded text-[10px] font-mono break-all leading-normal">
+              gomtm server --instance-id=YOUR_INSTANCE_ID
+            </code>
+          </li>
+          <li>本地节点启动后会自动上报到云端，无需手动添加。</li>
+        </ol>
+      </div>
+    </div>
+  );
+}

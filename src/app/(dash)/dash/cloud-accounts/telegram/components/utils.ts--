@@ -1,0 +1,61 @@
+import type { Query } from "@tanstack/react-query";
+import type { CloudAccountRecord } from "@/components/cloud-account/schemas";
+import type { LoginStep } from "./types";
+
+export function deriveLoginStep(account: CloudAccountRecord | undefined): LoginStep {
+  if (!account) return "pending";
+
+  const metadata = (account.metadata || {}) as Record<string, any>;
+  const metaStep = metadata.telegram_login_step as LoginStep | undefined;
+
+  if (metaStep) {
+    return metaStep;
+  }
+
+  // Fallback based on status
+  switch (account.status) {
+    case "pending":
+      return "pending";
+    case "active":
+      return "success";
+    case "token_expired":
+    case "needs_reauth":
+      return "failed";
+    // other statuses: quota_exceeded, suspended, disabled -> failed or specific page
+    default:
+      // If no metadata and status Unknown, default to pending
+      return "pending";
+  }
+}
+
+export function getFriendlyErrorMessage(msg: string | null | undefined): string | null {
+  if (!msg) return null;
+  if (msg.includes("FLOOD_WAIT")) {
+    const seconds = msg.match(/FLOOD_WAIT_(\d+)/)?.[1];
+    return seconds
+      ? `Too many attempts. Please wait ${seconds} seconds before trying again.`
+      : "Too many attempts. Please wait a while.";
+  }
+  if (msg.includes("PHONE_NUMBER_INVALID")) return "The phone number you entered is invalid.";
+  if (msg.includes("PHONE_CODE_INVALID")) return "The verification code is invalid.";
+  if (msg.includes("PHONE_CODE_EXPIRED")) return "The verification code has expired.";
+  if (msg.includes("PASSWORD_HASH_INVALID")) return "The password you entered is incorrect.";
+  if (msg.includes("SESSION_PASSWORD_NEEDED")) return "Two-Step Verification is enabled.";
+  return msg;
+}
+
+export function getRefetchInterval(query: Query): number | false {
+  const data = query.state.data as CloudAccountRecord[] | undefined;
+  const acct = data?.[0];
+  const status = acct?.status;
+
+  const meta = acct?.metadata as Record<string, any> | undefined;
+  const loginStep = meta?.telegram_login_step;
+
+  // Stop polling if active and fully engaged (info fetched, or success)
+  if (status === "active" && (!loginStep || loginStep === "success")) {
+    return 5000;
+  }
+  // Poll every second during login flow
+  return 1000;
+}

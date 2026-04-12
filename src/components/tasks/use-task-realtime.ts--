@@ -1,0 +1,34 @@
+import { useQueryClient } from "@tanstack/react-query";
+import { useSupabaseBrowser } from "mtmsdk/supabase/context";
+import { getRpcQueryKey } from "mtmsdk/supabase/use-sb-query/use-rpc-query";
+import { useEffect } from "react";
+
+export function useTaskRealtime() {
+  const sb = useSupabaseBrowser();
+  const queryClient = useQueryClient();
+  const tableName = "tasks";
+  const rpcName = "task_list_cursor";
+
+  useEffect(() => {
+    const channel = sb
+      .channel(`${tableName}_realtime`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: tableName,
+        },
+        () => {
+          void queryClient.invalidateQueries({
+            queryKey: getRpcQueryKey(rpcName),
+          });
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void sb.removeChannel(channel);
+    };
+  }, [sb, queryClient, tableName, rpcName]);
+}

@@ -1,0 +1,26 @@
+import { z } from "zod";
+
+export const ScriptListItemSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  description: z.string().nullable(),
+  file_path: z.string(),
+  created_at: z.string(),
+  updated_at: z.string(),
+  total_count: z.number(),
+});
+
+export const ScriptDetailSchema = ScriptListItemSchema.omit({ total_count: true }).extend({
+  content: z.string(),
+});
+
+export type ScriptListItem = z.infer<typeof ScriptListItemSchema>;
+
+export type ScriptDetailItem = z.infer<typeof ScriptDetailSchema>;
+
+export interface ScriptFormValues {
+  title: string;
+  description: string;
+  file_path: string;
+  content: string;
+}

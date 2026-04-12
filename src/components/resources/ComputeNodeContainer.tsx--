@@ -1,0 +1,59 @@
+"use client";
+
+import { Loader2 } from "lucide-react";
+import { useRpcQuery } from "mtmsdk/supabase/use-sb-query/use-rpc-query";
+import { computeNodeListItemSchema } from "mtmsdk/types";
+import { z } from "zod";
+import { ComputeNodeFormView } from "@/components/compute-node/compute-node-form-view";
+import { type HostUpsertReq, providerSchema } from "@/components/compute-node/schema";
+import type { ResourceViewProps } from "./resource-registry";
+
+export function ComputeNodeContainer({ resourceId, onSuccess, onCancel }: ResourceViewProps) {
+  const { data, error, isLoading } = useRpcQuery(
+    "compute_node_get",
+    {
+      p_id: resourceId || "",
+    },
+    {
+      enabled: !!resourceId,
+      refetchOnWindowFocus: false,
+      schema: z.array(computeNodeListItemSchema).transform((rows) => {
+        const row = rows?.[0];
+        if (!row) {
+          return undefined;
+        }
+
+        const parsedProvider = providerSchema.safeParse(row.provider);
+        const provider = parsedProvider.success ? parsedProvider.data : "ssh";
+
+        return {
+          id: row.id,
+          name: row.name,
+          provider,
+          host: row.host,
+          port: row.port,
+          ...(row.username ? { username: row.username } : {}),
+          ...(row.auth_secret ? { auth_secret: row.auth_secret } : {}),
+        } satisfies Partial<HostUpsertReq>;
+      }),
+    },
+  );
+
+  if (isLoading && resourceId) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="animate-spin text-muted-foreground size-8" />
+      </div>
+    );
+  }
+
+  if (error && resourceId) {
+    return (
+      <div className="p-4 border border-destructive/20 bg-destructive/5 rounded text-destructive text-sm m-4">
+        Failed to load compute node data: {error.message}
+      </div>
+    );
+  }
+
+  return <ComputeNodeFormView defaultValues={data} onSuccess={onSuccess} onCancel={onCancel} />;
+}

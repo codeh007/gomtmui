@@ -1,0 +1,55 @@
+"use client";
+
+import { Field, FieldDescription, FieldError, FieldLabel } from "mtxuilib/ui/field";
+import { Input } from "mtxuilib/ui/input";
+import type { ComputeNodeFormApi } from "../schema";
+
+interface HuggingFaceConfigSectionProps {
+  form: ComputeNodeFormApi;
+}
+
+/**
+ * HuggingFace 配置部分：Space ID 和 API Token
+ */
+export function HuggingFaceConfigSection({ form }: HuggingFaceConfigSectionProps) {
+  return (
+    <div className="space-y-4 rounded-lg border p-4 shadow-sm bg-card/50">
+      <form.Field name="hf_space_id">
+        {(field) => (
+          <Field>
+            <FieldLabel>Space ID (User/Repo)</FieldLabel>
+            <Input
+              placeholder="username/my-space-name"
+              name={field.name}
+              value={field.state.value || ""}
+              onBlur={field.handleBlur}
+              onChange={(e) => field.handleChange(e.target.value)}
+            />
+            <FieldDescription className="text-xs">
+              确保该 Space 已配置 Dockerfile 并且包含 MTM_TOKEN 环境变量。
+            </FieldDescription>
+            <FieldError errors={field.state.meta.errors} />
+          </Field>
+        )}
+      </form.Field>
+
+      <form.Field name="hf_token">
+        {(field) => (
+          <Field>
+            <FieldLabel>HF API Token (Write 权限)</FieldLabel>
+            <Input
+              type="password"
+              placeholder="hf_..."
+              name={field.name}
+              value={field.state.value || ""}
+              onBlur={field.handleBlur}
+              onChange={(e) => field.handleChange(e.target.value)}
+            />
+            <FieldDescription className="text-xs">用于重启 Space 或注入 Secret (可选)。</FieldDescription>
+            <FieldError errors={field.state.meta.errors} />
+          </Field>
+        )}
+      </form.Field>
+    </div>
+  );
+}

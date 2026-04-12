@@ -1,0 +1,89 @@
+"use client";
+
+import { Loader2, RefreshCw } from "lucide-react";
+import { cn } from "mtxuilib/lib/utils";
+import { Button } from "mtxuilib/ui/button";
+import { useEffect, useRef, useState } from "react";
+
+interface KasmVncDisplayProps {
+	url: string;
+	className?: string;
+	autoConnect?: boolean;
+	viewOnly?: boolean;
+	// KasmVNC 特有参数：remote (服务器自适应浏览器大小) 或 scale (浏览器拉伸适应服务器)
+	resizeMode?: "remote" | "scale" | "off";
+}
+
+export function KasmVncDisplay({
+	url,
+	className,
+	autoConnect = true,
+	viewOnly = false,
+	resizeMode = "remote",
+}: KasmVncDisplayProps) {
+	const iframeRef = useRef<HTMLIFrameElement>(null);
+	const [isLoading, setIsLoading] = useState(true);
+	const [activeUrl, setActiveUrl] = useState("");
+	useEffect(() => {
+		if (!url) return;
+		const urlObj = new URL(url);
+		if (autoConnect) urlObj.searchParams.set("autoconnect", "true");
+		if (viewOnly) urlObj.searchParams.set("view_only", "true");
+
+		// resize: remote 让服务器分辨率随浏览器窗口变化 (最佳体验)
+		urlObj.searchParams.set("resize", resizeMode);
+		urlObj.searchParams.set("audio", "1");
+
+		// 隐藏 Kasm 侧边栏 (可选，看需求)
+		// urlObj.searchParams.set('show_control_bar', 'false')
+
+		setActiveUrl(urlObj.toString());
+		setIsLoading(true);
+	}, [url, autoConnect, viewOnly, resizeMode]);
+
+	const handleReload = () => {
+		if (iframeRef.current) {
+			setIsLoading(true);
+			iframeRef.current.src = activeUrl;
+		}
+	};
+
+	if (!url) {
+		return (
+			<div
+				className={cn(
+					"flex h-full w-full items-center justify-center bg-gray-100 text-gray-500 rounded-md border border-dashed",
+					className,
+				)}
+			>
+				请输入 VNC 地址以开始连接
+			</div>
+		);
+	}
+
+	return (
+		<div className={cn("relative flex flex-col h-full w-full overflow-hidden rounded-md border bg-black", className)}>
+			<div className="absolute top-2 right-2 z-10 flex gap-2 opacity-0 hover:opacity-100 transition-opacity">
+				<Button size="icon" variant="secondary" onClick={handleReload} title="重载画面">
+					<RefreshCw className="h-4 w-4" />
+				</Button>
+			</div>
+
+			{isLoading && (
+				<div className="absolute inset-0 z-0 flex items-center justify-center bg-gray-900/50 text-white">
+					<Loader2 className="h-8 w-8 animate-spin" />
+				</div>
+			)}
+
+			<iframe
+				title="Kasm VNC Display"
+				ref={iframeRef}
+				src={activeUrl}
+				className="h-full w-full border-0"
+				allow="clipboard-read; clipboard-write; autoplay; fullscreen; microphone; camera"
+				onLoad={() => setIsLoading(false)}
+				// 允许全屏、允许剪贴板同步
+			/>
+		</div>
+	);
+}

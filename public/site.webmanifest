@@ -1,0 +1,25 @@
+{
+	"name": "GoMTM",
+	"short_name": "GoMTM",
+	"description": "GoMTM - 自动化聊天等功能。",
+	"start_url": "/",
+	"display": "standalone",
+	"background_color": "#ffffff",
+	"theme_color": "#ffffff",
+	"orientation": "portrait-primary",
+	"icons": [
+		{
+			"src": "/favicon.ico",
+			"sizes": "32x32",
+			"type": "image/x-icon"
+		},
+		{
+			"src": "/favicon.svg",
+			"sizes": "any",
+			"type": "image/svg+xml"
+		}
+	],
+	"categories": ["productivity", "business", "utilities"],
+	"lang": "zh-CN",
+	"dir": "ltr"
+}

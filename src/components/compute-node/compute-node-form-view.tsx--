@@ -1,0 +1,316 @@
+"use client";
+
+import { useForm } from "@tanstack/react-form";
+import { useQueryClient } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
+import { useRpcMutation } from "mtmsdk/supabase/use-sb-query/use-rpc-mutation";
+import { getRpcQueryKey, type RPCFunctionArgs } from "mtmsdk/supabase/use-sb-query/use-rpc-query";
+import { PasswordInput } from "mtxuilib/mt/inputs/password-input";
+import { Button } from "mtxuilib/ui/button";
+import { FieldError } from "mtxuilib/ui/field";
+import { Input } from "mtxuilib/ui/input";
+import { useErrorHandler } from "@/hooks/use-error-handler";
+import { type HostUpsertReq, hostUpsertSchema } from "./schema";
+import { BasicInfoSection } from "./sections/basic-info-section";
+import { HuggingFaceConfigSection } from "./sections/huggingface-config-section";
+import { LocalConfigSection } from "./sections/local-config-section";
+import { SshConfigSection } from "./sections/ssh-config-section";
+
+export interface ComputeNodeFormViewProps {
+  defaultValues?: Partial<HostUpsertReq>;
+  onSuccess?: (record?: unknown) => void;
+  onCancel?: () => void;
+  isInline?: boolean;
+}
+
+export const ComputeNodeFormView = ({ defaultValues, onSuccess, onCancel, isInline }: ComputeNodeFormViewProps) => {
+  const queryClient = useQueryClient();
+  const { handleError } = useErrorHandler();
+
+  const upsertMutation = useRpcMutation("compute_node_upsert", {
+    onSuccess: async (result) => {
+      if (result.error) {
+        handleError(result.error, { title: "保存失败", fallbackMessage: "无法保存节点配置" });
+        return;
+      }
+      await queryClient.invalidateQueries({ queryKey: getRpcQueryKey("compute_node_list") });
+      await queryClient.invalidateQueries({ queryKey: getRpcQueryKey("resource_list") });
+      const data = result.data;
+      const record = Array.isArray(data) ? data[0] : data;
+      onSuccess?.(record);
+    },
+    onError: (error) => {
+      handleError(error, { title: "保存失败", fallbackMessage: "无法保存节点配置" });
+    },
+  });
+
+  const formDefaultValues: HostUpsertReq = {
+    id: defaultValues?.id,
+    name: defaultValues?.name || "",
+    provider: defaultValues?.provider || "ssh",
+    host: defaultValues?.host || "",
+    port: defaultValues?.port || 22,
+    username: defaultValues?.username || "root",
+    auth_secret: defaultValues?.provider === "ssh" ? (defaultValues?.auth_secret ?? "") : "",
+    hf_space_id: defaultValues?.provider === "huggingface" ? defaultValues?.host || "" : "",
+    hf_token:
+      defaultValues?.hf_token || (defaultValues?.provider === "huggingface" ? defaultValues?.auth_secret || "" : ""),
+  };
+
+  const form = useForm({
+    defaultValues: formDefaultValues,
+    validators: {
+      onChange: hostUpsertSchema,
+      onSubmit: hostUpsertSchema,
+    },
+    onSubmit: async ({ value }) => {
+      const rpcParams: RPCFunctionArgs<"compute_node_upsert"> = {
+        p_name: value.name,
+        p_provider: value.provider,
+        ...(value.id ? { p_id: value.id } : {}),
+        ...(value.provider === "ssh" && value.host ? { p_host: value.host } : {}),
+        ...(value.provider === "ssh" ? { p_port: value.port } : {}),
+        ...(value.provider === "ssh" ? { p_username: value.username } : {}),
+        ...(value.provider === "ssh" && value.auth_secret ? { p_auth_secret: value.auth_secret } : {}),
+        ...(value.provider === "huggingface" && value.hf_space_id ? { p_host: value.hf_space_id } : {}),
+        ...(value.provider === "huggingface" && value.hf_token ? { p_auth_secret: value.hf_token } : {}),
+      };
+
+      await upsertMutation.mutateAsync(rpcParams);
+    },
+  });
+
+  // 内联模式：简化表单，只显示关键字段
+  if (isInline) {
+    return (
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          form.handleSubmit();
+        }}
+        className="p-4 space-y-4"
+      >
+        <form.Subscribe
+          selector={(state) => [state.values.provider]}
+          children={([provider]) => (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* 名称 */}
+              <form.Field name="name">
+                {(field) => (
+                  <div className="space-y-1.5">
+                    <label htmlFor="name" className="text-sm font-medium">
+                      节点名称
+                    </label>
+                    <Input
+                      id="name"
+                      placeholder="My-Server"
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      onBlur={field.handleBlur}
+                    />
+                    <FieldError errors={field.state.meta.errors} />
+                  </div>
+                )}
+              </form.Field>
+
+              {provider === "ssh" && (
+                <>
+                  {/* Host */}
+                  <form.Field name="host">
+                    {(field) => (
+                      <div className="space-y-1.5">
+                        <label htmlFor="host" className="text-sm font-medium">
+                          主机地址
+                        </label>
+                        <Input
+                          id="host"
+                          placeholder="1.2.3.4"
+                          value={field.state.value || ""}
+                          onChange={(e) => field.handleChange(e.target.value)}
+                          onBlur={field.handleBlur}
+                        />
+                        <FieldError errors={field.state.meta.errors} />
+                      </div>
+                    )}
+                  </form.Field>
+
+                  {/* Port */}
+                  <form.Field name="port">
+                    {(field) => (
+                      <div className="space-y-1.5">
+                        <label htmlFor="port" className="text-sm font-medium">
+                          端口
+                        </label>
+                        <Input
+                          id="port"
+                          type="number"
+                          value={field.state.value}
+                          onChange={(e) => field.handleChange(Number(e.target.value))}
+                          onBlur={field.handleBlur}
+                        />
+                        <FieldError errors={field.state.meta.errors} />
+                      </div>
+                    )}
+                  </form.Field>
+
+                  {/* Username */}
+                  <form.Field name="username">
+                    {(field) => (
+                      <div className="space-y-1.5">
+                        <label htmlFor="username" className="text-sm font-medium">
+                          用户名
+                        </label>
+                        <Input
+                          id="username"
+                          placeholder="root"
+                          value={field.state.value || ""}
+                          onChange={(e) => field.handleChange(e.target.value)}
+                          onBlur={field.handleBlur}
+                        />
+                        <FieldError errors={field.state.meta.errors} />
+                      </div>
+                    )}
+                  </form.Field>
+
+                  {/* Password */}
+                  <form.Field name="auth_secret">
+                    {(field) => (
+                      <div className="space-y-1.5 md:col-span-2">
+                        <label htmlFor="auth_secret" className="text-sm font-medium">
+                          认证凭据 (密码或私钥)
+                        </label>
+                        <PasswordInput
+                          id="auth_secret"
+                          isTextarea={true}
+                          placeholder="输入密码，如不修改请保持 dummy_password"
+                          className="font-mono text-xs min-h-[4rem] resize-y w-full"
+                          value={field.state.value || ""}
+                          onChange={(e) => field.handleChange(e.target.value)}
+                          onBlur={field.handleBlur}
+                        />
+                        <p className="text-[10px] text-muted-foreground">
+                          默认显示 <code className="text-[10px]">dummy_password</code>
+                          ，如需修改请直接输入新密码或粘贴私钥
+                        </p>
+                        <FieldError errors={field.state.meta.errors} />
+                      </div>
+                    )}
+                  </form.Field>
+                </>
+              )}
+            </div>
+          )}
+        />
+
+        {/* 操作按钮 */}
+        <div className="flex items-center justify-end gap-3 pt-2">
+          <form.Subscribe
+            selector={(state) => state.errors}
+            children={(formErrors) => {
+              if (!formErrors || formErrors.length === 0) return null;
+              const errorMessages = formErrors.map((err) => ({
+                message: typeof err === "string" ? err : JSON.stringify(err),
+              }));
+              return (
+                <div className="flex-1">
+                  <FieldError errors={errorMessages} />
+                </div>
+              );
+            }}
+          />
+          <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+            取消
+          </Button>
+          <form.Subscribe
+            selector={(state) => [state.canSubmit, state.isSubmitting]}
+            children={([canSubmit, isSubmitting]) => (
+              <Button type="submit" size="sm" disabled={!canSubmit || isSubmitting}>
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    保存中
+                  </>
+                ) : (
+                  "保存"
+                )}
+              </Button>
+            )}
+          />
+        </div>
+      </form>
+    );
+  }
+
+  // 完整模式：显示所有字段和分组
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        form.handleSubmit();
+      }}
+      className="flex flex-col h-full"
+    >
+      <div className="p-6 pt-2 space-y-6 flex-1 overflow-y-auto">
+        {/* 基础信息 */}
+        <BasicInfoSection form={form} />
+
+        {/* 根据 provider 显示对应配置 */}
+        <form.Subscribe
+          selector={(state) => [state.values.provider]}
+          children={([provider]) => (
+            <>
+              {provider === "ssh" && <SshConfigSection form={form} />}
+              {provider === "huggingface" && <HuggingFaceConfigSection form={form} />}
+              {provider === "local" && <LocalConfigSection />}
+            </>
+          )}
+        />
+      </div>
+
+      {/* 底部操作栏 */}
+      <div className="p-4 border-t bg-background mt-auto">
+        <div className="flex w-full items-center justify-between gap-3">
+          <div className="flex-1 min-w-0 pr-4">
+            <form.Subscribe
+              selector={(state) => state.errors}
+              children={(formErrors) => {
+                if (!formErrors || formErrors.length === 0) return null;
+                const errorMessages = formErrors.map((err) => ({
+                  message: typeof err === "string" ? err : JSON.stringify(err),
+                }));
+                return <FieldError errors={errorMessages} />;
+              }}
+            />
+          </div>
+          <div className="flex items-center gap-3 shrink-0">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={onCancel}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              取消
+            </Button>
+            <form.Subscribe
+              selector={(state) => [state.canSubmit, state.isSubmitting]}
+              children={([canSubmit, isSubmitting]) => (
+                <Button type="submit" disabled={!canSubmit || isSubmitting} className="min-w-[120px] shadow-sm">
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      保存中...
+                    </>
+                  ) : (
+                    "保存配置"
+                  )}
+                </Button>
+              )}
+            />
+          </div>
+        </div>
+      </div>
+    </form>
+  );
+};

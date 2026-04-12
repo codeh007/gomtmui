@@ -224,7 +224,7 @@ task_data/hema_theater/runs/
 /playwright/.cache/
 .turbo
 .build
-.wrangler
+.wrangler/
 
 sql/dumps/sb.dump.*.sql
 
