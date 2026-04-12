@@ -44,7 +44,7 @@ bun run build:worker
 - CI/CD 使用 GitHub repository secrets。
 - Cloudflare Worker 运行时 secrets 可通过 `wrangler secret put` 手动注入；GitHub Actions 部署链则使用 `wrangler deploy --secrets-file` 临时同步运行时 secret。
 - `wrangler.jsonc` 只保留公开仓需要的非敏感 Worker 配置，不提交真实域名、token、私有 service 或 bucket 绑定。
-- `CLOUDFLARE_ZONE_ID` 与 `CLOUDFLARE_ACCOUNT_ID` 属于部署时必须提供的标识符，但不是 secret；应通过外部环境变量或平台变量注入，而不是硬编码到仓库。
+- `CLOUDFLARE_ACCOUNT_ID` 属于部署时必须提供的标识符，但不是 secret；应通过外部环境变量或平台变量注入，而不是硬编码到仓库。
 
 示例：
 
@@ -68,7 +68,6 @@ wrangler secret put CLOUDFLARE_API_TOKEN
 - `NEXT_PUBLIC_QWEN_CLIENT_ID`
 - `NEXT_PUBLIC_LANGFUSE_BASE_URL`
 - `CLOUDFLARE_ACCOUNT_ID`
-- `CLOUDFLARE_ZONE_ID`
 
 ## Optional Local Helper Variables
 
