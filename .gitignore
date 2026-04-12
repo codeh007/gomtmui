@@ -22,11 +22,11 @@ openapitools.json
 .tmp
 tmp/
 /log
+!src/app/(dash)/dash/logs
 /core.*
 .tmp_*
 # bingbox
 cache.db
-/tailscale/*.log*
 supabase/.temp/
 **/.temp/**
 **/midscene_run/**
@@ -138,9 +138,7 @@ bower_components
 *.sublime-workspace
 
 # Logs
-logs
-!apps/gomtmui/src/app/(dash)/dash/clawd/logs/
-!apps/gomtmui/src/app/(dash)/dash/logs/
+/logs/
 !mtm/api/v1/server/handlers/logs
 !api/v1/server/handlers/logs
 *.log
