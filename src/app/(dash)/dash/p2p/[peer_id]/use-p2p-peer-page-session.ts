@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { canOpenAndroidView, listPeerFeatureLabels, supportsVncView } from "@/lib/p2p/discovery-contracts";
 import { deriveBrowserRelayAddressFromBootstrap } from "@/lib/p2p/libp2p-stream";
+import { logP2PConsole } from "@/lib/p2p/p2p-console";
 import { requestPeerCapabilityTruth } from "@/lib/p2p/worker-control";
 import { useP2PSession } from "../use-p2p-session";
 
@@ -124,13 +125,16 @@ export function useP2PPeerPageSession(peerId: string) {
               multiaddrs: targetPeer.multiaddrs,
               peerId,
             }));
-      console.log(
-        `[P2P][peer-page] resolveTargetAddress ${JSON.stringify({
+      logP2PConsole(
+        "debug",
+        "[peer-page] resolveTargetAddress",
+        {
           activeBootstrapAddr: p2pSession.activeBootstrapAddr,
           multiaddrs: targetPeer.multiaddrs,
           peerId,
           resolvedAddress: address,
-        })}`,
+        },
+        { verboseOnly: true },
       );
       if (requestSeq === targetAddressResolveSeqRef.current) {
         setTargetAddress((current) => address ?? current);

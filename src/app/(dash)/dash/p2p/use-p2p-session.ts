@@ -689,7 +689,7 @@ function useP2PSessionState() {
       setStatus("joining");
       setErrorMessage(null);
       setPeerCandidates([]);
-      logP2PConsole("info", "正在加入 P2P 网络", target);
+      logP2PConsole("info", "正在加入 P2P 网络", target, { verboseOnly: true });
 
       try {
         const dialTargets = getBootstrapDialTargets(target.bootstrapAddr, p2pSessionDeps.getCurrentPageHostname());
@@ -770,7 +770,7 @@ function useP2PSessionState() {
         logP2PConsole("info", "已接入 P2P 网络", {
           bootstrapAddr: target.bootstrapAddr,
           peerCandidates: (await discovery.listPeerCandidates()).length,
-        });
+        }, { verboseOnly: true });
         return true;
       } catch (error) {
         if (!isCurrentAttempt()) {
