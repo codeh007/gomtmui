@@ -8,10 +8,9 @@ import {
 import type { DeviceStatus, RemoteControlState } from "./discovery-contracts";
 import { type BrowserNodeLike, openStreamForAddress, readJsonFrame, writeJsonRequest } from "./libp2p-stream";
 import { invokeDeviceStatus, WorkerControlRequestError } from "./worker-control";
+import { SCRCPY_SERVER_VERSION, resolveScrcpyServerAssetURL } from "./android-scrcpy-asset";
 
 const INVOKE_PROTOCOL = "/gomtm/worker-sb/invoke/1.0.0";
-const SCRCPY_SERVER_VERSION = "3.3.3";
-const SCRCPY_SERVER_PUBLIC_PATH = `/vendor/scrcpy/scrcpy-server-v${SCRCPY_SERVER_VERSION}`;
 const DEFAULT_CONNECT_STEP_TIMEOUT_MS = 15000;
 const CONNECT_STEP_TIMEOUT_OVERRIDES_MS: Partial<Record<string, number>> = {
   "start scrcpy session": 45000,
@@ -897,7 +896,7 @@ function createPersistentAdbCredentialStore() {
 async function loadScrcpyServerBytes() {
   if (scrcpyServerBytesPromise == null) {
     scrcpyServerBytesPromise = (async () => {
-      const response = await fetch(SCRCPY_SERVER_PUBLIC_PATH, { cache: "force-cache" });
+      const response = await fetch(resolveScrcpyServerAssetURL(), { cache: "force-cache" });
       if (!response.ok) {
         throw new Error(`load scrcpy server asset failed: ${response.status}`);
       }
