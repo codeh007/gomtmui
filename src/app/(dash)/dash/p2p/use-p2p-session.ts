@@ -21,6 +21,7 @@ import {
   GOMTM_RENDEZVOUS_NAMESPACE,
   gomtmRendezvousDiscovery,
 } from "@/lib/p2p/rendezvous-discovery";
+import { logP2PConsole, summarizePeerCandidates } from "@/lib/p2p/p2p-console";
 import { requestPeerCapabilityTruth, WorkerControlRequestError } from "@/lib/p2p/worker-control";
 
 const BOOTSTRAP_STORAGE_KEY = "gomtm:p2p:bootstrap-target";
@@ -170,15 +171,6 @@ export async function stopBrowserNodeIfConnectAttemptStale(params: {
 }
 
 const P2PSessionContext = createContext<P2PSessionValue | null>(null);
-
-function logToConsole(level: "info" | "warn" | "error", message: string, details?: unknown) {
-  const method = level === "error" ? console.error : level === "warn" ? console.warn : console.log;
-  if (details === undefined) {
-    method(`[P2P] ${message}`);
-    return;
-  }
-  method(`[P2P] ${message}`, details);
-}
 
 export function getResolvedPeerTruth(cache: ResolvedPeerTruthMap, peerId: string) {
   const normalizedPeerId = peerId.trim();
@@ -640,10 +632,7 @@ function useP2PSessionState() {
     if (sessionRef.current?.node !== node) {
       return;
     }
-    logToConsole(
-      "info",
-      `peerCandidates ${JSON.stringify(candidates.map((candidate) => ({ peerId: candidate.peerId, multiaddrs: candidate.multiaddrs })))} `,
-    );
+    logP2PConsole("debug", "节点候选已更新", summarizePeerCandidates(candidates), { verboseOnly: true });
     setPeerCandidates(candidates);
   }, []);
 
@@ -700,7 +689,7 @@ function useP2PSessionState() {
       setStatus("joining");
       setErrorMessage(null);
       setPeerCandidates([]);
-      logToConsole("info", "正在加入 P2P 网络", target);
+      logP2PConsole("info", "正在加入 P2P 网络", target);
 
       try {
         const dialTargets = getBootstrapDialTargets(target.bootstrapAddr, p2pSessionDeps.getCurrentPageHostname());
@@ -778,7 +767,7 @@ function useP2PSessionState() {
 
         setBootstrapInput(target.bootstrapAddr);
         p2pSessionDeps.writeStoredBootstrapTarget({ bootstrapAddr: target.bootstrapAddr });
-        logToConsole("info", "已接入 P2P 网络", {
+        logP2PConsole("info", "已接入 P2P 网络", {
           bootstrapAddr: target.bootstrapAddr,
           peerCandidates: (await discovery.listPeerCandidates()).length,
         });
@@ -789,7 +778,7 @@ function useP2PSessionState() {
           return;
         }
         const message = describeBootstrapJoinError({ bootstrapAddr: target.bootstrapAddr, error });
-        logToConsole("error", "接入 P2P 网络失败", message);
+        logP2PConsole("error", "接入 P2P 网络失败", message);
         await stopNode({ invalidateAttempt: false });
         setActiveBootstrapAddr("");
         setPeerCandidates([]);

@@ -7,6 +7,7 @@ import { decodeMessage, encodeMessage } from "protons-runtime";
 import type { PeerCandidate } from "./discovery-contracts";
 import type { BrowserProtocolStream, StreamChunk } from "./libp2p-stream";
 import { chunkToUint8Array } from "./libp2p-stream";
+import { logP2PConsole } from "./p2p-console";
 import {
   type RendezvousMessage,
   RendezvousMessageType,
@@ -404,15 +405,18 @@ class GomtmRendezvousDiscovery extends EventTarget {
         )
       ).filter((registration): registration is DiscoveredRegistrationUpdate => registration != null);
 
-      console.log(
-        `[P2P][rendezvous] discover ${JSON.stringify({
+      logP2PConsole(
+        "debug",
+        "[rendezvous] discover",
+        {
           cookieLength: discoverResponse.cookie?.byteLength ?? 0,
           point,
           registrations: registrations.map((item) => ({
+            multiaddrCount: item.registration.multiaddrs.length,
             peerId: item.registration.peerId,
-            multiaddrs: item.registration.multiaddrs,
           })),
-        })}`,
+        },
+        { verboseOnly: true },
       );
 
       return {
