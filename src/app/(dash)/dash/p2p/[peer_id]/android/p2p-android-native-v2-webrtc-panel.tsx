@@ -234,12 +234,14 @@ export function P2PAndroidNativeV2WebRtcPanel({ session }: { session: NativeView
 
   useEffect(() => {
     setCapabilityOverride(null);
-  }, [
-    session.peerId,
-    session.targetAddress,
-    session.nativeRemoteV2.capability.reason,
-    session.nativeRemoteV2.capability.state,
-  ]);
+  }, [session.peerId, session.targetAddress]);
+
+  useEffect(() => {
+    const nextCapabilityState = session.nativeRemoteV2.capability.state?.trim().toLowerCase() ?? "";
+    if (nextCapabilityState === "available" || nextCapabilityState === "streaming") {
+      setCapabilityOverride(null);
+    }
+  }, [session.nativeRemoteV2.capability.state]);
 
   useEffect(() => {
     void startNativeStream();
