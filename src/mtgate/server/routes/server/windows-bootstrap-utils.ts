@@ -8,6 +8,7 @@ export type WindowsBootstrapTokenPayload = {
 
 export type WindowsBootstrapScriptInput = {
   hostname: string;
+  p2pWsHostname: string;
   publicUrl: string;
   instanceId: string;
   cloudflaredToken: string;
@@ -19,6 +20,42 @@ export type WindowsBootstrapScriptInput = {
 
 export function buildWindowsManualBootstrapCommand(installUrl: string) {
   return `irm "${installUrl}" | iex`;
+}
+
+export function buildWindowsP2PWsHostname(tunnelName: string, publicDomain: string) {
+  return `p2p-${tunnelName.trim()}.${publicDomain.trim()}`;
+}
+
+export function buildWindowsTunnelIngress(hostname: string, p2pWsHostname: string) {
+  return [
+    {
+      hostname,
+      service: "http://127.0.0.1:8383",
+    },
+    {
+      hostname: p2pWsHostname,
+      service: "http://127.0.0.1:8444",
+    },
+    {
+      hostname: "",
+      service: "http_status:404",
+    },
+  ];
+}
+
+export function resolveWindowsP2PWsHostname(tunnelName: string, hostname: string, currentP2PWsHostname?: string) {
+  const normalizedCurrent = currentP2PWsHostname?.trim();
+  if (normalizedCurrent) {
+    return normalizedCurrent;
+  }
+
+  const normalizedTunnelName = tunnelName.trim();
+  const normalizedHostname = hostname.trim();
+  const expectedPrefix = `${normalizedTunnelName}.`;
+  const publicDomain = normalizedHostname.startsWith(expectedPrefix)
+    ? normalizedHostname.slice(expectedPrefix.length)
+    : normalizedHostname;
+  return buildWindowsP2PWsHostname(normalizedTunnelName, publicDomain);
 }
 
 function normalizeOrigin(value: string) {
@@ -123,6 +160,7 @@ export function buildWindowsBootstrapScript(input: WindowsBootstrapScriptInput) 
   const escapedInstanceID = escapePowerShellSingleQuoted(input.instanceId);
   const escapedPublicURL = escapePowerShellSingleQuoted(input.publicUrl);
   const escapedHostname = escapePowerShellSingleQuoted(input.hostname);
+  const escapedP2PPublicHostname = escapePowerShellSingleQuoted(input.p2pWsHostname);
   const escapedSupabaseURL = escapePowerShellSingleQuoted(input.supabaseUrl);
   const escapedSupabaseAnonKey = escapePowerShellSingleQuoted(input.supabaseAnonKey);
   const escapedSupabaseServiceRoleKey = escapePowerShellSingleQuoted(input.supabaseServiceRoleKey);
@@ -192,6 +230,7 @@ export function buildWindowsBootstrapScript(input: WindowsBootstrapScriptInput) 
     `$env:NEXT_PUBLIC_SUPABASE_ANON_KEY = '${escapedSupabaseAnonKey}'`,
     `$env:SUPABASE_SERVICE_ROLE_KEY = '${escapedSupabaseServiceRoleKey}'`,
     `$env:CLOUDFLARED_TOKEN = '${escapedCloudflaredToken}'`,
+    `$env:GOMTM_P2P_PUBLIC_HOSTNAME = '${escapedP2PPublicHostname}'`,
     "$env:GOMTM_LISTEN = '127.0.0.1:8383'",
     "$env:GOMTM_LOG_LEVEL = 'info'",
     "$env:GOMTM_STORAGE_DIR = $instanceRoot",

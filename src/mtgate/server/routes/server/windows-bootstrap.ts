@@ -7,10 +7,13 @@ import { getCfClient } from "../../lib/cloudflare/cloudflare";
 import { ensureDnsRecord } from "../../lib/cloudflare/tunnel-utils";
 import { getServerBaseUrl } from "../../lib/sslib";
 import {
+  buildWindowsP2PWsHostname,
   buildWindowsBootstrapScript,
+  buildWindowsTunnelIngress,
   buildWindowsManualBootstrapCommand,
   createWindowsBootstrapToken,
   resolveInstallBaseUrl,
+  resolveWindowsP2PWsHostname,
   verifyWindowsBootstrapToken,
 } from "./windows-bootstrap-utils";
 
@@ -32,6 +35,7 @@ const tunnelConfigSchema = z.object({
   tunnel_id: z.string().min(1),
   tunnel_name: z.string().min(1),
   hostname: z.string().min(1),
+  p2p_ws_hostname: z.string().min(1).optional(),
 });
 
 const serverConfigSchema = z.object({
@@ -125,9 +129,42 @@ windowsBootstrapRoute.post("/manual-bootstrap", zValidator("json", manualBootstr
       }
 
       tunnelConfig = existingConfig.data.tunnel;
+      const p2pWsHostname = resolveWindowsP2PWsHostname(
+        tunnelConfig.tunnel_name,
+        tunnelConfig.hostname,
+        tunnelConfig.p2p_ws_hostname,
+      );
+      if (p2pWsHostname !== tunnelConfig.p2p_ws_hostname) {
+        const client = getCfClient(cloudflareConfig.data.api_token);
+        await client.zeroTrust.tunnels.cloudflared.configurations.update(tunnelConfig.tunnel_id, {
+          account_id: cloudflareConfig.data.account_id,
+          config: {
+            ingress: buildWindowsTunnelIngress(tunnelConfig.hostname, p2pWsHostname),
+          },
+        });
+        await ensureDnsRecord(client, cloudflareConfig.data.zone_id, tunnelConfig.tunnel_id, p2pWsHostname);
+
+        tunnelConfig = {
+          ...tunnelConfig,
+          p2p_ws_hostname: p2pWsHostname,
+        };
+
+        const updatedConfig = {
+          ...existingConfig.data,
+          tunnel: {
+            ...existingConfig.data.tunnel,
+            p2p_ws_hostname: p2pWsHostname,
+          },
+        };
+        const updateResult = await sbAdmin.from("servers").update({ config: updatedConfig }).eq("id", serverId);
+        if (updateResult.error) {
+          throw updateResult.error;
+        }
+      }
     } else {
       const tunnelName = `${domainConfig.data.worker_subdomain_prefix}${resolvedServerId.slice(-6)}`;
       const hostname = `${tunnelName}.${publicDomain}`;
+      const p2pWsHostname = buildWindowsP2PWsHostname(tunnelName, publicDomain);
       const client = getCfClient(cloudflareConfig.data.api_token);
       const createdTunnel = await client.zeroTrust.tunnels.cloudflared.create({
         account_id: cloudflareConfig.data.account_id,
@@ -142,20 +179,12 @@ windowsBootstrapRoute.post("/manual-bootstrap", zValidator("json", manualBootstr
       await client.zeroTrust.tunnels.cloudflared.configurations.update(tunnelID, {
         account_id: cloudflareConfig.data.account_id,
         config: {
-          ingress: [
-            {
-              hostname,
-              service: "http://127.0.0.1:8383",
-            },
-            {
-              hostname: "",
-              service: "http_status:404",
-            },
-          ],
+          ingress: buildWindowsTunnelIngress(hostname, p2pWsHostname),
         },
       });
 
       await ensureDnsRecord(client, cloudflareConfig.data.zone_id, tunnelID, hostname);
+      await ensureDnsRecord(client, cloudflareConfig.data.zone_id, tunnelID, p2pWsHostname);
 
       const tokenResponse = await client.zeroTrust.tunnels.cloudflared.token.get(tunnelID, {
         account_id: cloudflareConfig.data.account_id,
@@ -171,6 +200,7 @@ windowsBootstrapRoute.post("/manual-bootstrap", zValidator("json", manualBootstr
         tunnel_id: tunnelID,
         tunnel_name: tunnelName,
         hostname,
+        p2p_ws_hostname: p2pWsHostname,
       };
 
       const insertResult = await sbAdmin.from("servers").insert({
@@ -257,6 +287,11 @@ windowsBootstrapRoute.get("/install.ps1", zValidator("query", installScriptQuery
 
     const script = buildWindowsBootstrapScript({
       hostname: serverConfig.tunnel.hostname,
+      p2pWsHostname: resolveWindowsP2PWsHostname(
+        serverConfig.tunnel.tunnel_name,
+        serverConfig.tunnel.hostname,
+        serverConfig.tunnel.p2p_ws_hostname,
+      ),
       publicUrl: `https://${serverConfig.tunnel.hostname}`,
       instanceId: payload.serverId,
       cloudflaredToken: serverConfig.tunnel.token,

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildWindowsP2PWsHostname,
   buildWindowsBootstrapScript,
+  buildWindowsTunnelIngress,
   buildWindowsManualBootstrapCommand,
   createWindowsBootstrapToken,
   resolveInstallBaseUrl,
@@ -17,6 +19,7 @@ describe("windows-bootstrap-utils", () => {
   it("embeds required Windows bootstrap env vars and reconcile flow in script", () => {
     const script = buildWindowsBootstrapScript({
       hostname: "d1-1b583f.example.com",
+      p2pWsHostname: "p2p-d1-1b583f.example.com",
       publicUrl: "https://d1-1b583f.example.com",
       instanceId: "72494de4-9863-4100-9254-e899dc1b583f",
       cloudflaredToken: "cloudflared-token-value",
@@ -34,12 +37,34 @@ describe("windows-bootstrap-utils", () => {
     expect(script).toContain("$env:SUPABASE_ANON_KEY = 'supabase-anon-key'");
     expect(script).toContain("$env:SUPABASE_SERVICE_ROLE_KEY = 'supabase-service-role-key'");
     expect(script).toContain("$env:CLOUDFLARED_TOKEN = 'cloudflared-token-value'");
+    expect(script).toContain("$env:GOMTM_P2P_PUBLIC_HOSTNAME = 'p2p-d1-1b583f.example.com'");
     expect(script).toContain("$env:GOMTM_LISTEN = '127.0.0.1:8383'");
     expect(script).toContain("gomtm.exe");
     expect(script).toContain("https://d1-1b583f.example.com/api/system/status");
     expect(script).toContain("/rest/v1/rpc/server_status_reconcile");
     expect(script).toContain(["$", "{url}: 下载结果为空"].join(""));
     expect(script).toContain(["$", "{url}: $($_.Exception.Message)"].join(""));
+  });
+
+  it("builds dedicated p2p websocket hostname from tunnel name", () => {
+    expect(buildWindowsP2PWsHostname("d1-1b583f", "example.com")).toBe("p2p-d1-1b583f.example.com");
+  });
+
+  it("builds Cloudflare ingress rules for app and p2p websocket endpoints", () => {
+    expect(buildWindowsTunnelIngress("d1-1b583f.example.com", "p2p-d1-1b583f.example.com")).toEqual([
+      {
+        hostname: "d1-1b583f.example.com",
+        service: "http://127.0.0.1:8383",
+      },
+      {
+        hostname: "p2p-d1-1b583f.example.com",
+        service: "http://127.0.0.1:8444",
+      },
+      {
+        hostname: "",
+        service: "http_status:404",
+      },
+    ]);
   });
 
   it("signs and verifies Windows bootstrap tokens", async () => {
