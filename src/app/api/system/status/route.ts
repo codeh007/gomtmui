@@ -1,28 +1,42 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "mtmsdk/supabase/supabase";
-import { getServerAccessUrl, serverInstanceListSchema } from "@/components/server-instance/status-contract";
 
 export const dynamic = "force-dynamic";
 
-function getReadyServerStatusUrl() {
-  return async () => {
-    const sbAdmin = getSupabaseAdmin();
-    const { data, error } = await sbAdmin.rpc("server_list_cursor", { p_limit: 20 });
-    if (error) {
-      throw new Error(`load server_list_cursor failed: ${error.message}`);
-    }
-    const instances = serverInstanceListSchema.parse(data ?? []);
-    for (const instance of instances) {
-      const accessUrl = getServerAccessUrl(instance.status, instance.hostname);
-      if (accessUrl) {
-        return new URL("/api/system/status", accessUrl).toString();
-      }
-    }
-    return null;
-  };
+function asRecord(value: unknown) {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return {};
 }
 
-const resolveReadyServerStatusUrl = getReadyServerStatusUrl();
+function readString(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+async function resolveReadyServerStatusUrl() {
+  const sbAdmin = getSupabaseAdmin();
+  const { data, error } = await sbAdmin.rpc("server_list_cursor", { p_limit: 20 });
+  if (error) {
+    throw new Error(`load server_list_cursor failed: ${error.message}`);
+  }
+  const rows = Array.isArray(data) ? data : [];
+  for (const row of rows) {
+    const record = asRecord(row);
+    const state = asRecord(record.state);
+    const config = asRecord(record.config);
+    const tunnel = asRecord(config.tunnel);
+    if (readString(state.status) !== "ready") {
+      continue;
+    }
+    const hostname = readString(tunnel.hostname);
+    if (hostname === "") {
+      continue;
+    }
+    return new URL("/api/system/status", `https://${hostname}`).toString();
+  }
+  return null;
+}
 
 export async function GET() {
   try {
