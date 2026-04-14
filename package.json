@@ -6,8 +6,8 @@
   "packageManager": "bun@1.3.11",
   "scripts": {
     "dev": "next dev",
+    "check": "bun run typecheck",
     "typecheck": "bun run tsgo --noEmit",
-    "lint": "bun run typecheck",
     "build": "next build",
     "build:worker": "opennextjs-cloudflare build --skipNextBuild",
     "deploy": "bun run build && bun run build:worker && wrangler deploy"
