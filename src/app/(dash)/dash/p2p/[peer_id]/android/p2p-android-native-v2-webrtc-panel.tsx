@@ -10,11 +10,17 @@ import {
   invokeNativeRemoteV2Text,
   type NativeRemoteV2StreamDescriptor,
   openNativeRemoteV2VideoStream,
-  type WorkerControlRequestError,
 } from "@/lib/p2p/worker-control";
 import { AndroidNativeV2StatusOverlay } from "./android-native-v2-status-overlay";
 import { getAndroidNativeRemoteV2AvailabilityMeta } from "./android-session-model";
 import { createNativeAndroidCanvasRenderer } from "./native-android-video-renderer";
+import {
+  getBrowserNodeInstanceKey,
+  isScreenCapturePermissionError,
+  projectCanvasPoint,
+  triggerScreenshotDownload,
+  type NativeCanvasPoint,
+} from "./p2p-android-native-v2-webrtc-panel-utils";
 import {
   buildNativeV2DirectExperiment,
   buildNativeV2RemoteStatus,
@@ -26,85 +32,6 @@ import type { NativeViewportSessionLike, StreamStatus } from "./p2p-android-nati
 import { AndroidControlRail, AndroidDeviceNavigationBar } from "./p2p-android-viewport-control-rail";
 
 type NativeViewportSession = NativeViewportSessionLike;
-
-type NativeCanvasPoint = {
-  x: number;
-  y: number;
-};
-
-const browserNodeInstanceKeys = new WeakMap<object, number>();
-let browserNodeInstanceSeq = 0;
-
-function getBrowserNodeInstanceKey(node: unknown) {
-  if (node == null) {
-    return "none";
-  }
-  if (typeof node !== "object" && typeof node !== "function") {
-    return String(node);
-  }
-
-  const objectNode = node as object;
-  const existingKey = browserNodeInstanceKeys.get(objectNode);
-  if (existingKey != null) {
-    return `node-${existingKey}`;
-  }
-
-  browserNodeInstanceSeq += 1;
-  browserNodeInstanceKeys.set(objectNode, browserNodeInstanceSeq);
-  return `node-${browserNodeInstanceSeq}`;
-}
-
-function projectCanvasPoint(params: {
-  canvas: HTMLCanvasElement;
-  clientX: number;
-  clientY: number;
-  videoHeight: number;
-  videoWidth: number;
-}): NativeCanvasPoint | null {
-  const rect = params.canvas.getBoundingClientRect();
-  if (rect.width <= 0 || rect.height <= 0) {
-    return null;
-  }
-
-  return {
-    x: Math.round(((params.clientX - rect.left) / rect.width) * params.videoWidth),
-    y: Math.round(((params.clientY - rect.top) / rect.height) * params.videoHeight),
-  };
-}
-
-function inferScreenshotExtension(mimeType: string) {
-  if (mimeType.includes("jpeg")) {
-    return "jpg";
-  }
-  if (mimeType.includes("webp")) {
-    return "webp";
-  }
-  return "png";
-}
-
-function triggerScreenshotDownload(params: { imageBase64: string; mimeType: string; peerId: string }) {
-  const binary = atob(params.imageBase64);
-  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-  const blob = new Blob([bytes], { type: params.mimeType });
-  const objectUrl = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = objectUrl;
-  anchor.download = `android-${params.peerId}-${Date.now()}.${inferScreenshotExtension(params.mimeType)}`;
-  anchor.click();
-  URL.revokeObjectURL(objectUrl);
-}
-
-function isScreenCapturePermissionError(error: unknown): error is WorkerControlRequestError {
-  if (error instanceof Error && "code" in error) {
-    const code =
-      typeof (error as { code?: unknown }).code === "string" ? (error as { code?: string }).code?.trim() : "";
-    if (code === "SB_PERMISSION_REQUIRED") {
-      return true;
-    }
-  }
-  const message = error instanceof Error ? error.message.trim().toLowerCase() : String(error).trim().toLowerCase();
-  return message.includes("screen capture permission is not granted");
-}
 
 export function P2PAndroidNativeV2WebRtcPanel({ session }: { session: NativeViewportSession }) {
   const [streamStatus, setStreamStatus] = useState<StreamStatus>("idle");
