@@ -125,7 +125,6 @@ type P2PSessionValue = ReturnType<typeof useP2PSessionState>;
 type P2PSessionDeps = {
   assertBrowserP2PSupport: typeof assertBrowserP2PSupport;
   createBrowserNode: typeof createBrowserNode;
-  fetchSuggestedBootstrapTarget: typeof fetchSuggestedBootstrapTarget;
   getCurrentPageHostname: typeof getCurrentPageHostname;
   readStoredBootstrapTarget: typeof readStoredBootstrapTarget;
   writeStoredBootstrapTarget: typeof writeStoredBootstrapTarget;
@@ -134,7 +133,6 @@ type P2PSessionDeps = {
 const defaultP2PSessionDeps: P2PSessionDeps = {
   assertBrowserP2PSupport,
   createBrowserNode,
-  fetchSuggestedBootstrapTarget,
   getCurrentPageHostname,
   readStoredBootstrapTarget,
   writeStoredBootstrapTarget,
@@ -472,35 +470,6 @@ function writeStoredBootstrapTarget(target: { bootstrapAddr: string }) {
   return nextTarget;
 }
 
-async function fetchSuggestedBootstrapTarget(): Promise<StoredBootstrapTarget> {
-  if (typeof window === "undefined") {
-    return {};
-  }
-  try {
-    const response = await fetch("/api/system/status", { cache: "no-store" });
-    if (!response.ok) {
-      return {};
-    }
-    const payload = (await response.json()) as { suggested_browser_bootstrap_addr?: unknown };
-    const bootstrapAddr =
-      typeof payload.suggested_browser_bootstrap_addr === "string"
-        ? normalizeBrowserBootstrapAddr(payload.suggested_browser_bootstrap_addr)
-        : "";
-    return bootstrapAddr === "" ? {} : { bootstrapAddr };
-  } catch {
-    return {};
-  }
-}
-
-function shouldRetryWithSuggestedBootstrap(params: { storedBootstrapAddr: string; suggestedBootstrapAddr: string }) {
-  const storedBootstrapAddr = normalizeBrowserBootstrapAddr(params.storedBootstrapAddr) || "";
-  const suggestedBootstrapAddr = normalizeBrowserBootstrapAddr(params.suggestedBootstrapAddr) || "";
-  if (storedBootstrapAddr === "" || suggestedBootstrapAddr === "") {
-    return false;
-  }
-  return storedBootstrapAddr !== suggestedBootstrapAddr;
-}
-
 function resolveBootstrapTarget(input: string): ResolvedBootstrapTarget {
   const trimmed = normalizeBrowserBootstrapAddr(input);
   if (trimmed === "") {
@@ -796,10 +765,7 @@ function useP2PSessionState() {
 
     async function init() {
       const storedTarget = p2pSessionDeps.readStoredBootstrapTarget();
-      let suggestedTarget: StoredBootstrapTarget = storedTarget.bootstrapAddr?.trim()
-        ? {}
-        : await p2pSessionDeps.fetchSuggestedBootstrapTarget();
-      const initialInput = (storedTarget.bootstrapAddr?.trim() || suggestedTarget.bootstrapAddr?.trim() || "").trim();
+      const initialInput = (storedTarget.bootstrapAddr?.trim() || "").trim();
       if (cancelled) {
         return;
       }
@@ -814,21 +780,6 @@ function useP2PSessionState() {
         const connected = await connectToBootstrap({ input: initialInput });
         if (cancelled || connected) {
           return;
-        }
-        if (storedTarget.bootstrapAddr?.trim() && !(suggestedTarget.bootstrapAddr?.trim() ?? "")) {
-          suggestedTarget = await p2pSessionDeps.fetchSuggestedBootstrapTarget();
-        }
-        if (
-          shouldRetryWithSuggestedBootstrap({
-            storedBootstrapAddr: storedTarget.bootstrapAddr ?? "",
-            suggestedBootstrapAddr: suggestedTarget.bootstrapAddr ?? "",
-          })
-        ) {
-          const fallbackInput = suggestedTarget.bootstrapAddr?.trim() ?? "";
-          if (fallbackInput !== "") {
-            setBootstrapInput(fallbackInput);
-            await connectToBootstrap({ input: fallbackInput });
-          }
         }
         return;
       }

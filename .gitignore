@@ -34,6 +34,7 @@ supabase/.temp/
 # testing
 .browser_screenshots/
 **/__screenshots__/**
+.playwright-cli
 
 
 # android_aar_libbox

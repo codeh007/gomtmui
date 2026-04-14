@@ -74,6 +74,16 @@ export default async function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            // Cloudflare/Next currently emits next-themes' inline script with __name(...)
+            // but without the helper definition, so provide the same global no-op shim up front.
+            __html:
+              "function __name(target,name){try{return Object.defineProperty(target,'name',{value:name,configurable:true})}catch{return target}}",
+          }}
+        />
+      </head>
       <body className={cn("text-foreground group/body overscroll-none font-sans antialiased h-full", fontVariables)}>
         <Suspense fallback={"loading"}>
           <MainProvider>{children}</MainProvider>
