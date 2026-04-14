@@ -24,4 +24,32 @@ describe("parseDeviceStatus", () => {
       viaAddr: "/dns4/relay.example.com/udp/4101/quic-v1/webtransport/p2p/12D3KooWBootstrap",
     });
   });
+
+  it("accepts android native remote v2 capability without legacy v1 metadata", () => {
+    const parsed = parseDeviceStatus({
+      platform: "android",
+      remote_control: {
+        capabilities: {
+          adb_tunnel: {
+            state: "ready",
+          },
+          native_remote_v2: {
+            reason: "screen_capture_ready",
+            state: "available",
+          },
+          native_remote_v2_webrtc: {
+            state: "available",
+          },
+        },
+        platform: "android",
+        session: {
+          controller_mode: "single_controller",
+          controller_state: "idle",
+        },
+      },
+    });
+
+    expect(parsed?.remoteControl?.capabilities.nativeRemoteV2?.state).toBe("available");
+    expect(parsed?.remoteControl?.capabilities.nativeRemoteV2WebRTC?.state).toBe("available");
+  });
 });

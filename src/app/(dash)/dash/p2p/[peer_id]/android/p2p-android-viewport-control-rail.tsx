@@ -3,25 +3,27 @@
 import { ArrowLeft, Camera, Circle, RotateCcw, Square } from "lucide-react";
 import { cn } from "mtxuilib/lib/utils";
 import { Button } from "mtxuilib/ui/button";
-import type { AndroidScrcpyPerformanceProfile } from "@/lib/p2p/android-scrcpy-session";
+import type { P2PAndroidDirectExperimentView } from "./direct-experiment-view-model";
 import { AndroidMorePanel } from "./android-more-panel";
-import type { P2PAndroidDirectExperimentView } from "./p2p-android-viewport-stage";
 import type {
   AndroidDeviceOpHint,
+  AndroidPerformanceProfile,
   AndroidRemoteStatusView,
   AndroidSessionInfoItem,
 } from "./p2p-android-viewport-support";
 
 type AndroidControlRailProps = {
   directExperiment?: P2PAndroidDirectExperimentView;
-  onPerformanceProfileChange: (profile: AndroidScrcpyPerformanceProfile) => void;
   onReconnect: () => void;
   reconnectEnabled: boolean;
   onRotate: () => void;
   onScreenshot: () => void;
   onSendText: (text: string) => Promise<boolean>;
-  performanceMeta: string;
-  performanceProfile: AndroidScrcpyPerformanceProfile;
+  performanceControls?: {
+    onPerformanceProfileChange: (profile: AndroidPerformanceProfile) => void;
+    performanceMeta: string;
+    performanceProfile: AndroidPerformanceProfile;
+  };
   remoteStatus: AndroidRemoteStatusView;
   rotateEnabled: boolean;
   rotateHint: AndroidDeviceOpHint;
@@ -29,6 +31,7 @@ type AndroidControlRailProps = {
   screenshotHint: AndroidDeviceOpHint;
   sessionDebugItems: AndroidSessionInfoItem[];
   sessionInfoItems: AndroidSessionInfoItem[];
+  showPerformanceControls?: boolean;
   textActionsEnabled: boolean;
   textInputHint: AndroidDeviceOpHint;
 };
@@ -42,14 +45,12 @@ type AndroidDeviceNavigationBarProps = {
 
 export function AndroidControlRail({
   directExperiment,
-  onPerformanceProfileChange,
   onReconnect,
   reconnectEnabled,
   onRotate,
   onScreenshot,
   onSendText,
-  performanceMeta,
-  performanceProfile,
+  performanceControls,
   remoteStatus,
   rotateEnabled,
   rotateHint,
@@ -57,6 +58,7 @@ export function AndroidControlRail({
   screenshotHint,
   sessionDebugItems,
   sessionInfoItems,
+  showPerformanceControls = true,
   textActionsEnabled,
   textInputHint,
 }: AndroidControlRailProps) {
@@ -72,14 +74,13 @@ export function AndroidControlRail({
         <AndroidMorePanel
           directExperiment={directExperiment}
           forceOpen={shouldForceOpenMorePanel}
-          onPerformanceProfileChange={onPerformanceProfileChange}
           onReconnect={onReconnect}
           reconnectEnabled={reconnectEnabled}
           onSendText={onSendText}
-          performanceMeta={performanceMeta}
-          performanceProfile={performanceProfile}
+          performanceControls={performanceControls}
           sessionDebugItems={sessionDebugItems}
           sessionInfoItems={sessionInfoItems}
+          showPerformanceControls={showPerformanceControls}
           textActionsEnabled={textActionsEnabled}
           textInputHint={textInputHint}
         />

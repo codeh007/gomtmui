@@ -1,28 +1,18 @@
 import type { NativeViewportSessionLike, StreamStatus } from "./p2p-android-native-v2-webrtc-panel-shared";
-import type { P2PAndroidDirectExperimentView } from "./p2p-android-viewport-stage";
+import { buildDirectExperimentViewModel, type P2PAndroidDirectExperimentView } from "./direct-experiment-view-model";
 import type { AndroidRemoteStatusView, AndroidSessionInfoItem } from "./p2p-android-viewport-support";
 
 export function buildNativeV2DirectExperiment(
   session: NativeViewportSessionLike,
 ): P2PAndroidDirectExperimentView | undefined {
-  if (
-    session.runDirectExperiment == null &&
-    session.lastResult == null &&
-    session.lastError == null &&
-    session.state == null
-  ) {
-    return undefined;
-  }
-
-  return {
-    candidatePairSummary: session.candidatePairSummary ?? "尚无 candidate pair",
-    canRun: session.runDirectExperiment != null,
-    directEvidenceSummary: session.directEvidenceSummary ?? "尚无 direct 证据",
-    lastError: session.lastError ?? null,
-    lastResult: session.lastResult ?? null,
-    onRun: session.runDirectExperiment ?? (() => undefined),
-    state: session.state ?? "idle",
-  };
+  return buildDirectExperimentViewModel({
+    candidatePairSummary: session.candidatePairSummary,
+    directEvidenceSummary: session.directEvidenceSummary,
+    lastError: session.lastError,
+    lastResult: session.lastResult,
+    runDirectExperiment: session.runDirectExperiment,
+    state: session.state,
+  });
 }
 
 export function buildNativeV2SessionInfoItems(params: {
@@ -59,7 +49,6 @@ export function buildNativeV2SessionDebugItems(params: {
 
 export function buildNativeV2RemoteStatus(params: {
   capabilityDetail: string;
-  capabilityLabel: string;
   capabilityState: string;
   streamStatus: StreamStatus;
 }): AndroidRemoteStatusView {
@@ -76,11 +65,11 @@ export function buildNativeV2RemoteStatus(params: {
   if (capabilityState === "permission_required") {
     return { detail: capabilityDetail, label: "Unsupported", showBusyIndicator: false };
   }
-  if (capabilityState === "host_not_ready") {
+  if (capabilityState === "host_not_ready" || capabilityState === "connecting" || capabilityState === "starting") {
     return { detail: capabilityDetail, label: "Connecting", showBusyIndicator: false };
   }
-  if (capabilityState === "unavailable") {
-    return { detail: capabilityDetail, label: "Unsupported", showBusyIndicator: false };
+  if (capabilityState === "unavailable" || capabilityState === "error") {
+    return { detail: capabilityDetail, label: "Error", showBusyIndicator: false };
   }
   return { detail: "准备中", label: "Connecting", showBusyIndicator: false };
 }

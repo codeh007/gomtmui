@@ -1,5 +1,14 @@
-import type { P2PAndroidDirectExperimentView } from "./p2p-android-viewport-stage";
 import type { AndroidDirectLaneState } from "./use-android-direct-lane";
+
+export type P2PAndroidDirectExperimentView = {
+  candidatePairSummary: string;
+  canRun: boolean;
+  directEvidenceSummary: string;
+  lastError: string | null;
+  lastResult: unknown;
+  onRun: () => Promise<unknown> | undefined;
+  state: AndroidDirectLaneState;
+};
 
 type DirectExperimentInput = {
   candidatePairSummary?: string | null;

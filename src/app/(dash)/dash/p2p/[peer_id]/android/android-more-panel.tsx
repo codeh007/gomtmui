@@ -6,18 +6,16 @@ import { Button } from "mtxuilib/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "mtxuilib/ui/popover";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "mtxuilib/ui/sheet";
 import { useEffect, useState } from "react";
-import {
-  type AndroidScrcpyPerformanceProfile,
-  resolveAndroidScrcpyPerformanceTuning,
-} from "@/lib/p2p/android-scrcpy-session";
 import { AndroidDirectExperimentPanel } from "./android-direct-experiment-panel";
 import { AndroidSessionInfoDialog } from "./android-session-info-dialog";
 import { AndroidTextComposerAction } from "./android-text-composer-action";
-import type { P2PAndroidDirectExperimentView } from "./p2p-android-viewport-stage";
+import type { P2PAndroidDirectExperimentView } from "./direct-experiment-view-model";
 import {
   ANDROID_PERFORMANCE_PROFILES,
   type AndroidDeviceOpHint,
+  type AndroidPerformanceProfile,
   type AndroidSessionInfoItem,
+  resolveAndroidPerformanceTuning,
 } from "./p2p-android-viewport-support";
 
 function useIsNarrowScreen() {
@@ -53,14 +51,17 @@ function useIsNarrowScreen() {
 type AndroidMorePanelProps = {
   directExperiment?: P2PAndroidDirectExperimentView;
   forceOpen: boolean;
-  onPerformanceProfileChange: (profile: AndroidScrcpyPerformanceProfile) => void;
   onReconnect: () => void;
   reconnectEnabled: boolean;
   onSendText: (text: string) => Promise<boolean>;
-  performanceMeta: string;
-  performanceProfile: AndroidScrcpyPerformanceProfile;
+  performanceControls?: {
+    onPerformanceProfileChange: (profile: AndroidPerformanceProfile) => void;
+    performanceMeta: string;
+    performanceProfile: AndroidPerformanceProfile;
+  };
   sessionDebugItems: AndroidSessionInfoItem[];
   sessionInfoItems: AndroidSessionInfoItem[];
+  showPerformanceControls?: boolean;
   textActionsEnabled: boolean;
   textInputHint: AndroidDeviceOpHint;
 };
@@ -68,14 +69,13 @@ type AndroidMorePanelProps = {
 export function AndroidMorePanel({
   directExperiment,
   forceOpen,
-  onPerformanceProfileChange,
   onReconnect,
   reconnectEnabled,
   onSendText,
-  performanceMeta,
-  performanceProfile,
+  performanceControls,
   sessionDebugItems,
   sessionInfoItems,
+  showPerformanceControls = true,
   textActionsEnabled,
   textInputHint,
 }: AndroidMorePanelProps) {
@@ -174,37 +174,40 @@ export function AndroidMorePanel({
           ) : null}
         </OnlyDebug>
       </div>
-
-      <div className="rounded-2xl border border-white/10 bg-black/30 px-3 py-2 text-xs text-zinc-200">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-zinc-400">流畅度</span>
-          <span data-testid="android-performance-meta" className="text-[11px] text-zinc-400">
-            {performanceMeta}
-          </span>
+      {showPerformanceControls ? (
+        <div className="rounded-2xl border border-white/10 bg-black/30 px-3 py-2 text-xs text-zinc-200">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-zinc-400">流畅度</span>
+            <span data-testid="android-performance-meta" className="text-[11px] text-zinc-400">
+              {performanceControls?.performanceMeta ?? "-"}
+            </span>
+          </div>
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            {ANDROID_PERFORMANCE_PROFILES.map((profileOption) => {
+              const optionLabel = resolveAndroidPerformanceTuning(profileOption).label;
+              const performanceProfile = performanceControls?.performanceProfile;
+              return (
+                <Button
+                  key={profileOption}
+                  data-testid={`android-performance-profile-${profileOption}`}
+                  aria-pressed={performanceProfile === profileOption}
+                  size="sm"
+                  variant={performanceProfile === profileOption ? "default" : "secondary"}
+                  disabled={performanceControls == null}
+                  onClick={() => {
+                    if (performanceProfile === profileOption) {
+                      return;
+                    }
+                    performanceControls?.onPerformanceProfileChange(profileOption);
+                  }}
+                >
+                  {optionLabel}
+                </Button>
+              );
+            })}
+          </div>
         </div>
-        <div className="mt-2 grid grid-cols-3 gap-2">
-          {ANDROID_PERFORMANCE_PROFILES.map((profileOption) => {
-            const optionLabel = resolveAndroidScrcpyPerformanceTuning(profileOption).label;
-            return (
-              <Button
-                key={profileOption}
-                data-testid={`android-performance-profile-${profileOption}`}
-                aria-pressed={performanceProfile === profileOption}
-                size="sm"
-                variant={performanceProfile === profileOption ? "default" : "secondary"}
-                onClick={() => {
-                  if (performanceProfile === profileOption) {
-                    return;
-                  }
-                  onPerformanceProfileChange(profileOption);
-                }}
-              >
-                {optionLabel}
-              </Button>
-            );
-          })}
-        </div>
-      </div>
+      ) : null}
     </div>
   );
 

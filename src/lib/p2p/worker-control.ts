@@ -1,5 +1,4 @@
 import {
-  type DeviceStatus,
   type PeerCapabilityTruth,
   parseDeviceStatus,
   toPeerCapabilityTruth,
@@ -23,20 +22,20 @@ export class WorkerControlRequestError extends Error {
   }
 }
 
-export type InvokeErrorShape = {
+type InvokeErrorShape = {
   code: string;
   message: string;
   retryable: boolean;
 };
 
-export type VncResourceRef = {
+type VncResourceRef = {
   kind: string;
   resourceId: string;
   leaseId: string;
   resourceGeneration: number;
 };
 
-export type VncRawChannelContract = {
+type VncRawChannelContract = {
   kind: string;
   framing?: string;
   codec?: string;
@@ -46,7 +45,7 @@ export type VncRawChannelContract = {
   keyframeRequiredOnStart?: boolean;
 };
 
-export type NativeRemoteV2ResolvedTarget = {
+type NativeRemoteV2ResolvedTarget = {
   kind?: string;
   host?: string;
   port?: number;
@@ -54,7 +53,7 @@ export type NativeRemoteV2ResolvedTarget = {
   serviceHint?: string;
 };
 
-export type NativeRemoteV2ChannelDescriptor = {
+type NativeRemoteV2ChannelDescriptor = {
   kind?: string;
   framing?: string;
   codec?: string;
@@ -77,6 +76,14 @@ export type NativeRemoteV2WebRtcStartPayload = {
   lastError?: string;
 };
 
+type NativeRemoteV2ScreenshotPayload = {
+  capturedAt?: string;
+  height?: number;
+  imageBase64?: string;
+  mimeType?: string;
+  width?: number;
+};
+
 export type NativeRemoteV2VideoPacket = {
   data: Uint8Array;
   keyframe: boolean;
@@ -84,7 +91,7 @@ export type NativeRemoteV2VideoPacket = {
   type: "data";
 };
 
-export type NativeRemoteV2VideoStream = {
+type NativeRemoteV2VideoStream = {
   close: () => Promise<void>;
   metadata: {
     codec?: string;
@@ -94,14 +101,6 @@ export type NativeRemoteV2VideoStream = {
     width?: number;
   };
   packets: AsyncIterable<NativeRemoteV2VideoPacket>;
-};
-
-export type InvokeResult = {
-  status?: string;
-  resource?: VncResourceRef;
-  deviceStatus?: DeviceStatus;
-  remoteControlPayload?: NativeRemoteV2StreamDescriptor;
-  remoteControlWebRtcPayload?: NativeRemoteV2WebRtcStartPayload;
 };
 
 function asRecord(value: unknown) {
@@ -154,6 +153,7 @@ function parseInvokeResponse(value: unknown) {
             resource: parseVncResourceRef(resultRecord.resource),
             deviceStatus: parseDeviceStatus(resultRecord.device_status),
             remoteControlPayload: parseNativeRemoteV2StreamDescriptor(resultRecord.remote_control_payload),
+            remoteControlScreenshotPayload: parseNativeRemoteV2ScreenshotPayload(resultRecord.remote_control_payload),
             remoteControlWebRtcPayload: parseNativeRemoteV2WebRtcStartPayload(resultRecord.remote_control_payload),
           },
   };
@@ -291,6 +291,28 @@ function parseNativeRemoteV2WebRtcStartPayload(value: unknown): NativeRemoteV2We
     state,
     topology,
     lastError,
+  };
+}
+
+function parseNativeRemoteV2ScreenshotPayload(value: unknown): NativeRemoteV2ScreenshotPayload | undefined {
+  const record = asRecord(value);
+  if (record == null) {
+    return undefined;
+  }
+  const mimeType = asString(record.mime_type).trim() || undefined;
+  const imageBase64 = asString(record.image_base64).trim() || undefined;
+  const width = asNumber(record.width) || undefined;
+  const height = asNumber(record.height) || undefined;
+  const capturedAt = asString(record.captured_at).trim() || undefined;
+  if ([mimeType, imageBase64, width, height, capturedAt].every((field) => field == null || field === "")) {
+    return undefined;
+  }
+  return {
+    capturedAt,
+    height,
+    imageBase64,
+    mimeType,
+    width,
   };
 }
 
@@ -453,7 +475,7 @@ async function openWorkerStream(params: {
   };
 }
 
-export async function invokeDeviceStatus(params: { address: string; node: BrowserNodeLike; peerId: string }) {
+async function invokeDeviceStatus(params: { address: string; node: BrowserNodeLike; peerId: string }) {
   return invokeWorkerCommand({
     ...params,
     command: "device.status",
@@ -509,28 +531,6 @@ export async function ensureNativeRemoteV2Stream(params: { address: string; node
   }
 
   return result.remoteControlPayload;
-}
-
-export async function startNativeRemoteV2WebRtcSession(params: {
-  address: string;
-  node: BrowserNodeLike;
-  peerId: string;
-}) {
-  const result = await invokeWorkerCommand({
-    ...params,
-    command: "screen.webrtc.start",
-    requestIdPrefix: "android-native-v2-webrtc",
-    timeoutMs: 10_000,
-  });
-
-  if (result.remoteControlWebRtcPayload == null) {
-    throw new WorkerControlRequestError("screen.webrtc.start returned no usable remote_control_payload", {
-      code: "SB_BAD_FRAME",
-      retryable: false,
-    });
-  }
-
-  return result.remoteControlWebRtcPayload;
 }
 
 export async function openNativeRemoteV2VideoStream(params: {
@@ -594,6 +594,30 @@ async function invokeRemoteControlCommand(params: WorkerInvokeParams) {
   return invokeWorkerCommand(params);
 }
 
+export async function captureNativeRemoteV2Screenshot(params: {
+  address: string;
+  format?: string;
+  node: BrowserNodeLike;
+  peerId: string;
+}) {
+  const result = await invokeRemoteControlCommand({
+    ...params,
+    command: "screen.snapshot",
+    params: { format: params.format?.trim() || "png" },
+    requestIdPrefix: "android-native-v2-snapshot",
+    timeoutMs: 10_000,
+  });
+
+  if (result.remoteControlScreenshotPayload == null) {
+    throw new WorkerControlRequestError("screen.snapshot returned no usable remote_control_payload", {
+      code: "SB_BAD_FRAME",
+      retryable: false,
+    });
+  }
+
+  return result.remoteControlScreenshotPayload;
+}
+
 export async function invokeNativeRemoteV2Tap(params: {
   address: string;
   node: BrowserNodeLike;
@@ -606,6 +630,46 @@ export async function invokeNativeRemoteV2Tap(params: {
     command: "input.tap",
     params: { x: params.x, y: params.y },
     requestIdPrefix: "android-native-v2-tap",
+    timeoutMs: 10_000,
+  });
+}
+
+export async function invokeNativeRemoteV2Swipe(params: {
+  address: string;
+  durationMs?: number;
+  endX: number;
+  endY: number;
+  node: BrowserNodeLike;
+  peerId: string;
+  startX: number;
+  startY: number;
+}) {
+  await invokeRemoteControlCommand({
+    ...params,
+    command: "input.swipe",
+    params: {
+      duration_ms: params.durationMs,
+      end_x: params.endX,
+      end_y: params.endY,
+      start_x: params.startX,
+      start_y: params.startY,
+    },
+    requestIdPrefix: "android-native-v2-swipe",
+    timeoutMs: 10_000,
+  });
+}
+
+export async function invokeNativeRemoteV2Text(params: {
+  address: string;
+  node: BrowserNodeLike;
+  peerId: string;
+  text: string;
+}) {
+  await invokeRemoteControlCommand({
+    ...params,
+    command: "input.text",
+    params: { text: params.text },
+    requestIdPrefix: "android-native-v2-text",
     timeoutMs: 10_000,
   });
 }

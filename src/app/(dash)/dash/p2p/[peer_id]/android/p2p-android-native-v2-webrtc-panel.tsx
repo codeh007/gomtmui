@@ -2,9 +2,12 @@
 
 import { type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
 import {
+  captureNativeRemoteV2Screenshot,
   ensureNativeRemoteV2Stream,
   invokeNativeRemoteV2Key,
+  invokeNativeRemoteV2Swipe,
   invokeNativeRemoteV2Tap,
+  invokeNativeRemoteV2Text,
   type NativeRemoteV2StreamDescriptor,
   openNativeRemoteV2VideoStream,
   type WorkerControlRequestError,
@@ -24,6 +27,73 @@ import { AndroidControlRail, AndroidDeviceNavigationBar } from "./p2p-android-vi
 
 type NativeViewportSession = NativeViewportSessionLike;
 
+type NativeCanvasPoint = {
+  x: number;
+  y: number;
+};
+
+const browserNodeInstanceKeys = new WeakMap<object, number>();
+let browserNodeInstanceSeq = 0;
+
+function getBrowserNodeInstanceKey(node: unknown) {
+  if (node == null) {
+    return "none";
+  }
+  if (typeof node !== "object" && typeof node !== "function") {
+    return String(node);
+  }
+
+  const objectNode = node as object;
+  const existingKey = browserNodeInstanceKeys.get(objectNode);
+  if (existingKey != null) {
+    return `node-${existingKey}`;
+  }
+
+  browserNodeInstanceSeq += 1;
+  browserNodeInstanceKeys.set(objectNode, browserNodeInstanceSeq);
+  return `node-${browserNodeInstanceSeq}`;
+}
+
+function projectCanvasPoint(params: {
+  canvas: HTMLCanvasElement;
+  clientX: number;
+  clientY: number;
+  videoHeight: number;
+  videoWidth: number;
+}): NativeCanvasPoint | null {
+  const rect = params.canvas.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) {
+    return null;
+  }
+
+  return {
+    x: Math.round(((params.clientX - rect.left) / rect.width) * params.videoWidth),
+    y: Math.round(((params.clientY - rect.top) / rect.height) * params.videoHeight),
+  };
+}
+
+function inferScreenshotExtension(mimeType: string) {
+  if (mimeType.includes("jpeg")) {
+    return "jpg";
+  }
+  if (mimeType.includes("webp")) {
+    return "webp";
+  }
+  return "png";
+}
+
+function triggerScreenshotDownload(params: { imageBase64: string; mimeType: string; peerId: string }) {
+  const binary = atob(params.imageBase64);
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  const blob = new Blob([bytes], { type: params.mimeType });
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = `android-${params.peerId}-${Date.now()}.${inferScreenshotExtension(params.mimeType)}`;
+  anchor.click();
+  URL.revokeObjectURL(objectUrl);
+}
+
 function isScreenCapturePermissionError(error: unknown): error is WorkerControlRequestError {
   if (error instanceof Error && "code" in error) {
     const code =
@@ -42,6 +112,7 @@ export function P2PAndroidNativeV2WebRtcPanel({ session }: { session: NativeView
   const [videoMeta, setVideoMeta] = useState({ height: 1920, width: 1080 });
   const [capabilityOverride, setCapabilityOverride] = useState<null | { reason?: string; state?: string }>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const pointerGestureRef = useRef<null | (NativeCanvasPoint & { startedAt: number })>(null);
   const generationRef = useRef(0);
   const cleanupRef = useRef<null | (() => Promise<void>)>(null);
   const pendingBootstrapRef = useRef<null | {
@@ -50,6 +121,8 @@ export function P2PAndroidNativeV2WebRtcPanel({ session }: { session: NativeView
   }>(null);
   const effectiveCapability = capabilityOverride ?? session.nativeRemoteV2.capability;
   const capabilityState = effectiveCapability.state?.trim().toLowerCase() ?? "";
+  const currentNode = session.getCurrentNode();
+  const currentNodeKey = getBrowserNodeInstanceKey(currentNode);
   const capabilityMeta = getAndroidNativeRemoteV2AvailabilityMeta(
     effectiveCapability.state,
     effectiveCapability.reason,
@@ -71,7 +144,6 @@ export function P2PAndroidNativeV2WebRtcPanel({ session }: { session: NativeView
 
   const remoteStatus = buildNativeV2RemoteStatus({
     capabilityDetail: capabilityMeta.detail,
-    capabilityLabel: capabilityMeta.label,
     capabilityState,
     streamStatus,
   });
@@ -86,9 +158,10 @@ export function P2PAndroidNativeV2WebRtcPanel({ session }: { session: NativeView
     address: string;
     forceRefresh?: boolean;
     node: NonNullable<ReturnType<NativeViewportSession["getCurrentNode"]>>;
+    nodeKey: string;
     peerId: string;
   }) {
-    const key = `${params.peerId}::${params.address}`;
+    const key = `${params.peerId}::${params.address}::${params.nodeKey}`;
     if (params.forceRefresh) {
       pendingBootstrapRef.current = null;
     }
@@ -132,7 +205,7 @@ export function P2PAndroidNativeV2WebRtcPanel({ session }: { session: NativeView
       return;
     }
 
-    const node = session.getCurrentNode();
+    const node = currentNode;
     const address = session.targetAddress;
     if (node == null || address == null) {
       setStreamStatus("error");
@@ -148,6 +221,7 @@ export function P2PAndroidNativeV2WebRtcPanel({ session }: { session: NativeView
         address,
         forceRefresh: options?.forceRetry === true,
         node,
+        nodeKey: currentNodeKey,
         peerId: session.peerId,
       });
       if (generationRef.current !== generation) {
@@ -234,7 +308,7 @@ export function P2PAndroidNativeV2WebRtcPanel({ session }: { session: NativeView
 
   useEffect(() => {
     setCapabilityOverride(null);
-  }, [session.peerId, session.targetAddress]);
+  }, [currentNodeKey, session.peerId, session.targetAddress]);
 
   useEffect(() => {
     const nextCapabilityState = session.nativeRemoteV2.capability.state?.trim().toLowerCase() ?? "";
@@ -249,7 +323,7 @@ export function P2PAndroidNativeV2WebRtcPanel({ session }: { session: NativeView
       generationRef.current += 1;
       void closeActiveStream();
     };
-  }, [capabilityState, session.peerId, session.targetAddress]);
+  }, [capabilityState, currentNodeKey, session.peerId, session.targetAddress]);
 
   async function invokeKey(key: string) {
     const node = session.getCurrentNode();
@@ -266,25 +340,126 @@ export function P2PAndroidNativeV2WebRtcPanel({ session }: { session: NativeView
     }
   }
 
-  async function handleCanvasClick(event: ReactPointerEvent<HTMLCanvasElement>) {
+  async function sendText(text: string) {
+    const node = session.getCurrentNode();
+    const address = session.targetAddress;
+    if (node == null || address == null || streamStatus !== "connected") {
+      return false;
+    }
+
+    const nextText = text.trim();
+    if (nextText === "") {
+      return false;
+    }
+
+    try {
+      await invokeNativeRemoteV2Text({ address, node, peerId: session.peerId, text: nextText });
+      return true;
+    } catch (error) {
+      console.error("native v2 text error", error);
+      setStreamStatus("error");
+      setStreamError("操作失败");
+      return false;
+    }
+  }
+
+  async function captureScreenshot() {
+    const node = session.getCurrentNode();
+    const address = session.targetAddress;
+    if (node == null || address == null || streamStatus !== "connected") {
+      return;
+    }
+
+    try {
+      const screenshot = await captureNativeRemoteV2Screenshot({
+        address,
+        format: "png",
+        node,
+        peerId: session.peerId,
+      });
+      const imageBase64 = screenshot.imageBase64?.trim();
+      const mimeType = screenshot.mimeType?.trim() || "image/png";
+      if (!imageBase64) {
+        throw new Error("screen snapshot missing image payload");
+      }
+      triggerScreenshotDownload({ imageBase64, mimeType, peerId: session.peerId });
+    } catch (error) {
+      console.error("native v2 screenshot error", error);
+      setStreamStatus("error");
+      setStreamError("截图失败");
+    }
+  }
+
+  function handleCanvasPointerDown(event: ReactPointerEvent<HTMLCanvasElement>) {
+    const canvas = canvasRef.current;
+    if (canvas == null || streamStatus !== "connected") {
+      pointerGestureRef.current = null;
+      return;
+    }
+
+    const point = projectCanvasPoint({
+      canvas,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      videoHeight: videoMeta.height,
+      videoWidth: videoMeta.width,
+    });
+    if (point == null) {
+      pointerGestureRef.current = null;
+      return;
+    }
+
+    pointerGestureRef.current = {
+      ...point,
+      startedAt: event.timeStamp,
+    };
+  }
+
+  async function handleCanvasPointerUp(event: ReactPointerEvent<HTMLCanvasElement>) {
     const node = session.getCurrentNode();
     const address = session.targetAddress;
     const canvas = canvasRef.current;
+    const gestureStart = pointerGestureRef.current;
+    pointerGestureRef.current = null;
     if (node == null || address == null || canvas == null || streamStatus !== "connected") {
       return;
     }
 
-    const rect = canvas.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) {
+    const point = projectCanvasPoint({
+      canvas,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      videoHeight: videoMeta.height,
+      videoWidth: videoMeta.width,
+    });
+    if (point == null) {
       return;
     }
 
-    const x = Math.round(((event.clientX - rect.left) / rect.width) * videoMeta.width);
-    const y = Math.round(((event.clientY - rect.top) / rect.height) * videoMeta.height);
     try {
-      await invokeNativeRemoteV2Tap({ address, node, peerId: session.peerId, x, y });
+      if (gestureStart == null) {
+        await invokeNativeRemoteV2Tap({ address, node, peerId: session.peerId, x: point.x, y: point.y });
+        return;
+      }
+
+      const maxDelta = Math.max(Math.abs(point.x - gestureStart.x), Math.abs(point.y - gestureStart.y));
+      if (maxDelta < 12) {
+        await invokeNativeRemoteV2Tap({ address, node, peerId: session.peerId, x: point.x, y: point.y });
+        return;
+      }
+
+      await invokeNativeRemoteV2Swipe({
+        address,
+        durationMs: Math.max(120, Math.round(event.timeStamp - gestureStart.startedAt)),
+        endX: point.x,
+        endY: point.y,
+        node,
+        peerId: session.peerId,
+        startX: gestureStart.x,
+        startY: gestureStart.y,
+      });
     } catch (error) {
-      console.error("native v2 tap error", error);
+      console.error("native v2 pointer error", error);
       setStreamStatus("error");
       setStreamError("操作失败");
     }
@@ -317,8 +492,12 @@ export function P2PAndroidNativeV2WebRtcPanel({ session }: { session: NativeView
                   <canvas
                     data-testid="android-remote-canvas"
                     ref={canvasRef}
+                    onPointerDown={handleCanvasPointerDown}
+                    onPointerCancel={() => {
+                      pointerGestureRef.current = null;
+                    }}
                     onPointerUp={(event) => {
-                      void handleCanvasClick(event);
+                      void handleCanvasPointerUp(event);
                     }}
                     className="max-h-full max-w-full touch-none select-none bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.18),_rgba(15,23,42,0.96)_58%)]"
                   />
@@ -336,24 +515,24 @@ export function P2PAndroidNativeV2WebRtcPanel({ session }: { session: NativeView
 
           <AndroidControlRail
             directExperiment={directExperiment}
-            onPerformanceProfileChange={() => undefined}
             onReconnect={() => {
               void startNativeStream({ forceRetry: true });
             }}
             reconnectEnabled={streamStatus !== "connecting"}
             onRotate={() => undefined}
-            onScreenshot={() => undefined}
-            onSendText={async () => false}
-            performanceMeta="原生"
-            performanceProfile="medium"
+            onScreenshot={() => {
+              void captureScreenshot();
+            }}
+            onSendText={sendText}
             remoteStatus={remoteStatus}
             rotateEnabled={false}
             rotateHint={{ ...unavailableHint, op: "rotate" }}
-            screenshotEnabled={false}
+            screenshotEnabled={streamStatus === "connected"}
             screenshotHint={{ ...unavailableHint, op: "captureScreenshot" }}
             sessionDebugItems={sessionDebugItems}
             sessionInfoItems={sessionInfoItems}
-            textActionsEnabled={false}
+            showPerformanceControls={false}
+            textActionsEnabled={streamStatus === "connected"}
             textInputHint={{ ...unavailableHint, op: "writeClipboard" }}
           />
         </div>

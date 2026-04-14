@@ -27,10 +27,9 @@ export type RemoteControlCapabilityState = {
 };
 
 export type RemoteControlCapabilities = {
-  adbTunnel: RemoteControlCapabilityState;
+  adbTunnel?: RemoteControlCapabilityState;
   nativeRemoteV2?: RemoteControlCapabilityState;
   nativeRemoteV2WebRTC?: RemoteControlCapabilityState;
-  scrcpy: RemoteControlCapabilityState;
 };
 
 export type RemoteControlSession = {
@@ -54,6 +53,10 @@ export type RemoteControlState = {
   capabilities: RemoteControlCapabilities;
   session: RemoteControlSession;
 };
+
+function hasCapabilityState(value: RemoteControlCapabilityState | undefined) {
+  return (value?.state?.trim() ?? "") !== "";
+}
 
 export type PeerCandidate = {
   peerId: string;
@@ -159,8 +162,7 @@ export function parseRemoteControlState(value: unknown): RemoteControlState | un
   const adbTunnel = parseRemoteControlCapabilityState(capabilitiesRecord.adb_tunnel);
   const nativeRemoteV2 = parseRemoteControlCapabilityState(capabilitiesRecord.native_remote_v2);
   const nativeRemoteV2WebRTC = parseRemoteControlCapabilityState(capabilitiesRecord.native_remote_v2_webrtc);
-  const scrcpy = parseRemoteControlCapabilityState(capabilitiesRecord.scrcpy);
-  if ((adbTunnel.state?.trim() ?? "") === "" || (scrcpy.state?.trim() ?? "") === "") {
+  if (!hasCapabilityState(nativeRemoteV2) && !hasCapabilityState(nativeRemoteV2WebRTC)) {
     return undefined;
   }
 
@@ -184,7 +186,6 @@ export function parseRemoteControlState(value: unknown): RemoteControlState | un
       adbTunnel,
       nativeRemoteV2,
       nativeRemoteV2WebRTC,
-      scrcpy,
     },
     nativeRemoteV2Session: (() => {
       const sessionRecordV2 = asRecord(record.native_remote_v2_session);
@@ -224,8 +225,12 @@ export function supportsAndroidRemoteControl(remoteControl: RemoteControlState |
   return (remoteControl?.platform?.trim().toLowerCase() ?? "") === "android";
 }
 
+export function hasDeclaredAndroidRemoteCapability(remoteControl: RemoteControlState | null | undefined) {
+  return hasCapabilityState(remoteControl?.capabilities.nativeRemoteV2) || hasCapabilityState(remoteControl?.capabilities.nativeRemoteV2WebRTC);
+}
+
 export function canOpenAndroidView(remoteControl: RemoteControlState | null | undefined) {
-  return supportsAndroidRemoteControl(remoteControl);
+  return supportsAndroidRemoteControl(remoteControl) && hasDeclaredAndroidRemoteCapability(remoteControl);
 }
 
 export function listPeerFeatureLabels(
@@ -233,7 +238,7 @@ export function listPeerFeatureLabels(
   remoteControl?: RemoteControlState | null,
 ) {
   const labels = [] as string[];
-  if (supportsAndroidRemoteControl(remoteControl)) {
+  if (canOpenAndroidView(remoteControl)) {
     labels.push("android");
   }
   if (supportsVncView(vnc)) {
