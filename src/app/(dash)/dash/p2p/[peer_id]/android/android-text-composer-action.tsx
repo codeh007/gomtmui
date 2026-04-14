@@ -4,37 +4,8 @@ import { Button } from "mtxuilib/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "mtxuilib/ui/dialog";
 import { Input } from "mtxuilib/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "mtxuilib/ui/sheet";
-import { useEffect, useState } from "react";
-
-function useIsNarrowScreen() {
-  const [isNarrowScreen, setIsNarrowScreen] = useState(() => {
-    if (typeof window === "undefined") {
-      return false;
-    }
-
-    return window.matchMedia("(max-width: 767px)").matches;
-  });
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    const mediaQuery = window.matchMedia("(max-width: 767px)");
-    const handleChange = (event: MediaQueryListEvent) => {
-      setIsNarrowScreen(event.matches);
-    };
-
-    setIsNarrowScreen(mediaQuery.matches);
-    mediaQuery.addEventListener("change", handleChange);
-
-    return () => {
-      mediaQuery.removeEventListener("change", handleChange);
-    };
-  }, []);
-
-  return isNarrowScreen;
-}
+import { useState } from "react";
+import { useIsNarrowScreen } from "./use-is-narrow-screen";
 
 type AndroidTextComposerActionProps = {
   open: boolean;

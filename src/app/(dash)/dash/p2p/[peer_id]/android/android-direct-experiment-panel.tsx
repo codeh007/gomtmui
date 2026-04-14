@@ -1,11 +1,12 @@
 "use client";
 
-import { FlaskConical, LoaderCircle } from "lucide-react";
-import { cn } from "mtxuilib/lib/utils";
+import { FlaskConical } from "lucide-react";
 import { Button } from "mtxuilib/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "mtxuilib/ui/collapsible";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "mtxuilib/ui/sheet";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { AndroidDirectExperimentPanelBody } from "./android-direct-experiment-panel-body";
+import { stringifyDirectPayload } from "./android-direct-experiment-panel-utils";
 import type { AndroidDirectLaneState } from "./use-android-direct-lane";
 
 type AndroidDirectExperimentPanelProps = {
@@ -18,21 +19,6 @@ type AndroidDirectExperimentPanelProps = {
   onRun: () => Promise<unknown> | undefined;
   state: AndroidDirectLaneState;
 };
-
-function stringifyDirectPayload(value: unknown) {
-  if (value == null) {
-    return "尚无结果";
-  }
-  if (typeof value === "string") {
-    return value;
-  }
-
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
-}
 
 export function AndroidDirectExperimentPanel({
   candidatePairSummary,
@@ -78,76 +64,17 @@ export function AndroidDirectExperimentPanel({
   }
 
   const panelBody = (
-    <div data-testid="android-direct-experiment-panel" className="space-y-3">
-      <div className="space-y-1">
-        <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-zinc-400">直连实验</div>
-        <div className="text-xs leading-5 text-zinc-300">
-          direct-only 命中 Android 侧 direct lane，不走普通请求 fallback。
-        </div>
-      </div>
-
-      <div className="rounded-2xl border border-white/10 bg-black/30 px-3 py-2 text-xs text-zinc-200">
-        <div className="text-[11px] uppercase tracking-[0.16em] text-zinc-500">Direct 证据摘要</div>
-        <div data-testid="android-direct-experiment-evidence" className="mt-2 text-xs leading-5 text-zinc-100">
-          {directEvidenceSummary}
-        </div>
-      </div>
-
-      <div className="rounded-2xl border border-white/10 bg-black/30 px-3 py-2 text-xs text-zinc-200">
-        <div className="text-[11px] uppercase tracking-[0.16em] text-zinc-500">Candidate Pair 摘要</div>
-        <div data-testid="android-direct-experiment-candidate-pair" className="mt-2 text-xs leading-5 text-zinc-100">
-          {candidatePairSummary}
-        </div>
-      </div>
-
-      <div className="rounded-2xl border border-white/10 bg-black/30 px-3 py-2 text-xs text-zinc-200">
-        <div className="text-[11px] uppercase tracking-[0.16em] text-zinc-500">Direct 状态</div>
-        <div
-          data-testid="android-direct-experiment-status"
-          className={cn(
-            "mt-2 font-mono text-xs text-zinc-100",
-            state === "direct_ready" && "text-emerald-200",
-            state === "direct_not_established" && "text-amber-200",
-            state === "signaling" && "text-sky-200",
-          )}
-        >
-          {state}
-        </div>
-      </div>
-
-      <div className="rounded-2xl border border-white/10 bg-black/30 px-3 py-2 text-xs text-zinc-200">
-        <div className="text-[11px] uppercase tracking-[0.16em] text-zinc-500">
-          {lastError != null ? "最近一次错误" : "最近一次结果"}
-        </div>
-        <pre
-          data-testid="android-direct-experiment-result"
-          className={cn(
-            "mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-xl bg-black/40 p-2 font-mono text-[11px] leading-5 text-zinc-100",
-            lastError != null && "text-rose-200",
-          )}
-        >
-          {detail}
-        </pre>
-      </div>
-
-      <Button
-        data-testid="android-direct-experiment-run"
-        className="w-full"
-        disabled={!canRun || isRunning}
-        onClick={() => {
-          void handleRun();
-        }}
-      >
-        {isRunning ? (
-          <>
-            <LoaderCircle className="size-4 animate-spin" />
-            直连测试中...
-          </>
-        ) : (
-          "开始直连测试"
-        )}
-      </Button>
-    </div>
+    <AndroidDirectExperimentPanelBody
+      candidatePairSummary={candidatePairSummary}
+      detail={detail}
+      directEvidenceSummary={directEvidenceSummary}
+      isRunning={!canRun || isRunning}
+      lastError={lastError}
+      onRun={() => {
+        void handleRun();
+      }}
+      state={state}
+    />
   );
 
   if (isNarrowScreen) {

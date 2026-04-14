@@ -29,7 +29,8 @@ import {
   createNativeV2UnavailableHint,
 } from "./p2p-android-native-v2-view-model";
 import type { NativeViewportSessionLike, StreamStatus } from "./p2p-android-native-v2-webrtc-panel-shared";
-import { AndroidControlRail, AndroidDeviceNavigationBar } from "./p2p-android-viewport-control-rail";
+import { AndroidDeviceNavigationBar } from "./android-device-navigation-bar";
+import { AndroidControlRail } from "./p2p-android-viewport-control-rail";
 
 type NativeViewportSession = NativeViewportSessionLike;
 

@@ -5,7 +5,7 @@ import { OnlyDebug } from "mtxuilib/mt/DebugValue";
 import { Button } from "mtxuilib/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "mtxuilib/ui/popover";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "mtxuilib/ui/sheet";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { AndroidDirectExperimentPanel } from "./android-direct-experiment-panel";
 import { AndroidSessionInfoDialog } from "./android-session-info-dialog";
 import { AndroidTextComposerAction } from "./android-text-composer-action";
@@ -17,36 +17,9 @@ import {
   type AndroidSessionInfoItem,
   resolveAndroidPerformanceTuning,
 } from "./p2p-android-viewport-support";
-
-function useIsNarrowScreen() {
-  const [isNarrowScreen, setIsNarrowScreen] = useState(() => {
-    if (typeof window === "undefined") {
-      return false;
-    }
-
-    return window.matchMedia("(max-width: 767px)").matches;
-  });
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    const mediaQuery = window.matchMedia("(max-width: 767px)");
-    const handleChange = (event: MediaQueryListEvent) => {
-      setIsNarrowScreen(event.matches);
-    };
-
-    setIsNarrowScreen(mediaQuery.matches);
-    mediaQuery.addEventListener("change", handleChange);
-
-    return () => {
-      mediaQuery.removeEventListener("change", handleChange);
-    };
-  }, []);
-
-  return isNarrowScreen;
-}
+import { runAfterClosingMorePanel } from "./android-more-panel-actions";
+import { resolveMorePanelSurfaceState } from "./android-more-panel-state";
+import { useIsNarrowScreen } from "./use-is-narrow-screen";
 
 type AndroidMorePanelProps = {
   directExperiment?: P2PAndroidDirectExperimentView;
@@ -97,27 +70,16 @@ export function AndroidMorePanel({
 
   const handleSessionInfoOpenChange = (nextOpen: boolean) => {
     setSessionInfoOpen(nextOpen);
-    setActiveSurface((current) => {
-      if (nextOpen) {
-        return "sessionInfo";
-      }
-      return current === "sessionInfo" ? null : current;
-    });
+    setActiveSurface((current) => resolveMorePanelSurfaceState(current, "sessionInfo", nextOpen));
   };
 
   const handleTextComposerOpenChange = (nextOpen: boolean) => {
     setTextComposerOpen(nextOpen);
-    setActiveSurface((current) => {
-      if (nextOpen) {
-        return "textComposer";
-      }
-      return current === "textComposer" ? null : current;
-    });
+    setActiveSurface((current) => resolveMorePanelSurfaceState(current, "textComposer", nextOpen));
   };
 
   const handleOpenSessionInfo = () => {
-    setPanelOpen(false);
-    handleSessionInfoOpenChange(true);
+    runAfterClosingMorePanel(() => handleSessionInfoOpenChange(true), setPanelOpen);
   };
 
   const handleOpenTextComposer = () => {
@@ -125,8 +87,7 @@ export function AndroidMorePanel({
       return;
     }
 
-    setPanelOpen(false);
-    handleTextComposerOpenChange(true);
+    runAfterClosingMorePanel(() => handleTextComposerOpenChange(true), setPanelOpen);
   };
 
   const morePanelBody = (
@@ -150,10 +111,7 @@ export function AndroidMorePanel({
           size="icon"
           variant="secondary"
           disabled={!reconnectEnabled}
-          onClick={() => {
-            setPanelOpen(false);
-            onReconnect();
-          }}
+          onClick={() => runAfterClosingMorePanel(onReconnect, setPanelOpen)}
         >
           <RefreshCw className="size-4" />
         </Button>
