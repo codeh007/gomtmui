@@ -10,6 +10,12 @@ import {
   useRef,
   useState,
 } from "react";
+import { useRpcQuery } from "mtmsdk/supabase/use-sb-query/use-rpc-query";
+import {
+  getServerAccessUrl,
+  serverInstanceListSchema,
+  type ServerInstanceStatusDto,
+} from "@/components/server-instance/status-contract";
 import type { PeerCandidate, PeerCapabilityTruth } from "@/lib/p2p/discovery-contracts";
 import {
   type BrowserNodeLike,
@@ -125,7 +131,7 @@ type P2PSessionValue = ReturnType<typeof useP2PSessionState>;
 type P2PSessionDeps = {
   assertBrowserP2PSupport: typeof assertBrowserP2PSupport;
   createBrowserNode: typeof createBrowserNode;
-  fetchSuggestedBootstrapTarget: typeof fetchSuggestedBootstrapTarget;
+  fetchSuggestedBootstrapTarget: (statusUrl?: string | null) => Promise<StoredBootstrapTarget>;
   getCurrentPageHostname: typeof getCurrentPageHostname;
   readStoredBootstrapTarget: typeof readStoredBootstrapTarget;
   writeStoredBootstrapTarget: typeof writeStoredBootstrapTarget;
@@ -472,12 +478,23 @@ function writeStoredBootstrapTarget(target: { bootstrapAddr: string }) {
   return nextTarget;
 }
 
-async function fetchSuggestedBootstrapTarget(): Promise<StoredBootstrapTarget> {
-  if (typeof window === "undefined") {
+function getSuggestedBootstrapStatusUrl(instances: ReadonlyArray<ServerInstanceStatusDto> | null | undefined) {
+  for (const instance of instances ?? []) {
+    const accessUrl = getServerAccessUrl(instance.status, instance.hostname);
+    if (accessUrl) {
+      return new URL("/api/system/status", accessUrl).toString();
+    }
+  }
+  return null;
+}
+
+async function fetchSuggestedBootstrapTarget(statusUrl?: string | null): Promise<StoredBootstrapTarget> {
+  const normalizedStatusUrl = statusUrl?.trim() ?? "";
+  if (typeof window === "undefined" || normalizedStatusUrl === "") {
     return {};
   }
   try {
-    const response = await fetch("/api/system/status", { cache: "no-store" });
+    const response = await fetch(normalizedStatusUrl, { cache: "no-store" });
     if (!response.ok) {
       return {};
     }
@@ -585,7 +602,7 @@ function getRendezvousDiscoveryService(node: BrowserNodeSession["node"]) {
   return (node.services as { rendezvousDiscovery?: BrowserRendezvousDiscoveryService }).rendezvousDiscovery ?? null;
 }
 
-function useP2PSessionState() {
+function useP2PSessionState(options?: { suggestedBootstrapStatusUrl?: string | null }) {
   const sessionRef = useRef<BrowserNodeSession | null>(null);
   const connectAttemptRef = useRef(0);
   const resolvedPeerTruthRef = useRef<ResolvedPeerTruthMap>({});
@@ -798,7 +815,7 @@ function useP2PSessionState() {
       const storedTarget = p2pSessionDeps.readStoredBootstrapTarget();
       let suggestedTarget: StoredBootstrapTarget = storedTarget.bootstrapAddr?.trim()
         ? {}
-        : await p2pSessionDeps.fetchSuggestedBootstrapTarget();
+        : await p2pSessionDeps.fetchSuggestedBootstrapTarget(options?.suggestedBootstrapStatusUrl);
       const initialInput = (storedTarget.bootstrapAddr?.trim() || suggestedTarget.bootstrapAddr?.trim() || "").trim();
       if (cancelled) {
         return;
@@ -816,7 +833,7 @@ function useP2PSessionState() {
           return;
         }
         if (storedTarget.bootstrapAddr?.trim() && !(suggestedTarget.bootstrapAddr?.trim() ?? "")) {
-          suggestedTarget = await p2pSessionDeps.fetchSuggestedBootstrapTarget();
+          suggestedTarget = await p2pSessionDeps.fetchSuggestedBootstrapTarget(options?.suggestedBootstrapStatusUrl);
         }
         if (
           shouldRetryWithSuggestedBootstrap({
@@ -842,7 +859,7 @@ function useP2PSessionState() {
       cancelled = true;
       void stopNode();
     };
-  }, [connectToBootstrap, stopNode]);
+  }, [connectToBootstrap, options?.suggestedBootstrapStatusUrl, stopNode]);
 
   const resolveDialableAddress = useCallback(async (multiaddrs: string[]) => {
     const node = sessionRef.current?.node;
@@ -968,7 +985,16 @@ function useP2PSessionState() {
 }
 
 export function P2PSessionProvider({ children }: { children: ReactNode }) {
-  const value = useP2PSessionState();
+  const serverInstancesQuery = useRpcQuery(
+    "server_list_cursor",
+    { p_limit: 20 },
+    {
+      schema: serverInstanceListSchema,
+    },
+  );
+  const value = useP2PSessionState({
+    suggestedBootstrapStatusUrl: getSuggestedBootstrapStatusUrl(serverInstancesQuery.data),
+  });
   return createElement(P2PSessionContext.Provider, { value }, children);
 }
 
