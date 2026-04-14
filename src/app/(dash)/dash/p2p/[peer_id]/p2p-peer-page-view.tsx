@@ -226,8 +226,15 @@ export function P2PPeerPageView({ peerId }: { peerId: string }) {
                         <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                           <PeerStat label="platform" value={remoteControl.platform || "unknown"} />
                           <PeerStat label="controller" value={remoteControl.session.controllerState || "unknown"} />
-                          <PeerStat label="adb" value={remoteControl.capabilities.adbTunnel.state || "unknown"} />
-                          <PeerStat label="scrcpy" value={remoteControl.capabilities.scrcpy.state || "unknown"} />
+                          <PeerStat label="adb_tunnel" value={remoteControl.capabilities.adbTunnel?.state || "unknown"} />
+                          <PeerStat
+                            label="native_remote_v2"
+                            value={remoteControl.capabilities.nativeRemoteV2?.state || "unknown"}
+                          />
+                          <PeerStat
+                            label="native_remote_v2_webrtc"
+                            value={remoteControl.capabilities.nativeRemoteV2WebRTC?.state || "unknown"}
+                          />
                           {remoteControl.session.activeControllerPeerId ? (
                             <div className="rounded-xl border px-4 py-3 text-xs md:col-span-2 xl:col-span-4">
                               <div className="text-muted-foreground">active_controller_peer_id</div>

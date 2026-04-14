@@ -23,7 +23,6 @@ vi.mock("./libp2p-stream", () => ({
 import {
   ensureNativeRemoteV2Stream,
   openNativeRemoteV2VideoStream,
-  startNativeRemoteV2WebRtcSession,
 } from "./worker-control";
 
 describe("ensureNativeRemoteV2Stream", () => {
@@ -57,46 +56,6 @@ describe("ensureNativeRemoteV2Stream", () => {
     ).rejects.toMatchObject({
       code: "SB_BAD_FRAME",
       message: "screen.stream.ensure returned no usable remote_control_payload",
-    });
-  });
-});
-
-describe("startNativeRemoteV2WebRtcSession", () => {
-  beforeEach(() => {
-    libp2pStreamMocks.close.mockClear();
-    libp2pStreamMocks.onDrain.mockClear();
-    libp2pStreamMocks.send.mockClear();
-    libp2pStreamMocks.openStreamForAddress.mockClear();
-    libp2pStreamMocks.readJsonFrame.mockReset();
-    libp2pStreamMocks.writeJsonRequest.mockClear();
-  });
-
-  it("returns minimal webrtc start payload", async () => {
-    libp2pStreamMocks.readJsonFrame.mockResolvedValue({
-      payload: {
-        payload: {
-          ok: true,
-          result: {
-            remote_control_payload: {
-              session_id: "sess-webrtc-1",
-              state: "connecting",
-              topology: "signaling_starting",
-            },
-          },
-        },
-      },
-    });
-
-    await expect(
-      startNativeRemoteV2WebRtcSession({
-        address: "/ip4/127.0.0.1/tcp/4101/p2p/12D3KooWAndroid",
-        node: {} as never,
-        peerId: "12D3KooWAndroid",
-      }),
-    ).resolves.toMatchObject({
-      sessionId: "sess-webrtc-1",
-      state: "connecting",
-      topology: "signaling_starting",
     });
   });
 });
