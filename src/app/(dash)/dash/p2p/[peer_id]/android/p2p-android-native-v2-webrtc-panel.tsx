@@ -2,25 +2,15 @@
 
 import { type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
 import {
-  captureNativeRemoteV2Screenshot,
   ensureNativeRemoteV2Stream,
-  invokeNativeRemoteV2Key,
-  invokeNativeRemoteV2Swipe,
-  invokeNativeRemoteV2Tap,
-  invokeNativeRemoteV2Text,
   type NativeRemoteV2StreamDescriptor,
   openNativeRemoteV2VideoStream,
 } from "@/lib/p2p/worker-control";
 import { AndroidNativeV2StatusOverlay } from "./android-native-v2-status-overlay";
 import { getAndroidNativeRemoteV2AvailabilityMeta } from "./android-session-model";
 import { createNativeAndroidCanvasRenderer } from "./native-android-video-renderer";
-import {
-  getBrowserNodeInstanceKey,
-  isScreenCapturePermissionError,
-  projectCanvasPoint,
-  triggerScreenshotDownload,
-  type NativeCanvasPoint,
-} from "./p2p-android-native-v2-webrtc-panel-utils";
+import { getBrowserNodeInstanceKey, isScreenCapturePermissionError, type NativeCanvasPoint } from "./p2p-android-native-v2-webrtc-panel-utils";
+import { createNativeV2ActionController, createNativeV2PointerHandlers } from "./p2p-android-native-v2-panel-actions";
 import {
   buildNativeV2DirectExperiment,
   buildNativeV2RemoteStatus,

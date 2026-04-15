@@ -23,9 +23,19 @@ import {
 } from "@/lib/p2p/rendezvous-discovery";
 import { logP2PConsole, summarizePeerCandidates } from "@/lib/p2p/p2p-console";
 import { requestPeerCapabilityTruth, WorkerControlRequestError } from "@/lib/p2p/worker-control";
+import {
+  getBootstrapDialTargets,
+  getCurrentPageHostname,
+  loadOrCreateBrowserPrivateKey,
+  normalizeBrowserBootstrapAddr,
+  readStoredBootstrapTarget,
+  readStoredBrowserIdentity,
+  persistStoredBrowserIdentity,
+  resolveBootstrapTarget,
+  shouldAllowPrivateBootstrapMultiaddr,
+  writeStoredBootstrapTarget,
+} from "./p2p-bootstrap-storage";
 
-const BOOTSTRAP_STORAGE_KEY = "gomtm:p2p:bootstrap-target";
-const BROWSER_IDENTITY_STORAGE_KEY = "gomtm:p2p:browser-identity-v1";
 const TRANSIENT_PEER_TRUTH_RETRY_DELAY_MS = 250;
 const UNRESOLVED_PEER_TRUTH_RETRY_DELAY_MS = 1_000;
 const MAX_UNRESOLVED_PEER_TRUTH_FAILURES = 3;
@@ -303,185 +313,6 @@ export async function resolveMissingPeerTruth(params: {
     retryablePeerKeys,
     terminalPeerKeys,
   };
-}
-
-export function shouldAllowPrivateBootstrapMultiaddr(candidate: string, bootstrapAddr: string) {
-  return (
-    normalizeBrowserBootstrapAddr(candidate) !== "" &&
-    normalizeBrowserBootstrapAddr(candidate) === normalizeBrowserBootstrapAddr(bootstrapAddr)
-  );
-}
-
-export function normalizeBrowserBootstrapAddr(value: string) {
-  const trimmed = value.trim();
-  if (trimmed === "" || !trimmed.includes("/webtransport") || !trimmed.includes("/certhash/")) {
-    return trimmed;
-  }
-
-  const segments = trimmed.split("/");
-  const normalized: string[] = [];
-  let seenCertHash = false;
-  for (let index = 0; index < segments.length; index += 1) {
-    const segment = segments[index];
-    if (segment !== "certhash") {
-      normalized.push(segment);
-      continue;
-    }
-    const hashValue = segments[index + 1];
-    if (hashValue == null) {
-      break;
-    }
-    if (!seenCertHash) {
-      normalized.push(segment, hashValue);
-      seenCertHash = true;
-    }
-    index += 1;
-  }
-
-  return normalized.join("/");
-}
-
-function getCurrentPageHostname() {
-  if (typeof window === "undefined") {
-    return "";
-  }
-  return window.location.hostname.trim().toLowerCase();
-}
-
-export function getLocalhostLoopbackBootstrapAddr(value: string, hostname: string) {
-  void value;
-  void hostname;
-  return null;
-}
-
-export function getBootstrapDialTargets(value: string, hostname: string) {
-  const primary = normalizeBrowserBootstrapAddr(value);
-  if (primary === "") {
-    return [];
-  }
-  void hostname;
-  return [primary];
-}
-
-function readStoredBootstrapTarget(): StoredBootstrapTarget {
-  if (typeof window === "undefined") {
-    return {};
-  }
-
-  try {
-    const raw = window.localStorage.getItem(BOOTSTRAP_STORAGE_KEY);
-    if (raw != null) {
-      const parsed = JSON.parse(raw) as { bootstrap_addr?: unknown };
-      const bootstrapAddr =
-        typeof parsed.bootstrap_addr === "string" ? normalizeBrowserBootstrapAddr(parsed.bootstrap_addr) : "";
-      return bootstrapAddr === "" ? {} : { bootstrapAddr };
-    }
-  } catch {
-    // localStorage 不可用时直接回退到运行时默认值
-  }
-
-  return {};
-}
-
-function persistStoredBootstrapTarget(target: StoredBootstrapTarget) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  try {
-    if ((target.bootstrapAddr?.trim() ?? "") === "") {
-      window.localStorage.removeItem(BOOTSTRAP_STORAGE_KEY);
-      return;
-    }
-
-    window.localStorage.setItem(BOOTSTRAP_STORAGE_KEY, JSON.stringify({ bootstrap_addr: target.bootstrapAddr }));
-  } catch {
-    // best effort only
-  }
-}
-
-function encodeBase64(bytes: Uint8Array) {
-  let binary = "";
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
-  }
-  return btoa(binary);
-}
-
-function decodeBase64(value: string) {
-  const binary = atob(value);
-  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
-}
-
-export function readStoredBrowserIdentity() {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  try {
-    const raw = window.localStorage.getItem(BROWSER_IDENTITY_STORAGE_KEY);
-    if (raw == null || raw.trim() === "") {
-      return null;
-    }
-    const parsed = JSON.parse(raw) as { private_key_base64?: unknown };
-    const privateKeyBase64 = typeof parsed.private_key_base64 === "string" ? parsed.private_key_base64.trim() : "";
-    return privateKeyBase64 === "" ? null : privateKeyBase64;
-  } catch {
-    return null;
-  }
-}
-
-export function persistStoredBrowserIdentity(privateKeyBase64: string | null) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  try {
-    const normalized = privateKeyBase64?.trim() ?? "";
-    if (normalized === "") {
-      window.localStorage.removeItem(BROWSER_IDENTITY_STORAGE_KEY);
-      return;
-    }
-    window.localStorage.setItem(BROWSER_IDENTITY_STORAGE_KEY, JSON.stringify({ private_key_base64: normalized }));
-  } catch {
-    // best effort only
-  }
-}
-
-async function loadOrCreateBrowserPrivateKey() {
-  const [{ keys }] = await Promise.all([import("@libp2p/crypto")]);
-  const storedKey = readStoredBrowserIdentity();
-  if (storedKey != null) {
-    try {
-      return keys.privateKeyFromProtobuf(decodeBase64(storedKey));
-    } catch {
-      persistStoredBrowserIdentity(null);
-    }
-  }
-
-  const privateKey = await keys.generateKeyPair("Ed25519");
-  persistStoredBrowserIdentity(encodeBase64(keys.privateKeyToProtobuf(privateKey)));
-  return privateKey;
-}
-
-function writeStoredBootstrapTarget(target: { bootstrapAddr: string }) {
-  const nextTarget = { bootstrapAddr: normalizeBrowserBootstrapAddr(target.bootstrapAddr) || undefined };
-  persistStoredBootstrapTarget(nextTarget);
-  return nextTarget;
-}
-
-function resolveBootstrapTarget(input: string): ResolvedBootstrapTarget {
-  const trimmed = normalizeBrowserBootstrapAddr(input);
-  if (trimmed === "") {
-    throw new Error("missing bootstrap input");
-  }
-  if (!trimmed.startsWith("/")) {
-    throw new Error("bootstrap 地址必须使用完整 auto_bootstrap multiaddr。");
-  }
-  if (!trimmed.includes("/webtransport") || !trimmed.includes("/p2p/")) {
-    throw new Error("bootstrap 地址必须是浏览器可拨的 WebTransport multiaddr（包含 /webtransport 与 /p2p）。");
-  }
-  return { bootstrapAddr: trimmed };
 }
 
 export function describeBootstrapJoinError(input: { bootstrapAddr: string; error: unknown }) {
