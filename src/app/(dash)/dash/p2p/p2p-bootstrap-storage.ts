@@ -147,12 +147,6 @@ export async function loadOrCreateBrowserPrivateKey() {
   return privateKey;
 }
 
-export function writeStoredBootstrapTarget(target: { bootstrapAddr: string }) {
-  const nextTarget = { bootstrapAddr: normalizeBrowserBootstrapAddr(target.bootstrapAddr) || undefined };
-  persistStoredBootstrapTarget(nextTarget);
-  return nextTarget;
-}
-
 export function resolveBootstrapTarget(input: string): ResolvedBootstrapTarget {
   const trimmed = normalizeBrowserBootstrapAddr(input);
   if (trimmed === "") {

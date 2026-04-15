@@ -25,10 +25,10 @@ import { logP2PConsole, summarizePeerCandidates } from "@/lib/p2p/p2p-console";
 import { requestPeerCapabilityTruth, WorkerControlRequestError } from "@/lib/p2p/worker-control";
 import {
   loadOrCreateBrowserPrivateKey,
+  persistStoredBootstrapTarget,
   readStoredBootstrapTarget,
   resolveBootstrapTarget,
   shouldAllowPrivateBootstrapMultiaddr,
-  writeStoredBootstrapTarget,
 } from "./p2p-bootstrap-storage";
 
 const TRANSIENT_PEER_TRUTH_RETRY_DELAY_MS = 250;
@@ -123,14 +123,14 @@ type P2PSessionDeps = {
   assertBrowserP2PSupport: typeof assertBrowserP2PSupport;
   createBrowserNode: typeof createBrowserNode;
   readStoredBootstrapTarget: typeof readStoredBootstrapTarget;
-  writeStoredBootstrapTarget: typeof writeStoredBootstrapTarget;
+  persistStoredBootstrapTarget: typeof persistStoredBootstrapTarget;
 };
 
 const defaultP2PSessionDeps: P2PSessionDeps = {
   assertBrowserP2PSupport,
   createBrowserNode,
   readStoredBootstrapTarget,
-  writeStoredBootstrapTarget,
+  persistStoredBootstrapTarget,
 };
 
 let p2pSessionDeps: P2PSessionDeps = defaultP2PSessionDeps;
@@ -535,7 +535,7 @@ function useP2PSessionState() {
         setStatus("peer_candidates_ready");
 
         setBootstrapInput(target.bootstrapAddr);
-        p2pSessionDeps.writeStoredBootstrapTarget({ bootstrapAddr: target.bootstrapAddr });
+        p2pSessionDeps.persistStoredBootstrapTarget({ bootstrapAddr: target.bootstrapAddr });
         logP2PConsole("info", "已接入 P2P 网络", {
           bootstrapAddr: target.bootstrapAddr,
           peerCandidates: (await discovery.listPeerCandidates()).length,
