@@ -66,6 +66,29 @@ export function P2PAndroidNativeV2WebRtcPanel({ session }: { session: NativeView
     streamStatus,
   });
 
+  const actionController = createNativeV2ActionController({
+    getSession: () => session,
+    getStreamStatus: () => streamStatus,
+    onActionError: (message, error) => {
+      console.error("native v2 action error", error);
+      setStreamStatus("error");
+      setStreamError(message);
+    },
+  });
+
+  const pointerHandlers = createNativeV2PointerHandlers({
+    canvasRef,
+    getStreamStatus: () => streamStatus,
+    getVideoMeta: () => videoMeta,
+    gestureRef: pointerGestureRef,
+    onActionError: (message, error) => {
+      console.error("native v2 pointer error", error);
+      setStreamStatus("error");
+      setStreamError(message);
+    },
+    session,
+  });
+
   async function closeActiveStream() {
     const cleanup = cleanupRef.current;
     cleanupRef.current = null;
@@ -244,143 +267,23 @@ export function P2PAndroidNativeV2WebRtcPanel({ session }: { session: NativeView
   }, [capabilityState, currentNodeKey, session.peerId, session.targetAddress]);
 
   async function invokeKey(key: string) {
-    const node = session.getCurrentNode();
-    const address = session.targetAddress;
-    if (node == null || address == null || streamStatus !== "connected") {
-      return;
-    }
-    try {
-      await invokeNativeRemoteV2Key({ address, key, node, peerId: session.peerId });
-    } catch (error) {
-      console.error("native v2 key error", error);
-      setStreamStatus("error");
-      setStreamError("操作失败");
-    }
+    await actionController.invokeKey(key);
   }
 
   async function sendText(text: string) {
-    const node = session.getCurrentNode();
-    const address = session.targetAddress;
-    if (node == null || address == null || streamStatus !== "connected") {
-      return false;
-    }
-
-    const nextText = text.trim();
-    if (nextText === "") {
-      return false;
-    }
-
-    try {
-      await invokeNativeRemoteV2Text({ address, node, peerId: session.peerId, text: nextText });
-      return true;
-    } catch (error) {
-      console.error("native v2 text error", error);
-      setStreamStatus("error");
-      setStreamError("操作失败");
-      return false;
-    }
+    return await actionController.sendText(text);
   }
 
   async function captureScreenshot() {
-    const node = session.getCurrentNode();
-    const address = session.targetAddress;
-    if (node == null || address == null || streamStatus !== "connected") {
-      return;
-    }
-
-    try {
-      const screenshot = await captureNativeRemoteV2Screenshot({
-        address,
-        format: "png",
-        node,
-        peerId: session.peerId,
-      });
-      const imageBase64 = screenshot.imageBase64?.trim();
-      const mimeType = screenshot.mimeType?.trim() || "image/png";
-      if (!imageBase64) {
-        throw new Error("screen snapshot missing image payload");
-      }
-      triggerScreenshotDownload({ imageBase64, mimeType, peerId: session.peerId });
-    } catch (error) {
-      console.error("native v2 screenshot error", error);
-      setStreamStatus("error");
-      setStreamError("截图失败");
-    }
+    await actionController.captureScreenshot();
   }
 
   function handleCanvasPointerDown(event: ReactPointerEvent<HTMLCanvasElement>) {
-    const canvas = canvasRef.current;
-    if (canvas == null || streamStatus !== "connected") {
-      pointerGestureRef.current = null;
-      return;
-    }
-
-    const point = projectCanvasPoint({
-      canvas,
-      clientX: event.clientX,
-      clientY: event.clientY,
-      videoHeight: videoMeta.height,
-      videoWidth: videoMeta.width,
-    });
-    if (point == null) {
-      pointerGestureRef.current = null;
-      return;
-    }
-
-    pointerGestureRef.current = {
-      ...point,
-      startedAt: event.timeStamp,
-    };
+    pointerHandlers.handlePointerDown(event);
   }
 
   async function handleCanvasPointerUp(event: ReactPointerEvent<HTMLCanvasElement>) {
-    const node = session.getCurrentNode();
-    const address = session.targetAddress;
-    const canvas = canvasRef.current;
-    const gestureStart = pointerGestureRef.current;
-    pointerGestureRef.current = null;
-    if (node == null || address == null || canvas == null || streamStatus !== "connected") {
-      return;
-    }
-
-    const point = projectCanvasPoint({
-      canvas,
-      clientX: event.clientX,
-      clientY: event.clientY,
-      videoHeight: videoMeta.height,
-      videoWidth: videoMeta.width,
-    });
-    if (point == null) {
-      return;
-    }
-
-    try {
-      if (gestureStart == null) {
-        await invokeNativeRemoteV2Tap({ address, node, peerId: session.peerId, x: point.x, y: point.y });
-        return;
-      }
-
-      const maxDelta = Math.max(Math.abs(point.x - gestureStart.x), Math.abs(point.y - gestureStart.y));
-      if (maxDelta < 12) {
-        await invokeNativeRemoteV2Tap({ address, node, peerId: session.peerId, x: point.x, y: point.y });
-        return;
-      }
-
-      await invokeNativeRemoteV2Swipe({
-        address,
-        durationMs: Math.max(120, Math.round(event.timeStamp - gestureStart.startedAt)),
-        endX: point.x,
-        endY: point.y,
-        node,
-        peerId: session.peerId,
-        startX: gestureStart.x,
-        startY: gestureStart.y,
-      });
-    } catch (error) {
-      console.error("native v2 pointer error", error);
-      setStreamStatus("error");
-      setStreamError("操作失败");
-    }
+    await pointerHandlers.handlePointerUp(event);
   }
 
   const statusOverlay = (
@@ -412,7 +315,7 @@ export function P2PAndroidNativeV2WebRtcPanel({ session }: { session: NativeView
                     ref={canvasRef}
                     onPointerDown={handleCanvasPointerDown}
                     onPointerCancel={() => {
-                      pointerGestureRef.current = null;
+                      pointerHandlers.handlePointerCancel();
                     }}
                     onPointerUp={(event) => {
                       void handleCanvasPointerUp(event);

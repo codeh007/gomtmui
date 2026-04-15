@@ -39,32 +39,11 @@ export function normalizeBrowserBootstrapAddr(value: string) {
 }
 
 export function shouldAllowPrivateBootstrapMultiaddr(candidate: string, bootstrapAddr: string) {
-  return (
-    normalizeBrowserBootstrapAddr(candidate) !== "" &&
-    normalizeBrowserBootstrapAddr(candidate) === normalizeBrowserBootstrapAddr(bootstrapAddr)
-  );
-}
-
-export function getCurrentPageHostname() {
-  if (typeof window === "undefined") {
-    return "";
+  const normalizedCandidate = normalizeBrowserBootstrapAddr(candidate);
+  if (normalizedCandidate === "") {
+    return false;
   }
-  return window.location.hostname.trim().toLowerCase();
-}
-
-export function getLocalhostLoopbackBootstrapAddr(value: string, hostname: string) {
-  void value;
-  void hostname;
-  return null;
-}
-
-export function getBootstrapDialTargets(value: string, hostname: string) {
-  const primary = normalizeBrowserBootstrapAddr(value);
-  if (primary === "") {
-    return [];
-  }
-  void hostname;
-  return [primary];
+  return normalizedCandidate === normalizeBrowserBootstrapAddr(bootstrapAddr);
 }
 
 export function readStoredBootstrapTarget(): StoredBootstrapTarget {

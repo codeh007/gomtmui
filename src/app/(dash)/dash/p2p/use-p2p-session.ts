@@ -24,13 +24,8 @@ import {
 import { logP2PConsole, summarizePeerCandidates } from "@/lib/p2p/p2p-console";
 import { requestPeerCapabilityTruth, WorkerControlRequestError } from "@/lib/p2p/worker-control";
 import {
-  getBootstrapDialTargets,
-  getCurrentPageHostname,
   loadOrCreateBrowserPrivateKey,
-  normalizeBrowserBootstrapAddr,
   readStoredBootstrapTarget,
-  readStoredBrowserIdentity,
-  persistStoredBrowserIdentity,
   resolveBootstrapTarget,
   shouldAllowPrivateBootstrapMultiaddr,
   writeStoredBootstrapTarget,
@@ -48,14 +43,6 @@ type PeerTruthRetryState = {
 type BrowserNodeSession = {
   node: Awaited<ReturnType<typeof createBrowserNode>>;
   disposeDiscoveryListener?: () => void;
-};
-
-type StoredBootstrapTarget = {
-  bootstrapAddr?: string;
-};
-
-type ResolvedBootstrapTarget = {
-  bootstrapAddr: string;
 };
 
 export type P2PStatus = "loading" | "needs-bootstrap" | "joining" | "discovering" | "peer_candidates_ready" | "error";
@@ -135,7 +122,6 @@ type P2PSessionValue = ReturnType<typeof useP2PSessionState>;
 type P2PSessionDeps = {
   assertBrowserP2PSupport: typeof assertBrowserP2PSupport;
   createBrowserNode: typeof createBrowserNode;
-  getCurrentPageHostname: typeof getCurrentPageHostname;
   readStoredBootstrapTarget: typeof readStoredBootstrapTarget;
   writeStoredBootstrapTarget: typeof writeStoredBootstrapTarget;
 };
@@ -143,7 +129,6 @@ type P2PSessionDeps = {
 const defaultP2PSessionDeps: P2PSessionDeps = {
   assertBrowserP2PSupport,
   createBrowserNode,
-  getCurrentPageHostname,
   readStoredBootstrapTarget,
   writeStoredBootstrapTarget,
 };
@@ -492,23 +477,7 @@ function useP2PSessionState() {
       logP2PConsole("info", "正在加入 P2P 网络", target, { verboseOnly: true });
 
       try {
-        const dialTargets = getBootstrapDialTargets(target.bootstrapAddr, p2pSessionDeps.getCurrentPageHostname());
-        let node: Awaited<ReturnType<typeof createBrowserNode>> | null = null;
-        let lastDialError: unknown = null;
-        for (const dialTarget of dialTargets) {
-          try {
-            node = await p2pSessionDeps.createBrowserNode(dialTarget);
-            if (dialTarget !== target.bootstrapAddr) {
-              target = { bootstrapAddr: dialTarget };
-            }
-            break;
-          } catch (error) {
-            lastDialError = error;
-          }
-        }
-        if (node == null) {
-          throw lastDialError ?? new Error("failed to create browser node");
-        }
+        const node = await p2pSessionDeps.createBrowserNode(target.bootstrapAddr);
         createdNode = node;
         if (!isCurrentAttempt()) {
           await stopCreatedNode();

@@ -5,36 +5,8 @@ import { canOpenAndroidView, listPeerFeatureLabels, supportsVncView } from "@/li
 import { deriveBrowserRelayAddressFromBootstrap } from "@/lib/p2p/libp2p-stream";
 import { logP2PConsole } from "@/lib/p2p/p2p-console";
 import { requestPeerCapabilityTruth } from "@/lib/p2p/worker-control";
+import { normalizeBrowserBootstrapAddr } from "../p2p-bootstrap-storage";
 import { useP2PSession } from "../use-p2p-session";
-
-function normalizePeerBrowserMultiaddr(value: string) {
-  const trimmed = value.trim();
-  if (trimmed === "" || !trimmed.includes("/webtransport") || !trimmed.includes("/certhash/")) {
-    return trimmed;
-  }
-
-  const segments = trimmed.split("/");
-  const normalized: string[] = [];
-  let seenCertHash = false;
-  for (let index = 0; index < segments.length; index += 1) {
-    const segment = segments[index];
-    if (segment !== "certhash") {
-      normalized.push(segment);
-      continue;
-    }
-    const hashValue = segments[index + 1];
-    if (hashValue == null) {
-      break;
-    }
-    if (!seenCertHash) {
-      normalized.push(segment, hashValue);
-      seenCertHash = true;
-    }
-    index += 1;
-  }
-
-  return normalized.join("/");
-}
 
 export type PeerTruthStatus = "idle" | "loading" | "ready" | "error";
 
@@ -56,7 +28,7 @@ function resolveCurrentNodePeerId(node: unknown) {
 
 function pickObservedRelayBrowserAddress(multiaddrs: string[]) {
   const normalized = multiaddrs
-    .map((value) => normalizePeerBrowserMultiaddr(value.trim()))
+    .map((value) => normalizeBrowserBootstrapAddr(value.trim()))
     .filter((value) => value.startsWith("/"));
   return (
     normalized.find((value) => value.includes("/p2p-circuit/") && value.includes("/webtransport/")) ??
@@ -112,9 +84,7 @@ export function useP2PPeerPageSession(peerId: string) {
         setTargetAddress(null);
         return;
       }
-      const dialableAddress = normalizePeerBrowserMultiaddr(
-        (await resolveDialableAddress(targetPeer.multiaddrs)) ?? "",
-      );
+      const dialableAddress = normalizeBrowserBootstrapAddr((await resolveDialableAddress(targetPeer.multiaddrs)) ?? "");
       const observedRelayAddress = pickObservedRelayBrowserAddress(targetPeer.multiaddrs);
       const address =
         dialableAddress !== ""
