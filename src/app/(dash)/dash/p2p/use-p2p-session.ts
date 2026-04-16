@@ -303,13 +303,39 @@ export async function resolveMissingPeerTruth(params: {
 export function describeBootstrapJoinError(input: { bootstrapAddr: string; error: unknown }) {
   const message = input.error instanceof Error ? input.error.message.trim() : String(input.error).trim();
   if (
-    message === "Connection lost." ||
-    message === "Opening handshake failed." ||
-    message === "failed to create browser node"
+    message.includes("unreachable bootstrap") ||
+    message.includes("stream reset") ||
+    message.includes("connection failed")
   ) {
-    return `浏览器当前网络环境未能与 bootstrap 建立 WebTransport 握手（${message}）。这通常不是 Android 节点本身掉线，而是当前浏览器的代理、VPN、抓包扩展或 HTTPS 隧道拦截了 ${input.bootstrapAddr}；请先在当前浏览器禁用相关代理/扩展，或为该地址添加直连白名单后重试。`;
+    return `无法连接到 bootstrap 节点 ${input.bootstrapAddr}，请确认地址可用且当前网络支持 WebTransport。`;
   }
-  return message;
+  return message === "" ? `无法连接到 bootstrap 节点 ${input.bootstrapAddr}。` : message;
+}
+
+function resolveBootstrapConnectTarget(input: string):
+  | { kind: "ok"; target: ReturnType<typeof resolveBootstrapTarget> }
+  | { kind: "error"; status: P2PStatus; message: string } {
+  const rawInput = input.trim();
+  if (rawInput === "") {
+    return {
+      kind: "error",
+      status: "needs-bootstrap",
+      message: "请输入完整 auto_bootstrap multiaddr。",
+    };
+  }
+
+  try {
+    return {
+      kind: "ok",
+      target: resolveBootstrapTarget(rawInput),
+    };
+  } catch (error) {
+    return {
+      kind: "error",
+      status: "needs-bootstrap",
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 function assertBrowserP2PSupport() {
@@ -319,6 +345,78 @@ function assertBrowserP2PSupport() {
   if (!("WebTransport" in window)) {
     throw new Error("当前浏览器不支持 WebTransport。");
   }
+}
+
+type BootstrapConnectSuccessStateHandlers = {
+  persistStoredBootstrapTarget: typeof persistStoredBootstrapTarget;
+  setActiveBootstrapAddr: (value: string) => void;
+  setBootstrapInput: (value: string) => void;
+  setStatus: (value: P2PStatus) => void;
+};
+
+type BootstrapConnectFailureStateHandlers = {
+  setActiveBootstrapAddr: (value: string) => void;
+  setErrorMessage: (value: string | null) => void;
+  setPeerCandidates: (value: PeerCandidate[]) => void;
+  setStatus: (value: P2PStatus) => void;
+  stopNode: (options?: { invalidateAttempt?: boolean }) => Promise<void>;
+  updateResolvedPeerTruth: (nextValue: ResolvedPeerTruthMap) => void;
+};
+
+type BootstrapConnectResetStateHandlers = {
+  setErrorMessage: (value: string | null) => void;
+  setPeerCandidates: (value: PeerCandidate[]) => void;
+  setStatus: (value: P2PStatus) => void;
+  updateResolvedPeerTruth: (nextValue: ResolvedPeerTruthMap) => void;
+};
+
+function resetBootstrapConnectState(params: {
+  handlers: BootstrapConnectResetStateHandlers;
+  retryStateRef: React.MutableRefObject<Record<string, PeerTruthRetryState>>;
+  target: ReturnType<typeof resolveBootstrapTarget>;
+}) {
+  params.retryStateRef.current = {};
+  params.handlers.updateResolvedPeerTruth({});
+  params.handlers.setStatus("joining");
+  params.handlers.setErrorMessage(null);
+  params.handlers.setPeerCandidates([]);
+  logP2PConsole("info", "正在加入 P2P 网络", params.target, { verboseOnly: true });
+}
+
+async function commitBootstrapConnectFailure(params: {
+  handlers: BootstrapConnectFailureStateHandlers;
+  message: string;
+}) {
+  await params.handlers.stopNode({ invalidateAttempt: false });
+  params.handlers.setActiveBootstrapAddr("");
+  params.handlers.setPeerCandidates([]);
+  params.handlers.updateResolvedPeerTruth({});
+  params.handlers.setStatus("error");
+  params.handlers.setErrorMessage(params.message);
+}
+
+async function commitBootstrapConnectSuccess(params: {
+  bootstrapAddr: string;
+  discovery: BrowserRendezvousDiscoveryService;
+  handlers: BootstrapConnectSuccessStateHandlers;
+  syncPeerCandidates: (node: BrowserNodeSession["node"]) => Promise<void>;
+  node: BrowserNodeSession["node"];
+}) {
+  params.handlers.setActiveBootstrapAddr(params.bootstrapAddr);
+  params.handlers.setStatus("discovering");
+  await params.syncPeerCandidates(params.node);
+  params.handlers.setStatus("peer_candidates_ready");
+  params.handlers.setBootstrapInput(params.bootstrapAddr);
+  params.handlers.persistStoredBootstrapTarget({ bootstrapAddr: params.bootstrapAddr });
+  logP2PConsole(
+    "info",
+    "已接入 P2P 网络",
+    {
+      bootstrapAddr: params.bootstrapAddr,
+      peerCandidates: (await params.discovery.listPeerCandidates()).length,
+    },
+    { verboseOnly: true },
+  );
 }
 
 async function createBrowserNode(rendezvousPoint: string) {
@@ -449,32 +547,28 @@ function useP2PSessionState() {
         return false;
       }
 
-      const rawInput = options.input.trim();
-      if (rawInput === "") {
-        setStatus("needs-bootstrap");
-        setErrorMessage("请输入完整 auto_bootstrap multiaddr。");
+      const bootstrapTarget = resolveBootstrapConnectTarget(options.input);
+      if (bootstrapTarget.kind === "error") {
+        setStatus(bootstrapTarget.status);
+        setErrorMessage(bootstrapTarget.message);
         return false;
       }
-
-      try {
-        target = resolveBootstrapTarget(rawInput);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        setStatus("needs-bootstrap");
-        setErrorMessage(message);
-        return false;
-      }
+      target = bootstrapTarget.target;
 
       await stopNode({ invalidateAttempt: false });
       if (!isCurrentAttempt()) {
         return;
       }
-      peerTruthRetryStateRef.current = {};
-      updateResolvedPeerTruth({});
-      setStatus("joining");
-      setErrorMessage(null);
-      setPeerCandidates([]);
-      logP2PConsole("info", "正在加入 P2P 网络", target, { verboseOnly: true });
+      resetBootstrapConnectState({
+        handlers: {
+          setErrorMessage,
+          setPeerCandidates,
+          setStatus,
+          updateResolvedPeerTruth,
+        },
+        retryStateRef: peerTruthRetryStateRef,
+        target,
+      });
 
       try {
         const node = await p2pSessionDeps.createBrowserNode(target.bootstrapAddr);
@@ -525,21 +619,22 @@ function useP2PSessionState() {
           await stopCreatedNode();
           return;
         }
-        setActiveBootstrapAddr(target.bootstrapAddr);
-        setStatus("discovering");
-        await syncPeerCandidates(node);
+        await commitBootstrapConnectSuccess({
+          bootstrapAddr: target.bootstrapAddr,
+          discovery,
+          handlers: {
+            persistStoredBootstrapTarget: p2pSessionDeps.persistStoredBootstrapTarget,
+            setActiveBootstrapAddr,
+            setBootstrapInput,
+            setStatus,
+          },
+          syncPeerCandidates,
+          node,
+        });
         if (!isCurrentAttempt()) {
           await stopCreatedNode();
           return;
         }
-        setStatus("peer_candidates_ready");
-
-        setBootstrapInput(target.bootstrapAddr);
-        p2pSessionDeps.persistStoredBootstrapTarget({ bootstrapAddr: target.bootstrapAddr });
-        logP2PConsole("info", "已接入 P2P 网络", {
-          bootstrapAddr: target.bootstrapAddr,
-          peerCandidates: (await discovery.listPeerCandidates()).length,
-        }, { verboseOnly: true });
         return true;
       } catch (error) {
         if (!isCurrentAttempt()) {
@@ -548,12 +643,17 @@ function useP2PSessionState() {
         }
         const message = describeBootstrapJoinError({ bootstrapAddr: target.bootstrapAddr, error });
         logP2PConsole("error", "接入 P2P 网络失败", message);
-        await stopNode({ invalidateAttempt: false });
-        setActiveBootstrapAddr("");
-        setPeerCandidates([]);
-        updateResolvedPeerTruth({});
-        setStatus("error");
-        setErrorMessage(message);
+        await commitBootstrapConnectFailure({
+          handlers: {
+            setActiveBootstrapAddr,
+            setErrorMessage,
+            setPeerCandidates,
+            setStatus,
+            stopNode,
+            updateResolvedPeerTruth,
+          },
+          message,
+        });
         return false;
       }
     },

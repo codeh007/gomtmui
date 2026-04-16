@@ -5,6 +5,11 @@ type StoredBootstrapTarget = {
   bootstrapAddr?: string;
 };
 
+type StoredBootstrapTargetLegacyShape = {
+  bootstrap_addr?: unknown;
+  bootstrapAddr?: unknown;
+};
+
 export type ResolvedBootstrapTarget = {
   bootstrapAddr: string;
 };
@@ -54,9 +59,14 @@ export function readStoredBootstrapTarget(): StoredBootstrapTarget {
   try {
     const raw = window.localStorage.getItem(BOOTSTRAP_STORAGE_KEY);
     if (raw != null) {
-      const parsed = JSON.parse(raw) as { bootstrap_addr?: unknown };
-      const bootstrapAddr =
-        typeof parsed.bootstrap_addr === "string" ? normalizeBrowserBootstrapAddr(parsed.bootstrap_addr) : "";
+      const parsed = JSON.parse(raw) as StoredBootstrapTargetLegacyShape;
+      const rawBootstrapAddr =
+        typeof parsed.bootstrapAddr === "string"
+          ? parsed.bootstrapAddr
+          : typeof parsed.bootstrap_addr === "string"
+            ? parsed.bootstrap_addr
+            : "";
+      const bootstrapAddr = normalizeBrowserBootstrapAddr(rawBootstrapAddr);
       return bootstrapAddr === "" ? {} : { bootstrapAddr };
     }
   } catch {
@@ -77,7 +87,7 @@ export function persistStoredBootstrapTarget(target: StoredBootstrapTarget) {
       return;
     }
 
-    window.localStorage.setItem(BOOTSTRAP_STORAGE_KEY, JSON.stringify({ bootstrap_addr: target.bootstrapAddr }));
+    window.localStorage.setItem(BOOTSTRAP_STORAGE_KEY, JSON.stringify({ bootstrapAddr: target.bootstrapAddr }));
   } catch {
     // best effort only
   }

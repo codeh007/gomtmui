@@ -30,9 +30,6 @@ describe("parseDeviceStatus", () => {
       platform: "android",
       remote_control: {
         capabilities: {
-          adb_tunnel: {
-            state: "ready",
-          },
           native_remote_v2: {
             reason: "screen_capture_ready",
             state: "available",
