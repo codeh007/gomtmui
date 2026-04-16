@@ -322,7 +322,7 @@ function resolveBootstrapConnectTarget(input: string):
     return {
       kind: "error",
       status: "needs-bootstrap",
-      message: "请输入完整的浏览器可拨 multiaddr（WebTransport/WS）。",
+      message: "请输入 gomtm server 公网地址，或输入浏览器可拨的 bootstrap multiaddr。",
     };
   }
 

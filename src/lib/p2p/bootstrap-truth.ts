@@ -74,6 +74,34 @@ export type CanonicalBootstrapState =
       blockedOverrideBootstrapAddr: string;
     };
 
+export type PublicBootstrapMetadata = {
+  version: number;
+  server: {
+    publicUrl: string | null;
+  };
+  p2p: {
+    enabled: boolean;
+    generation: string | null;
+    browser: BrowserBootstrapTruth | null;
+  };
+};
+
+const publicBootstrapMetadataWireSchema = z.object({
+  version: z.number().int(),
+  server: z
+    .object({
+      public_url: z.string().trim().min(1).optional(),
+    })
+    .optional(),
+  p2p: z
+    .object({
+      enabled: z.boolean(),
+      generation: z.string().trim().min(1).optional(),
+      browser: browserBootstrapTruthWireSchema.optional(),
+    })
+    .optional(),
+});
+
 export function parseBrowserBootstrapTruth(value: unknown) {
   return browserBootstrapTruthWireSchema.parse(value);
 }
@@ -84,6 +112,21 @@ export function parseMaybeBrowserBootstrapTruth(value: unknown) {
   }
 
   return parseBrowserBootstrapTruth(value);
+}
+
+export function parsePublicBootstrapMetadata(value: unknown): PublicBootstrapMetadata {
+  const parsed = publicBootstrapMetadataWireSchema.parse(value);
+  return {
+    version: parsed.version,
+    server: {
+      publicUrl: parsed.server?.public_url?.trim() || null,
+    },
+    p2p: {
+      enabled: parsed.p2p?.enabled ?? false,
+      generation: parsed.p2p?.generation?.trim() || null,
+      browser: parsed.p2p?.browser ?? null,
+    },
+  };
 }
 
 function normalizeOptionalBrowserMultiaddr(value: string | null | undefined) {

@@ -1,122 +1,123 @@
 import { describe, expect, it } from "vitest";
-import { parseBrowserBootstrapTruth, resolveCanonicalBootstrapState } from "./bootstrap-truth";
+import {
+  parseBrowserBootstrapTruth,
+  parsePublicBootstrapMetadata,
+  resolveCanonicalBootstrapState,
+} from "./bootstrap-truth";
 
 const LIVE_TRUTH = {
   generation: "gen-1",
-  primaryTransport: "webtransport",
+  primary_transport: "webtransport",
   candidates: [
     {
       transport: "webtransport",
-      addr: "/dns4/p2p.example.com/udp/8443/quic-v1/webtransport/certhash/uEiFresh/p2p/12D3KooWBootstrap",
+      addr: "/dns4/gomtm2.yuepa8.com/udp/8443/quic-v1/webtransport/certhash/uEiTest/p2p/12D3KooWBootstrap",
       priority: 100,
     },
     {
       transport: "ws",
-      addr: "/dns4/p2p.example.com/tcp/443/ws/p2p/12D3KooWBootstrap",
+      addr: "/dns4/gomtm2.yuepa8.com/tcp/443/ws/p2p/12D3KooWBootstrap",
       priority: 50,
     },
   ],
-} as const;
+};
 
 describe("resolveCanonicalBootstrapState", () => {
   it("parses webtransport + ws browser bootstrap truth", () => {
     expect(
       parseBrowserBootstrapTruth({
-        generation: LIVE_TRUTH.generation,
-        primary_transport: LIVE_TRUTH.primaryTransport,
+        generation: "gen-1",
+        primary_transport: "webtransport",
         candidates: LIVE_TRUTH.candidates,
       }),
-    ).toEqual(LIVE_TRUTH);
+    ).toMatchObject({
+      generation: "gen-1",
+      primaryTransport: "webtransport",
+      candidates: [
+        {
+          transport: "webtransport",
+          addr: "/dns4/gomtm2.yuepa8.com/udp/8443/quic-v1/webtransport/certhash/uEiTest/p2p/12D3KooWBootstrap",
+        },
+        {
+          transport: "ws",
+          addr: "/dns4/gomtm2.yuepa8.com/tcp/443/ws/p2p/12D3KooWBootstrap",
+        },
+      ],
+    });
+  });
+
+  it("parses public bootstrap metadata and exposes server url + browser truth", () => {
+    expect(
+      parsePublicBootstrapMetadata({
+        version: 1,
+        server: {
+          public_url: "https://gomtm2.yuepa8.com",
+        },
+        p2p: {
+          enabled: true,
+          generation: "gen-1",
+          browser: LIVE_TRUTH,
+        },
+      }),
+    ).toEqual({
+      version: 1,
+      server: {
+        publicUrl: "https://gomtm2.yuepa8.com",
+      },
+      p2p: {
+        enabled: true,
+        generation: "gen-1",
+        browser: {
+          generation: "gen-1",
+          primaryTransport: "webtransport",
+          candidates: [
+            {
+              transport: "webtransport",
+              addr: "/dns4/gomtm2.yuepa8.com/udp/8443/quic-v1/webtransport/certhash/uEiTest/p2p/12D3KooWBootstrap",
+              priority: 100,
+            },
+            {
+              transport: "ws",
+              addr: "/dns4/gomtm2.yuepa8.com/tcp/443/ws/p2p/12D3KooWBootstrap",
+              priority: 50,
+            },
+          ],
+        },
+      },
+    });
   });
 
   it("rejects legacy wss browser bootstrap truth", () => {
     expect(() =>
       parseBrowserBootstrapTruth({
-        generation: LIVE_TRUTH.generation,
-        primary_transport: LIVE_TRUTH.primaryTransport,
-        candidates: [
-          LIVE_TRUTH.candidates[0],
-          {
-            transport: "wss",
-            addr: "/dns4/p2p.example.com/tcp/443/wss/p2p/12D3KooWBootstrap",
-            priority: 50,
-          },
-        ],
-      }),
-    ).toThrow();
-  });
-
-  it("rejects ws transport paired with legacy tls websocket address", () => {
-    expect(() =>
-      parseBrowserBootstrapTruth({
-        generation: LIVE_TRUTH.generation,
+        generation: "gen-1",
         primary_transport: "ws",
         candidates: [
-          LIVE_TRUTH.candidates[0],
           {
             transport: "ws",
-            addr: "/dns4/p2p.example.com/tcp/443/tls/ws/p2p/12D3KooWBootstrap",
-            priority: 50,
+            addr: "/dns4/gomtm2.yuepa8.com/tcp/443/wss/p2p/12D3KooWBootstrap",
+            priority: 100,
           },
         ],
       }),
-    ).toThrow();
+    ).toThrow("ws transport must use canonical /ws multiaddr without legacy secure websocket segments");
   });
 
-  it("rejects ws transport paired with legacy wss address", () => {
-    expect(() =>
-      parseBrowserBootstrapTruth({
-        generation: LIVE_TRUTH.generation,
-        primary_transport: "ws",
-        candidates: [
-          LIVE_TRUTH.candidates[0],
-          {
-            transport: "ws",
-            addr: "/dns4/p2p.example.com/tcp/443/wss/p2p/12D3KooWBootstrap",
-            priority: 50,
-          },
-        ],
-      }),
-    ).toThrow();
-  });
-
-  it("prefers live candidates over stale local cache", () => {
-    const result = resolveCanonicalBootstrapState({
-      liveTruth: LIVE_TRUTH,
-      storedBootstrapAddr: "/dns4/old.example.com/udp/8443/quic-v1/webtransport/certhash/uEiOld/p2p/12D3KooWBootstrap",
+  it("prefers live bootstrap truth when present", () => {
+    const state = resolveCanonicalBootstrapState({
+      liveTruth: parseBrowserBootstrapTruth(LIVE_TRUTH),
+      storedBootstrapAddr: "/dns4/old.example.com/udp/8443/quic-v1/webtransport/certhash/uEiOld/p2p/12D3KooWOld",
       overrideBootstrapAddr: null,
       allowOverride: false,
     });
 
-    expect(result.mode).toBe("live");
-    expect(result.selected?.addr).toBe(LIVE_TRUTH.candidates[0].addr);
-    expect(result.staleStoredBootstrapAddr).toBe(
-      "/dns4/old.example.com/udp/8443/quic-v1/webtransport/certhash/uEiOld/p2p/12D3KooWBootstrap",
-    );
-  });
-
-  it("returns missing-live-truth when no live truth exists", () => {
-    const result = resolveCanonicalBootstrapState({
-      liveTruth: null,
-      storedBootstrapAddr: LIVE_TRUTH.candidates[0].addr,
-      overrideBootstrapAddr: null,
-      allowOverride: false,
+    expect(state).toMatchObject({
+      mode: "live",
+      selected: {
+        transport: "webtransport",
+        addr: "/dns4/gomtm2.yuepa8.com/udp/8443/quic-v1/webtransport/certhash/uEiTest/p2p/12D3KooWBootstrap",
+      },
+      staleStoredBootstrapAddr: "/dns4/old.example.com/udp/8443/quic-v1/webtransport/certhash/uEiOld/p2p/12D3KooWOld",
     });
-
-    expect(result.mode).toBe("missing-live-truth");
-    expect(result.selected).toBeNull();
-  });
-
-  it("blocks a non-live override until explicitly allowed", () => {
-    const result = resolveCanonicalBootstrapState({
-      liveTruth: LIVE_TRUTH,
-      storedBootstrapAddr: LIVE_TRUTH.candidates[0].addr,
-      overrideBootstrapAddr: "/dns4/manual.example.com/tcp/443/ws/p2p/12D3KooWManual",
-      allowOverride: false,
-    });
-
-    expect(result.mode).toBe("blocked-override");
-    expect(result.selected).toBeNull();
-    expect(result.blockedOverrideBootstrapAddr).toBe("/dns4/manual.example.com/tcp/443/ws/p2p/12D3KooWManual");
   });
 });

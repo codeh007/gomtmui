@@ -1,8 +1,10 @@
 const BOOTSTRAP_STORAGE_KEY = "gomtm:p2p:bootstrap-target";
+const BOOTSTRAP_SERVER_URL_STORAGE_KEY = "gomtm:p2p:bootstrap-server-url";
 const BROWSER_IDENTITY_STORAGE_KEY = "gomtm:p2p:browser-identity-v1";
 
-type StoredBootstrapTarget = {
+export type StoredBootstrapTarget = {
   bootstrapAddr?: string;
+  serverUrl?: string;
 };
 
 export type ResolvedBootstrapTarget = {
@@ -70,11 +72,22 @@ export function readStoredBootstrapTarget(): StoredBootstrapTarget {
 
   try {
     const raw = window.localStorage.getItem(BOOTSTRAP_STORAGE_KEY);
+    const rawServerUrl = window.localStorage.getItem(BOOTSTRAP_SERVER_URL_STORAGE_KEY);
+    const serverUrl = rawServerUrl?.trim() ?? "";
     if (raw != null) {
       const parsed = JSON.parse(raw) as StoredBootstrapTarget;
       const rawBootstrapAddr = typeof parsed.bootstrapAddr === "string" ? parsed.bootstrapAddr : "";
       const bootstrapAddr = normalizeBrowserBootstrapAddr(rawBootstrapAddr);
-      return bootstrapAddr === "" ? {} : { bootstrapAddr };
+      if (bootstrapAddr !== "" || serverUrl !== "") {
+        return {
+          ...(bootstrapAddr === "" ? {} : { bootstrapAddr }),
+          ...(serverUrl === "" ? {} : { serverUrl }),
+        };
+      }
+      return {};
+    }
+    if (serverUrl !== "") {
+      return { serverUrl };
     }
   } catch {
     // localStorage 不可用时直接回退到运行时默认值
@@ -89,12 +102,18 @@ export function persistStoredBootstrapTarget(target: StoredBootstrapTarget) {
   }
 
   try {
-    if ((target.bootstrapAddr?.trim() ?? "") === "") {
+    const bootstrapAddr = target.bootstrapAddr?.trim() ?? "";
+    const serverUrl = target.serverUrl?.trim() ?? "";
+    if (bootstrapAddr === "") {
       window.localStorage.removeItem(BOOTSTRAP_STORAGE_KEY);
-      return;
+    } else {
+      window.localStorage.setItem(BOOTSTRAP_STORAGE_KEY, JSON.stringify({ bootstrapAddr }));
     }
-
-    window.localStorage.setItem(BOOTSTRAP_STORAGE_KEY, JSON.stringify({ bootstrapAddr: target.bootstrapAddr }));
+    if (serverUrl === "") {
+      window.localStorage.removeItem(BOOTSTRAP_SERVER_URL_STORAGE_KEY);
+    } else {
+      window.localStorage.setItem(BOOTSTRAP_SERVER_URL_STORAGE_KEY, serverUrl);
+    }
   } catch {
     // best effort only
   }
