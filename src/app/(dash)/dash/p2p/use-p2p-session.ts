@@ -10,19 +10,19 @@ import {
   useRef,
   useState,
 } from "react";
-import type { PeerCandidate, PeerCapabilityTruth } from "@/lib/p2p/discovery-contracts";
+import type { PeerCandidate, PeerCapabilityTruth } from "@/lib/p2p/discovery-contracts.ts";
 import {
   type BrowserNodeLike,
   getPreferredBrowserConnectionPath,
   pickDialableBrowserAddress,
-} from "@/lib/p2p/libp2p-stream";
+} from "@/lib/p2p/libp2p-stream.ts";
 import {
   type BrowserRendezvousDiscoveryService,
   GOMTM_RENDEZVOUS_NAMESPACE,
   gomtmRendezvousDiscovery,
-} from "@/lib/p2p/rendezvous-discovery";
-import { logP2PConsole, summarizePeerCandidates } from "@/lib/p2p/p2p-console";
-import { requestPeerCapabilityTruth, WorkerControlRequestError } from "@/lib/p2p/worker-control";
+} from "@/lib/p2p/rendezvous-discovery.ts";
+import { logP2PConsole, summarizePeerCandidates } from "@/lib/p2p/p2p-console.ts";
+import { requestPeerCapabilityTruth, WorkerControlRequestError } from "@/lib/p2p/worker-control.ts";
 import {
   loadOrCreateBrowserPrivateKey,
   persistStoredBootstrapTarget,
@@ -320,7 +320,7 @@ function resolveBootstrapConnectTarget(input: string):
     return {
       kind: "error",
       status: "needs-bootstrap",
-      message: "请输入完整 auto_bootstrap multiaddr。",
+      message: "请输入完整的浏览器可拨 multiaddr（WebTransport/WSS）。",
     };
   }
 
@@ -419,10 +419,13 @@ async function commitBootstrapConnectSuccess(params: {
   );
 }
 
-async function createBrowserNode(rendezvousPoint: string) {
+type BrowserTransportFactory = (components: any) => any;
+
+async function createBrowserNode(target: { bootstrapAddr: string; transport: "webtransport" | "wss" }) {
   const [
     { createLibp2p },
-    { webTransport },
+    webTransportModule,
+    webSocketsModule,
     { circuitRelayTransport },
     { noise },
     { yamux },
@@ -431,6 +434,7 @@ async function createBrowserNode(rendezvousPoint: string) {
   ] = await Promise.all([
     import("libp2p"),
     import("@libp2p/webtransport"),
+    import("@libp2p/websockets"),
     import("@libp2p/circuit-relay-v2"),
     import("@chainsafe/libp2p-noise"),
     import("@chainsafe/libp2p-yamux"),
@@ -439,6 +443,13 @@ async function createBrowserNode(rendezvousPoint: string) {
   ]);
 
   const privateKey = await loadOrCreateBrowserPrivateKey();
+  const rendezvousPoint = target.bootstrapAddr;
+  const transportFactories: BrowserTransportFactory[] = [circuitRelayTransport() as BrowserTransportFactory];
+  if (target.transport === "webtransport") {
+    transportFactories.unshift(webTransportModule.webTransport() as BrowserTransportFactory);
+  } else {
+    transportFactories.unshift(webSocketsModule.webSockets() as BrowserTransportFactory);
+  }
 
   return createLibp2p({
     privateKey,
@@ -451,7 +462,7 @@ async function createBrowserNode(rendezvousPoint: string) {
         return isPrivate(candidate);
       },
     },
-    transports: [webTransport(), circuitRelayTransport()],
+    transports: transportFactories,
     connectionEncrypters: [noise()],
     streamMuxers: [yamux()],
     services: {
@@ -571,7 +582,7 @@ function useP2PSessionState() {
       });
 
       try {
-        const node = await p2pSessionDeps.createBrowserNode(target.bootstrapAddr);
+        const node = await p2pSessionDeps.createBrowserNode(target);
         createdNode = node;
         if (!isCurrentAttempt()) {
           await stopCreatedNode();

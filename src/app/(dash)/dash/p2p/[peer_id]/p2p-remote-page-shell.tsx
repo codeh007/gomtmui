@@ -36,13 +36,13 @@ export function getP2PBootstrapEntryMeta(status: P2PStatus, joiningDetail: strin
   if (status === "error") {
     return {
       title: "重新接入",
-      detail: "更新 relay 地址后重试。",
+      detail: "更新浏览器可拨 multiaddr（WebTransport/WSS）后重试。",
     };
   }
 
   return {
-    title: "输入 relay",
-    detail: "使用 auto_bootstrap multiaddr。",
+    title: "输入入口地址",
+    detail: "使用浏览器可拨 multiaddr（WebTransport/WSS）。",
   };
 }
 
@@ -103,7 +103,7 @@ export function P2PBootstrapEntryCard({
             className="sm:flex-1"
             value={bootstrapInput}
             onChange={(event) => onBootstrapInputChange(event.target.value)}
-            placeholder="auto_bootstrap multiaddr"
+            placeholder="浏览器可拨 multiaddr（WebTransport/WSS）"
             spellCheck={false}
           />
           <Button type="submit" disabled={!canConnect} className="sm:min-w-32">

@@ -12,7 +12,12 @@ type StoredBootstrapTargetLegacyShape = {
 
 export type ResolvedBootstrapTarget = {
   bootstrapAddr: string;
+  transport: "webtransport" | "wss";
 };
+
+function isBrowserDialableBootstrapAddr(value: string) {
+  return value.includes("/p2p/") && (value.includes("/webtransport") || value.includes("/wss") || value.includes("/tls/ws"));
+}
 
 export function normalizeBrowserBootstrapAddr(value: string) {
   const trimmed = value.trim();
@@ -165,8 +170,11 @@ export function resolveBootstrapTarget(input: string): ResolvedBootstrapTarget {
   if (!trimmed.startsWith("/")) {
     throw new Error("bootstrap 地址必须使用完整 auto_bootstrap multiaddr。");
   }
-  if (!trimmed.includes("/webtransport") || !trimmed.includes("/p2p/")) {
-    throw new Error("bootstrap 地址必须是浏览器可拨的 WebTransport multiaddr（包含 /webtransport 与 /p2p）。");
+  if (!isBrowserDialableBootstrapAddr(trimmed)) {
+    throw new Error("bootstrap 地址必须是浏览器可拨的 multiaddr（包含 /p2p，且传输为 /webtransport 或 /wss /tls/ws）。");
   }
-  return { bootstrapAddr: trimmed };
+  return {
+    bootstrapAddr: trimmed,
+    transport: trimmed.includes("/webtransport") ? "webtransport" : "wss",
+  };
 }

@@ -107,7 +107,7 @@ export function P2PPeerPageView({ peerId }: { peerId: string }) {
                 <Input
                   value={session.bootstrapInput}
                   onChange={(event) => session.setBootstrapInput(event.target.value)}
-                  placeholder="auto_bootstrap multiaddr"
+                  placeholder="浏览器可拨 multiaddr（WebTransport/WSS）"
                   spellCheck={false}
                 />
                 <Button type="submit" disabled={!session.canConnect} className="w-full">

@@ -212,7 +212,7 @@ export default function P2PPage() {
                     <Input
                       value={session.bootstrapInput}
                       onChange={(event) => session.setBootstrapInput(event.target.value)}
-                      placeholder="auto_bootstrap multiaddr"
+                      placeholder="浏览器可拨 multiaddr（WebTransport/WSS）"
                       spellCheck={false}
                     />
                     <div className="flex justify-end">
