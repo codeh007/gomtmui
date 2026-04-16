@@ -7,11 +7,23 @@ type StoredBootstrapTarget = {
 
 export type ResolvedBootstrapTarget = {
   bootstrapAddr: string;
-  transport: "webtransport" | "wss";
+  transport: "webtransport" | "ws";
 };
 
+function hasProtocolSegment(value: string, protocol: string) {
+  return value.split("/").includes(protocol);
+}
+
 function isBrowserDialableBootstrapAddr(value: string) {
-  return value.includes("/p2p/") && (value.includes("/webtransport") || value.includes("/wss") || value.includes("/tls/ws"));
+  if (!hasProtocolSegment(value, "p2p")) {
+    return false;
+  }
+
+  if (hasProtocolSegment(value, "webtransport")) {
+    return true;
+  }
+
+  return hasProtocolSegment(value, "ws") && !hasProtocolSegment(value, "tls") && !hasProtocolSegment(value, "wss");
 }
 
 export function normalizeBrowserBootstrapAddr(value: string) {
@@ -161,10 +173,10 @@ export function resolveBootstrapTarget(input: string): ResolvedBootstrapTarget {
     throw new Error("bootstrap 地址必须使用完整 auto_bootstrap multiaddr。");
   }
   if (!isBrowserDialableBootstrapAddr(trimmed)) {
-    throw new Error("bootstrap 地址必须是浏览器可拨的 multiaddr（包含 /p2p，且传输为 /webtransport 或 /wss /tls/ws）。");
+    throw new Error("bootstrap 地址必须是浏览器可拨的 multiaddr（包含 /p2p，且传输为 /webtransport 或 /ws）。");
   }
   return {
     bootstrapAddr: trimmed,
-    transport: trimmed.includes("/webtransport") ? "webtransport" : "wss",
+    transport: hasProtocolSegment(trimmed, "webtransport") ? "webtransport" : "ws",
   };
 }

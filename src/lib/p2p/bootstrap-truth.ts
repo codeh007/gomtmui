@@ -1,12 +1,28 @@
 import { z } from "zod";
 import { normalizeBrowserMultiaddr, sameBrowserMultiaddr } from "./browser-multiaddr";
 
-const browserBootstrapTransportSchema = z.enum(["webtransport", "wss"]);
+const browserBootstrapTransportSchema = z.enum(["webtransport", "ws"]);
+
+function hasProtocolSegment(value: string, protocol: string) {
+  return value.split("/").includes(protocol);
+}
 
 const browserBootstrapCandidateBaseSchema = z.object({
   transport: browserBootstrapTransportSchema,
   addr: z.string().trim().min(1),
   priority: z.number(),
+}).superRefine((candidate, ctx) => {
+  if (candidate.transport !== "ws") {
+    return;
+  }
+
+  if (hasProtocolSegment(candidate.addr, "tls") || hasProtocolSegment(candidate.addr, "wss")) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'ws transport must use canonical /ws multiaddr without legacy secure websocket segments',
+      path: ["addr"],
+    });
+  }
 });
 
 export const browserBootstrapCandidateSchema = browserBootstrapCandidateBaseSchema.transform((candidate) => ({

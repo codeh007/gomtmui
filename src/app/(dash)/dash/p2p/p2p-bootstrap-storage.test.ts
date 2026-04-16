@@ -19,11 +19,23 @@ describe("p2p-bootstrap-storage", () => {
     });
   });
 
-  it("accepts browser dialable wss bootstrap multiaddr", () => {
-    expect(resolveBootstrapTarget("/dns4/p2p.example.com/tcp/443/tls/ws/p2p/12D3KooWBootstrap")).toEqual({
-      bootstrapAddr: "/dns4/p2p.example.com/tcp/443/tls/ws/p2p/12D3KooWBootstrap",
-      transport: "wss",
+  it("accepts browser dialable ws bootstrap multiaddr", () => {
+    expect(resolveBootstrapTarget("/dns4/p2p.example.com/tcp/443/ws/p2p/12D3KooWBootstrap")).toEqual({
+      bootstrapAddr: "/dns4/p2p.example.com/tcp/443/ws/p2p/12D3KooWBootstrap",
+      transport: "ws",
     });
+  });
+
+  it("rejects legacy tls websocket bootstrap multiaddr", () => {
+    expect(() => resolveBootstrapTarget("/dns4/p2p.example.com/tcp/443/tls/ws/p2p/12D3KooWBootstrap")).toThrow(
+      "bootstrap 地址必须是浏览器可拨的 multiaddr（包含 /p2p，且传输为 /webtransport 或 /ws）。",
+    );
+  });
+
+  it("rejects legacy wss bootstrap multiaddr", () => {
+    expect(() => resolveBootstrapTarget("/dns4/p2p.example.com/tcp/443/wss/p2p/12D3KooWBootstrap")).toThrow(
+      "bootstrap 地址必须是浏览器可拨的 multiaddr（包含 /p2p，且传输为 /webtransport 或 /ws）。",
+    );
   });
 
   it("rejects non browser dialable bootstrap multiaddr", () => {

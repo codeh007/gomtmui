@@ -307,7 +307,7 @@ export function describeBootstrapJoinError(input: { bootstrapAddr: string; error
     message.includes("stream reset") ||
     message.includes("connection failed")
   ) {
-    return `无法连接到 bootstrap 节点 ${input.bootstrapAddr}，请确认地址可用且当前网络支持 WebTransport。`;
+    return `无法连接到 bootstrap 节点 ${input.bootstrapAddr}，请确认地址可用且当前网络支持该地址所需的传输。`;
   }
   return message === "" ? `无法连接到 bootstrap 节点 ${input.bootstrapAddr}。` : message;
 }
@@ -320,7 +320,7 @@ function resolveBootstrapConnectTarget(input: string):
     return {
       kind: "error",
       status: "needs-bootstrap",
-      message: "请输入完整的浏览器可拨 multiaddr（WebTransport/WSS）。",
+      message: "请输入完整的浏览器可拨 multiaddr（WebTransport/WS）。",
     };
   }
 
@@ -338,7 +338,10 @@ function resolveBootstrapConnectTarget(input: string):
   }
 }
 
-function assertBrowserP2PSupport() {
+function assertBrowserP2PSupport(transport: ReturnType<typeof resolveBootstrapTarget>["transport"]) {
+  if (transport !== "webtransport") {
+    return;
+  }
   if (!window.isSecureContext) {
     throw new Error("当前页面不是安全上下文，浏览器无法建立 WebTransport 连接。");
   }
@@ -421,7 +424,7 @@ async function commitBootstrapConnectSuccess(params: {
 
 type BrowserTransportFactory = (components: any) => any;
 
-async function createBrowserNode(target: { bootstrapAddr: string; transport: "webtransport" | "wss" }) {
+async function createBrowserNode(target: { bootstrapAddr: string; transport: "webtransport" | "ws" }) {
   const [
     { createLibp2p },
     webTransportModule,
@@ -546,8 +549,16 @@ function useP2PSessionState() {
         });
       };
 
+      const bootstrapTarget = resolveBootstrapConnectTarget(options.input);
+      if (bootstrapTarget.kind === "error") {
+        setStatus(bootstrapTarget.status);
+        setErrorMessage(bootstrapTarget.message);
+        return false;
+      }
+      target = bootstrapTarget.target;
+
       try {
-        p2pSessionDeps.assertBrowserP2PSupport();
+        p2pSessionDeps.assertBrowserP2PSupport(target.transport);
       } catch (error) {
         if (!isCurrentAttempt()) {
           return;
@@ -557,14 +568,6 @@ function useP2PSessionState() {
         setErrorMessage(message);
         return false;
       }
-
-      const bootstrapTarget = resolveBootstrapConnectTarget(options.input);
-      if (bootstrapTarget.kind === "error") {
-        setStatus(bootstrapTarget.status);
-        setErrorMessage(bootstrapTarget.message);
-        return false;
-      }
-      target = bootstrapTarget.target;
 
       await stopNode({ invalidateAttempt: false });
       if (!isCurrentAttempt()) {

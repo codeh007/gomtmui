@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   __resetP2PSessionDepsForTest,
   __setP2PSessionDepsForTest,
+  describeBootstrapJoinError,
   P2PSessionProvider,
   useP2PSession,
 } from "./use-p2p-session";
@@ -18,6 +19,7 @@ function SessionProbe() {
     <>
       <div data-testid="status">{session.status}</div>
       <div data-testid="bootstrap-input">{session.bootstrapInput}</div>
+      <div data-testid="error-message">{session.errorMessage ?? ""}</div>
     </>
   );
 }
@@ -52,7 +54,7 @@ describe("P2PSessionProvider", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("passes wss bootstrap target to createBrowserNode", async () => {
+  it("passes ws bootstrap target to createBrowserNode", async () => {
     const start = vi.fn(async () => {});
     const stop = vi.fn(async () => {});
     const awaitReady = vi.fn(async () => {});
@@ -76,7 +78,7 @@ describe("P2PSessionProvider", () => {
     __setP2PSessionDepsForTest({
       createBrowserNode,
       readStoredBootstrapTarget: () => ({
-        bootstrapAddr: "/dns4/p2p.example.com/tcp/443/tls/ws/p2p/12D3KooWBootstrap",
+        bootstrapAddr: "/dns4/p2p.example.com/tcp/443/ws/p2p/12D3KooWBootstrap",
       }),
     });
 
@@ -88,13 +90,62 @@ describe("P2PSessionProvider", () => {
 
     await waitFor(() => {
       expect(createBrowserNode).toHaveBeenCalledWith({
-        bootstrapAddr: "/dns4/p2p.example.com/tcp/443/tls/ws/p2p/12D3KooWBootstrap",
-        transport: "wss",
+        bootstrapAddr: "/dns4/p2p.example.com/tcp/443/ws/p2p/12D3KooWBootstrap",
+        transport: "ws",
       });
     });
 
     await waitFor(() => {
       expect(screen.getByTestId("status").textContent).toBe("peer_candidates_ready");
     });
+  });
+
+  it("rejects legacy tls websocket bootstrap target from storage", async () => {
+    const createBrowserNode = vi.fn(async () => ({
+      status: "started",
+      start: vi.fn(async () => {}),
+      stop: vi.fn(async () => {}),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      services: {
+        rendezvousDiscovery: {
+          awaitReady: vi.fn(async () => {}),
+          listPeerCandidates: vi.fn(async () => []),
+        },
+      },
+    }));
+
+    __setP2PSessionDepsForTest({
+      createBrowserNode,
+      readStoredBootstrapTarget: () => ({
+        bootstrapAddr: "/dns4/p2p.example.com/tcp/443/tls/ws/p2p/12D3KooWBootstrap",
+      }),
+    });
+
+    render(
+      <P2PSessionProvider>
+        <SessionProbe />
+      </P2PSessionProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("status").textContent).toBe("needs-bootstrap");
+    });
+
+    expect(screen.getByTestId("error-message").textContent).toBe(
+      "bootstrap 地址必须是浏览器可拨的 multiaddr（包含 /p2p，且传输为 /webtransport 或 /ws）。",
+    );
+    expect(createBrowserNode).not.toHaveBeenCalled();
+  });
+
+  it("returns a transport-neutral bootstrap join error message", () => {
+    expect(
+      describeBootstrapJoinError({
+        bootstrapAddr: "/dns4/p2p.example.com/tcp/443/ws/p2p/12D3KooWBootstrap",
+        error: new Error("connection failed"),
+      }),
+    ).toBe(
+      "无法连接到 bootstrap 节点 /dns4/p2p.example.com/tcp/443/ws/p2p/12D3KooWBootstrap，请确认地址可用且当前网络支持该地址所需的传输。",
+    );
   });
 });
