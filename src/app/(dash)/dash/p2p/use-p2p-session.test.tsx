@@ -12,6 +12,19 @@ import {
 
 const originalFetch = globalThis.fetch;
 
+vi.mock("./use-live-browser-bootstrap-truth", () => ({
+  useLiveBrowserBootstrapTruth: vi.fn(() => ({
+    accessUrl: null,
+    readyServers: [],
+    truthQuery: {
+      data: null,
+      status: "pending",
+    },
+  })),
+}));
+
+import { useLiveBrowserBootstrapTruth } from "./use-live-browser-bootstrap-truth";
+
 function SessionProbe() {
   const session = useP2PSession();
 
@@ -52,6 +65,64 @@ describe("P2PSessionProvider", () => {
 
     expect(screen.getByTestId("bootstrap-input").textContent).toBe("");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("uses live bootstrap truth as default input when local storage is empty", async () => {
+    const createBrowserNode = vi.fn(async () => ({
+      status: "started",
+      start: vi.fn(async () => {}),
+      stop: vi.fn(async () => {}),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      services: {
+        rendezvousDiscovery: {
+          awaitReady: vi.fn(async () => {}),
+          listPeerCandidates: vi.fn(async () => []),
+        },
+      },
+    }));
+
+    vi.mocked(useLiveBrowserBootstrapTruth).mockReturnValue({
+      accessUrl: "https://gomtm2.yuepa8.com",
+      readyServers: [{ id: "server-1", accessUrl: "https://gomtm2.yuepa8.com" }],
+      truthQuery: {
+        data: {
+          generation: "gen-1",
+          primaryTransport: "webtransport",
+          candidates: [
+            {
+              transport: "webtransport",
+              addr: "/dns4/gomtm2.yuepa8.com/udp/8443/quic-v1/webtransport/certhash/uEiTest/p2p/12D3KooWBootstrap",
+              priority: 100,
+            },
+          ],
+        },
+        status: "success",
+      },
+    } as ReturnType<typeof useLiveBrowserBootstrapTruth>);
+
+    __setP2PSessionDepsForTest({
+      createBrowserNode,
+      readStoredBootstrapTarget: () => ({}),
+      assertBrowserP2PSupport: () => {},
+    });
+
+    render(
+      <P2PSessionProvider>
+        <SessionProbe />
+      </P2PSessionProvider>,
+    );
+
+    await waitFor(() => {
+      expect(createBrowserNode).toHaveBeenCalledWith({
+        bootstrapAddr: "/dns4/gomtm2.yuepa8.com/udp/8443/quic-v1/webtransport/certhash/uEiTest/p2p/12D3KooWBootstrap",
+        transport: "webtransport",
+      });
+    });
+
+    expect(screen.getByTestId("bootstrap-input").textContent).toBe(
+      "/dns4/gomtm2.yuepa8.com/udp/8443/quic-v1/webtransport/certhash/uEiTest/p2p/12D3KooWBootstrap",
+    );
   });
 
   it("passes ws bootstrap target to createBrowserNode", async () => {

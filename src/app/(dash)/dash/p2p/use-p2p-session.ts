@@ -7,6 +7,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -30,6 +31,7 @@ import {
   resolveBootstrapTarget,
   shouldAllowPrivateBootstrapMultiaddr,
 } from "./p2p-bootstrap-storage";
+import { useLiveBrowserBootstrapTruth } from "./use-live-browser-bootstrap-truth";
 
 const TRANSIENT_PEER_TRUTH_RETRY_DELAY_MS = 250;
 const UNRESOLVED_PEER_TRUTH_RETRY_DELAY_MS = 1_000;
@@ -483,6 +485,8 @@ function getRendezvousDiscoveryService(node: BrowserNodeSession["node"]) {
 }
 
 function useP2PSessionState() {
+  const liveBootstrap = useLiveBrowserBootstrapTruth();
+  const liveBootstrapAddr = useMemo(() => liveBootstrap.truthQuery.data?.candidates[0]?.addr?.trim() ?? "", [liveBootstrap]);
   const sessionRef = useRef<BrowserNodeSession | null>(null);
   const connectAttemptRef = useRef(0);
   const resolvedPeerTruthRef = useRef<ResolvedPeerTruthMap>({});
@@ -679,7 +683,7 @@ function useP2PSessionState() {
 
     async function init() {
       const storedTarget = p2pSessionDeps.readStoredBootstrapTarget();
-      const initialInput = (storedTarget.bootstrapAddr?.trim() || "").trim();
+      const initialInput = (storedTarget.bootstrapAddr?.trim() || liveBootstrapAddr).trim();
       if (cancelled) {
         return;
       }
@@ -707,7 +711,7 @@ function useP2PSessionState() {
       cancelled = true;
       void stopNode();
     };
-  }, [connectToBootstrap, stopNode]);
+  }, [connectToBootstrap, liveBootstrapAddr, stopNode]);
 
   const resolveDialableAddress = useCallback(async (multiaddrs: string[]) => {
     const node = sessionRef.current?.node;
