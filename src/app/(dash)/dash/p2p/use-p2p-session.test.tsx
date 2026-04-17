@@ -32,6 +32,8 @@ function SessionProbe() {
     <>
       <div data-testid="status">{session.status}</div>
       <div data-testid="bootstrap-input">{session.bootstrapInput}</div>
+      <div data-testid="active-bootstrap">{session.activeBootstrapAddr}</div>
+      <div data-testid="candidate-count">{String(session.peerCandidates.length)}</div>
       <div data-testid="error-message">{session.errorMessage ?? ""}</div>
     </>
   );
@@ -86,7 +88,13 @@ describe("P2PSessionProvider", () => {
       services: {
         rendezvousDiscovery: {
           awaitReady: vi.fn(async () => {}),
-          listPeerCandidates: vi.fn(async () => []),
+          listPeerCandidates: vi.fn(async () => [
+            {
+              label: "android",
+              multiaddrs: ["/dns4/android.example.com/tcp/443/ws/p2p/12D3KooWPeer"],
+              peerId: "12D3KooWPeer",
+            },
+          ]),
         },
       },
     }));
@@ -129,9 +137,17 @@ describe("P2PSessionProvider", () => {
       });
     });
 
+    await waitFor(() => {
+      expect(screen.getByTestId("status").textContent).toBe("peer_candidates_ready");
+    });
+
     expect(screen.getByTestId("bootstrap-input").textContent).toBe(
       "/dns4/gomtm2.yuepa8.com/udp/8443/quic-v1/webtransport/certhash/uEiTest/p2p/12D3KooWBootstrap",
     );
+    expect(screen.getByTestId("active-bootstrap").textContent).toBe(
+      "/dns4/gomtm2.yuepa8.com/udp/8443/quic-v1/webtransport/certhash/uEiTest/p2p/12D3KooWBootstrap",
+    );
+    expect(screen.getByTestId("candidate-count").textContent).toBe("1");
   });
 
   it("passes ws bootstrap target to createBrowserNode", async () => {

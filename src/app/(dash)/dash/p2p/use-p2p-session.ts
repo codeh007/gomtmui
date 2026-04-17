@@ -592,12 +592,20 @@ function useP2PSessionState() {
       try {
         const node = await p2pSessionDeps.createBrowserNode(target);
         createdNode = node;
+        logP2PConsole("info", "browser node created", {
+          bootstrapAddr: target.bootstrapAddr,
+          transport: target.transport,
+        });
         if (!isCurrentAttempt()) {
           await stopCreatedNode();
           return;
         }
         if (node.status !== "started") {
           await node.start();
+          logP2PConsole("info", "browser node started", {
+            bootstrapAddr: target.bootstrapAddr,
+            transport: target.transport,
+          });
           if (!isCurrentAttempt()) {
             await stopCreatedNode();
             return;
@@ -607,7 +615,13 @@ function useP2PSessionState() {
         if (discovery == null) {
           throw new Error("browser rendezvous discovery service is missing");
         }
+        logP2PConsole("info", "awaiting rendezvous ready", {
+          bootstrapAddr: target.bootstrapAddr,
+        });
         await discovery.awaitReady();
+        logP2PConsole("info", "rendezvous ready", {
+          bootstrapAddr: target.bootstrapAddr,
+        });
         if (!isCurrentAttempt()) {
           await stopCreatedNode();
           return;
