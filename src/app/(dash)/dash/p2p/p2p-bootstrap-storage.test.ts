@@ -1,7 +1,19 @@
-import { describe, expect, it } from "vitest";
-import { normalizeBrowserBootstrapAddr, resolveBootstrapTarget } from "./p2p-bootstrap-storage";
+// @vitest-environment jsdom
+
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  normalizeBrowserBootstrapAddr,
+  persistStoredBootstrapServerUrl,
+  readStoredBootstrapServerUrl,
+  resolveBootstrapTarget,
+} from "./p2p-bootstrap-storage";
 
 describe("p2p-bootstrap-storage", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    vi.unstubAllEnvs();
+  });
+
   it("keeps only the first certhash for webtransport bootstrap addr", () => {
     expect(
       normalizeBrowserBootstrapAddr(
@@ -26,21 +38,33 @@ describe("p2p-bootstrap-storage", () => {
     });
   });
 
-  it("rejects legacy tls websocket bootstrap multiaddr", () => {
-    expect(() => resolveBootstrapTarget("/dns4/p2p.example.com/tcp/443/tls/ws/p2p/12D3KooWBootstrap")).toThrow(
-      "bootstrap 地址必须是浏览器可拨的 multiaddr（包含 /p2p，且传输为 /webtransport 或 /ws）。",
-    );
+  it("accepts canonical tls websocket bootstrap multiaddr", () => {
+    expect(resolveBootstrapTarget("/dns4/p2p.example.com/tcp/443/tls/ws/p2p/12D3KooWBootstrap")).toEqual({
+      bootstrapAddr: "/dns4/p2p.example.com/tcp/443/tls/ws/p2p/12D3KooWBootstrap",
+      transport: "ws",
+    });
   });
 
-  it("rejects legacy wss bootstrap multiaddr", () => {
-    expect(() => resolveBootstrapTarget("/dns4/p2p.example.com/tcp/443/wss/p2p/12D3KooWBootstrap")).toThrow(
-      "bootstrap 地址必须是浏览器可拨的 multiaddr（包含 /p2p，且传输为 /webtransport 或 /ws）。",
-    );
+  it("normalizes legacy wss bootstrap multiaddr to canonical tls/ws", () => {
+    expect(resolveBootstrapTarget("/dns4/p2p.example.com/tcp/443/wss/p2p/12D3KooWBootstrap")).toEqual({
+      bootstrapAddr: "/dns4/p2p.example.com/tcp/443/tls/ws/p2p/12D3KooWBootstrap",
+      transport: "ws",
+    });
   });
 
   it("rejects non browser dialable bootstrap multiaddr", () => {
     expect(() => resolveBootstrapTarget("/ip4/156.233.234.137/tcp/8443/p2p/12D3KooWBootstrap")).toThrow(
       "bootstrap 地址必须是浏览器可拨的 multiaddr",
     );
+  });
+
+  it("reads empty server url when nothing is stored", () => {
+    expect(readStoredBootstrapServerUrl()).toBe("");
+  });
+
+  it("prefers stored server url over default env", () => {
+    vi.stubEnv("NEXT_PUBLIC_GOMTM_PUBLIC_URL", "https://gomtm2.yuepa8.com");
+    persistStoredBootstrapServerUrl("https://alt.example.com");
+    expect(readStoredBootstrapServerUrl()).toBe("https://alt.example.com");
   });
 });

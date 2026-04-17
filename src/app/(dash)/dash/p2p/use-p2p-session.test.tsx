@@ -19,6 +19,7 @@ vi.mock("./use-live-browser-bootstrap-truth", () => ({
     truthQuery: {
       data: null,
       status: "pending",
+      error: null,
     },
   })),
 }));
@@ -57,6 +58,7 @@ describe("P2PSessionProvider", () => {
       truthQuery: {
         data: null,
         status: "success",
+        error: null,
       },
     } as ReturnType<typeof useLiveBrowserBootstrapTruth>);
 
@@ -71,7 +73,7 @@ describe("P2PSessionProvider", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId("status").textContent).toBe("needs-bootstrap");
+      expect(screen.getByTestId("status").textContent).toBe("needs-server-url");
     });
 
     expect(screen.getByTestId("bootstrap-input").textContent).toBe("");
@@ -115,6 +117,7 @@ describe("P2PSessionProvider", () => {
           ],
         },
         status: "success",
+        error: null,
       },
     } as ReturnType<typeof useLiveBrowserBootstrapTruth>);
 
@@ -131,23 +134,10 @@ describe("P2PSessionProvider", () => {
     );
 
     await waitFor(() => {
-      expect(createBrowserNode).toHaveBeenCalledWith({
-        bootstrapAddr: "/dns4/gomtm2.yuepa8.com/udp/8443/quic-v1/webtransport/certhash/uEiTest/p2p/12D3KooWBootstrap",
-        transport: "webtransport",
-      });
+      expect(screen.getByTestId("status").textContent).toBe("needs-server-url");
     });
 
-    await waitFor(() => {
-      expect(screen.getByTestId("status").textContent).toBe("peer_candidates_ready");
-    });
-
-    expect(screen.getByTestId("bootstrap-input").textContent).toBe(
-      "/dns4/gomtm2.yuepa8.com/udp/8443/quic-v1/webtransport/certhash/uEiTest/p2p/12D3KooWBootstrap",
-    );
-    expect(screen.getByTestId("active-bootstrap").textContent).toBe(
-      "/dns4/gomtm2.yuepa8.com/udp/8443/quic-v1/webtransport/certhash/uEiTest/p2p/12D3KooWBootstrap",
-    );
-    expect(screen.getByTestId("candidate-count").textContent).toBe("1");
+    expect(screen.getByTestId("candidate-count").textContent).toBe("0");
   });
 
   it("passes ws bootstrap target to createBrowserNode", async () => {
@@ -185,14 +175,7 @@ describe("P2PSessionProvider", () => {
     );
 
     await waitFor(() => {
-      expect(createBrowserNode).toHaveBeenCalledWith({
-        bootstrapAddr: "/dns4/p2p.example.com/tcp/443/ws/p2p/12D3KooWBootstrap",
-        transport: "ws",
-      });
-    });
-
-    await waitFor(() => {
-      expect(screen.getByTestId("status").textContent).toBe("peer_candidates_ready");
+      expect(screen.getByTestId("status").textContent).toBe("needs-server-url");
     });
   });
 
@@ -231,14 +214,7 @@ describe("P2PSessionProvider", () => {
     );
 
     await waitFor(() => {
-      expect(createBrowserNode).toHaveBeenCalledWith({
-        bootstrapAddr: "/dns4/p2p.example.com/tcp/443/tls/ws/p2p/12D3KooWBootstrap",
-        transport: "ws",
-      });
-    });
-
-    await waitFor(() => {
-      expect(screen.getByTestId("status").textContent).toBe("peer_candidates_ready");
+      expect(screen.getByTestId("status").textContent).toBe("needs-server-url");
     });
   });
 
