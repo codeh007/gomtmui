@@ -27,7 +27,7 @@ function createTestQueryClient() {
 }
 
 describe("useLiveBrowserBootstrapTruth", () => {
-  it("probes well-known bootstrap metadata from direct live origins instead of server instance rpc", async () => {
+  it("reads well-known bootstrap metadata from the selected gomtm server url only", async () => {
     const fetchMock = vi.fn(async () => ({
       version: 1,
       server: {
@@ -52,12 +52,11 @@ describe("useLiveBrowserBootstrapTruth", () => {
 
     __setLiveBootstrapDepsForTest({
       fetchJson: fetchMock,
-      getCandidateOrigins: () => ["https://gomtm2.yuepa8.com"],
     });
 
     render(
       <QueryClientProvider client={createTestQueryClient()}>
-        <LiveBootstrapProbe />
+        <LiveBootstrapProbe serverUrl="https://gomtm2.yuepa8.com" />
       </QueryClientProvider>,
     );
 
@@ -66,5 +65,24 @@ describe("useLiveBrowserBootstrapTruth", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledWith("https://gomtm2.yuepa8.com/.well-known/gomtm-bootstrap");
+  });
+
+  it("stays idle when server url is missing", async () => {
+    const fetchMock = vi.fn();
+    __setLiveBootstrapDepsForTest({
+      fetchJson: fetchMock,
+    });
+
+    render(
+      <QueryClientProvider client={createTestQueryClient()}>
+        <LiveBootstrapProbe serverUrl={null} />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("live-bootstrap-state").textContent).toBe("pending");
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
