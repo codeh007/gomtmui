@@ -102,8 +102,7 @@ describe("P2PSessionProvider", () => {
     }));
 
     const serverUrl = "https://gomtm2.yuepa8.com";
-    const bootstrapAddr =
-      "/dns4/gomtm2.yuepa8.com/udp/8443/quic-v1/webtransport/certhash/uEiTest/p2p/12D3KooWBootstrap";
+    const bootstrapAddr = "/dns4/gomtm2.yuepa8.com/tcp/443/ws/p2p/12D3KooWBootstrap";
 
     vi.mocked(useLiveBrowserBootstrapTruth).mockImplementation((inputServerUrl: string) => ({
       accessUrl: inputServerUrl === serverUrl ? serverUrl : null,
@@ -113,12 +112,12 @@ describe("P2PSessionProvider", () => {
           ? {
               data: {
                 generation: "gen-1",
-                primaryTransport: "webtransport",
+                primaryTransport: "ws",
                 candidates: [
                   {
-                    transport: "webtransport",
+                    transport: "ws",
                     addr: bootstrapAddr,
-                    priority: 100,
+                    priority: 50,
                   },
                 ],
               },
@@ -155,7 +154,7 @@ describe("P2PSessionProvider", () => {
     expect(screen.getByTestId("candidate-count").textContent).toBe("1");
     expect(createBrowserNode).toHaveBeenCalledWith({
       bootstrapAddr,
-      transport: "webtransport",
+      transport: "ws",
     });
   });
 

@@ -38,12 +38,12 @@ describe("useLiveBrowserBootstrapTruth", () => {
         generation: "gen-1",
         browser: {
           generation: "gen-1",
-          primary_transport: "webtransport",
+          primary_transport: "ws",
           candidates: [
             {
-              transport: "webtransport",
-              addr: "/dns4/gomtm2.yuepa8.com/udp/8443/quic-v1/webtransport/certhash/uEiFresh/p2p/12D3KooWBootstrap",
-              priority: 100,
+              transport: "ws",
+              addr: "/dns4/gomtm2.yuepa8.com/tcp/443/ws/p2p/12D3KooWBootstrap",
+              priority: 50,
             },
           ],
         },
