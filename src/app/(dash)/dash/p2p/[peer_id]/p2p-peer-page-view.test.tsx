@@ -58,8 +58,7 @@ vi.mock("../use-p2p-session", () => ({
 
 vi.mock("./use-p2p-peer-page-session", () => ({
   useP2PPeerPageSession: () => ({
-    activeBootstrapAddr: "/dns4/p2p.example.com/udp/8443/quic-v1/webtransport/certhash/uEiTest/p2p/12D3KooWBootstrap",
-    bootstrapInput: "/dns4/p2p.example.com/udp/8443/quic-v1/webtransport/certhash/uEiTest/p2p/12D3KooWBootstrap",
+    activeConnectionAddr: "/dns4/p2p.example.com/udp/8443/quic-v1/webtransport/certhash/uEiTest/p2p/12D3KooWBootstrap",
     canConnect: true,
     canOpenAndroid: true,
     canOpenVnc: false,
@@ -85,7 +84,6 @@ vi.mock("./use-p2p-peer-page-session", () => ({
     peerTruthErrorMessage: null,
     peerTruthStatus: "ready",
     refreshPeerTruth: vi.fn(),
-    setBootstrapInput: vi.fn(),
     status: "peer_candidates_ready",
     targetPeer: {
       lastDiscoveredAt: "2026-04-15T18:00:00Z",
@@ -107,5 +105,12 @@ describe("P2PPeerPageView", () => {
     expect(screen.getByText("native_remote_v2")).toBeTruthy();
     expect(screen.getByText("native_remote_v2_webrtc")).toBeTruthy();
     expect(screen.queryByText("adb_tunnel")).toBeNull();
+  });
+
+  test("不再暴露手工 connection multiaddr 输入", () => {
+    render(<P2PPeerPageView peerId="12D3KooWPeer" />);
+
+    expect(screen.getByText("节点详情页不再支持手工输入连接地址；请回到 P2P 主页面连接服务器，会话建立后这里会自动复用当前连接。")).toBeTruthy();
+    expect(screen.queryByPlaceholderText("浏览器可拨 multiaddr（WebTransport/WSS）")).toBeNull();
   });
 });

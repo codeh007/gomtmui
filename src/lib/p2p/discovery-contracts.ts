@@ -3,22 +3,22 @@ export type CapabilityState = {
   reason?: string;
 };
 
+export type ConnectionPathObservation = {
+  connectionPeerId?: string;
+  path?: "direct" | "relay";
+  viaAddr?: string;
+};
+
 export type PeerCapabilityTruth = {
-  bootstrapConnectionPath?: BootstrapConnectionPathObservation;
+  connectionPath?: ConnectionPathObservation;
   vnc?: CapabilityState;
   remoteControl?: RemoteControlState;
+  platform?: string;
 };
 
 export type DeviceStatus = PeerCapabilityTruth & {
-  platform?: string;
   runtimeStatus?: string;
   lastError?: string;
-};
-
-export type BootstrapConnectionPathObservation = {
-  bootstrapPeerId?: string;
-  path?: "direct" | "relay";
-  viaAddr?: string;
 };
 
 export type RemoteControlCapabilityState = {
@@ -84,7 +84,7 @@ function parseRemoteControlCapabilityState(value: unknown): RemoteControlCapabil
   };
 }
 
-function parseBootstrapConnectionPathObservation(value: unknown): BootstrapConnectionPathObservation | undefined {
+function parseConnectionPathObservation(value: unknown): ConnectionPathObservation | undefined {
   const record = asRecord(value);
   if (record == null) {
     return undefined;
@@ -96,7 +96,7 @@ function parseBootstrapConnectionPathObservation(value: unknown): BootstrapConne
   }
 
   return {
-    bootstrapPeerId: asString(record.bootstrap_peer_id).trim() || undefined,
+    connectionPeerId: asString(record.connection_peer_id).trim() || undefined,
     path,
     viaAddr: asString(record.via_addr).trim() || undefined,
   };
@@ -120,7 +120,7 @@ export function parseDeviceStatus(value: unknown): DeviceStatus | undefined {
   }
 
   return {
-    bootstrapConnectionPath: parseBootstrapConnectionPathObservation(record.bootstrap_connection_path),
+    connectionPath: parseConnectionPathObservation(record.connection_path),
     platform: asString(record.platform).trim() || undefined,
     vnc: parseCapabilityState(record.vnc),
     remoteControl: parseRemoteControlState(record.remote_control),
@@ -135,12 +135,13 @@ export function toPeerCapabilityTruth(status: DeviceStatus | null | undefined): 
   }
 
   const truth: PeerCapabilityTruth = {
-    bootstrapConnectionPath: status.bootstrapConnectionPath,
+    connectionPath: status.connectionPath,
     vnc: status.vnc,
     remoteControl: status.remoteControl,
+    platform: status.platform,
   };
 
-  if (truth.bootstrapConnectionPath == null && truth.vnc == null && truth.remoteControl == null) {
+  if (truth.connectionPath == null && truth.vnc == null && truth.remoteControl == null) {
     return null;
   }
 
@@ -221,28 +222,17 @@ export function supportsVncView(vnc: CapabilityState | null | undefined) {
   return (vnc?.state?.trim().toLowerCase() ?? "") === "available";
 }
 
-export function supportsAndroidRemoteControl(remoteControl: RemoteControlState | null | undefined) {
-  return (remoteControl?.platform?.trim().toLowerCase() ?? "") === "android";
-}
-
-export function hasDeclaredAndroidRemoteCapability(remoteControl: RemoteControlState | null | undefined) {
-  return hasCapabilityState(remoteControl?.capabilities.nativeRemoteV2) || hasCapabilityState(remoteControl?.capabilities.nativeRemoteV2WebRTC);
-}
-
 export function canOpenAndroidView(remoteControl: RemoteControlState | null | undefined) {
-  return supportsAndroidRemoteControl(remoteControl) && hasDeclaredAndroidRemoteCapability(remoteControl);
+  return (remoteControl?.capabilities.nativeRemoteV2?.state?.trim().toLowerCase() ?? "") === "available";
 }
 
-export function listPeerFeatureLabels(
-  vnc: CapabilityState | null | undefined,
-  remoteControl?: RemoteControlState | null,
-) {
-  const labels = [] as string[];
-  if (canOpenAndroidView(remoteControl)) {
-    labels.push("android");
-  }
+export function listPeerFeatureLabels(vnc: CapabilityState | null | undefined, remoteControl: RemoteControlState | null | undefined) {
+  const labels: string[] = [];
   if (supportsVncView(vnc)) {
     labels.push("vnc");
+  }
+  if (canOpenAndroidView(remoteControl)) {
+    labels.push("android");
   }
   return labels;
 }

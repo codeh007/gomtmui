@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { canOpenAndroidView, listPeerFeatureLabels, supportsVncView } from "@/lib/p2p/discovery-contracts";
-import { deriveBrowserRelayAddressFromBootstrap } from "@/lib/p2p/libp2p-stream";
+import { deriveBrowserRelayAddressFromConnectionEntry } from "@/lib/p2p/libp2p-stream";
 import { logP2PConsole } from "@/lib/p2p/p2p-console";
 import { requestPeerCapabilityTruth } from "@/lib/p2p/worker-control";
-import { normalizeBrowserBootstrapAddr } from "../p2p-bootstrap-storage";
+import { normalizeBrowserConnectionAddr } from "../p2p-connection-runtime";
 import { useP2PSession } from "../use-p2p-session";
 
 export type PeerTruthStatus = "idle" | "loading" | "ready" | "error";
@@ -28,7 +28,7 @@ function resolveCurrentNodePeerId(node: unknown) {
 
 function pickObservedRelayBrowserAddress(multiaddrs: string[]) {
   const normalized = multiaddrs
-    .map((value) => normalizeBrowserBootstrapAddr(value.trim()))
+    .map((value) => normalizeBrowserConnectionAddr(value.trim()))
     .filter((value) => value.startsWith("/"));
   return (
     normalized.find((value) => value.includes("/p2p-circuit/") && value.includes("/webtransport/")) ??
@@ -84,14 +84,14 @@ export function useP2PPeerPageSession(peerId: string) {
         setTargetAddress(null);
         return;
       }
-      const dialableAddress = normalizeBrowserBootstrapAddr((await resolveDialableAddress(targetPeer.multiaddrs)) ?? "");
+      const dialableAddress = normalizeBrowserConnectionAddr((await resolveDialableAddress(targetPeer.multiaddrs)) ?? "");
       const observedRelayAddress = pickObservedRelayBrowserAddress(targetPeer.multiaddrs);
       const address =
         dialableAddress !== ""
           ? dialableAddress
           : (observedRelayAddress ??
-            deriveBrowserRelayAddressFromBootstrap({
-              activeBootstrapAddr: p2pSession.activeBootstrapAddr,
+            deriveBrowserRelayAddressFromConnectionEntry({
+              activeConnectionAddr: p2pSession.activeConnectionAddr,
               multiaddrs: targetPeer.multiaddrs,
               peerId,
             }));
@@ -99,7 +99,7 @@ export function useP2PPeerPageSession(peerId: string) {
         "debug",
         "[peer-page] resolveTargetAddress",
         {
-          activeBootstrapAddr: p2pSession.activeBootstrapAddr,
+          activeConnectionAddr: p2pSession.activeConnectionAddr,
           multiaddrs: targetPeer.multiaddrs,
           peerId,
           resolvedAddress: address,
@@ -118,7 +118,7 @@ export function useP2PPeerPageSession(peerId: string) {
         targetAddressResolveSeqRef.current += 1;
       }
     };
-  }, [currentNode, isConnected, p2pSession.activeBootstrapAddr, peerId, resolveDialableAddress, targetPeer]);
+  }, [currentNode, isConnected, p2pSession.activeConnectionAddr, peerId, resolveDialableAddress, targetPeer]);
 
   useEffect(() => {
     if (!isConnected || currentNode == null || targetPeer == null) {

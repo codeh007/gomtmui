@@ -5,7 +5,6 @@ import { cn } from "mtxuilib/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "mtxuilib/ui/alert";
 import { Badge } from "mtxuilib/ui/badge";
 import { Button } from "mtxuilib/ui/button";
-import { Input } from "mtxuilib/ui/input";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { DashContent } from "@/components/dash-layout";
@@ -13,12 +12,12 @@ import type { P2PStatus } from "../use-p2p-session";
 
 type StatusTone = "default" | "secondary" | "destructive";
 
-type P2PBootstrapEntryMeta = {
+type P2PConnectionEntryMeta = {
   title: string;
   detail: string;
 };
 
-export function getP2PBootstrapEntryMeta(status: P2PStatus, joiningDetail: string): P2PBootstrapEntryMeta {
+export function getP2PConnectionEntryMeta(status: P2PStatus, joiningDetail: string): P2PConnectionEntryMeta {
   if (status === "loading") {
     return {
       title: "准备浏览器节点",
@@ -35,49 +34,36 @@ export function getP2PBootstrapEntryMeta(status: P2PStatus, joiningDetail: strin
 
   if (status === "error") {
     return {
-      title: "重新接入",
-      detail: "更新浏览器可拨 multiaddr（WebTransport/WSS）后重试。",
+      title: "等待服务器恢复",
+      detail: "当前节点连接依赖主页面已建立的服务器会话，请先返回 P2P 页面检查后端地址与连接状态。",
     };
   }
 
   return {
-    title: "输入入口地址",
-    detail: "使用浏览器可拨 multiaddr（WebTransport/WSS）。",
+    title: "等待服务器连接",
+    detail: "当前节点页面不再支持手工输入连接地址；请先在 P2P 主页面连接服务器。",
   };
 }
 
-export function getP2PBootstrapConnectButtonLabel(status: P2PStatus, canConnect: boolean) {
-  if (canConnect) {
-    return status === "error" ? "重新连接" : "连接";
-  }
 
-  return status === "loading" ? "准备中" : "连接中";
-}
-
-type P2PBootstrapEntryCardProps = {
-  activeBootstrapAddr: string;
-  bootstrapInput: string;
-  canConnect: boolean;
+type P2PConnectionEntryCardProps = {
+  activeConnectionAddr: string;
   entryLabel: string;
   joiningDetail: string;
-  onBootstrapInputChange: (value: string) => void;
-  onConnect: () => void;
+  onBackToP2P: string;
   status: P2PStatus;
   surfaceError: string | null;
 };
 
-export function P2PBootstrapEntryCard({
-  activeBootstrapAddr,
-  bootstrapInput,
-  canConnect,
+export function P2PConnectionEntryCard({
+  activeConnectionAddr,
   entryLabel,
   joiningDetail,
-  onBootstrapInputChange,
-  onConnect,
+  onBackToP2P,
   status,
   surfaceError,
-}: P2PBootstrapEntryCardProps) {
-  const entryMeta = getP2PBootstrapEntryMeta(status, joiningDetail);
+}: P2PConnectionEntryCardProps) {
+  const entryMeta = getP2PConnectionEntryMeta(status, joiningDetail);
 
   return (
     <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col justify-center gap-4 px-3 py-4 sm:px-0 sm:py-0">
@@ -92,29 +78,16 @@ export function P2PBootstrapEntryCard({
           <div className="text-xs text-muted-foreground">{entryMeta.detail}</div>
         </div>
 
-        <form
-          className="mt-4 flex flex-col gap-3 sm:flex-row"
-          onSubmit={(event) => {
-            event.preventDefault();
-            onConnect();
-          }}
-        >
-          <Input
-            className="sm:flex-1"
-            value={bootstrapInput}
-            onChange={(event) => onBootstrapInputChange(event.target.value)}
-            placeholder="浏览器可拨 multiaddr（WebTransport/WSS）"
-            spellCheck={false}
-          />
-          <Button type="submit" disabled={!canConnect} className="sm:min-w-32">
-            {getP2PBootstrapConnectButtonLabel(status, canConnect)}
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+          <Button asChild className="sm:min-w-40">
+            <Link href={onBackToP2P}>返回 P2P 主页面连接服务器</Link>
           </Button>
-        </form>
+        </div>
 
-        {activeBootstrapAddr ? (
+        {activeConnectionAddr ? (
           <div className="mt-3 rounded-lg border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-            <div className="text-[11px] uppercase tracking-wide">Relay</div>
-            <div className="mt-1 break-all font-mono">{activeBootstrapAddr}</div>
+            <div className="text-[11px] uppercase tracking-wide">当前连接入口</div>
+            <div className="mt-1 break-all font-mono">{activeConnectionAddr}</div>
           </div>
         ) : null}
         {surfaceError ? (
@@ -203,21 +176,21 @@ export function P2PRemoteSurfaceShell({
 }
 
 export function P2PRemotePageScaffold({
-  bootstrapEntry,
+  connectionEntry,
   children,
   contentInnerClassName,
   showSurfaceStatusBadge = true,
-  showBootstrapEntry,
+  showConnectionEntry,
   statusLabel,
   statusTone,
   surfaceClassName,
   title,
 }: {
-  bootstrapEntry: P2PBootstrapEntryCardProps;
+  connectionEntry: P2PConnectionEntryCardProps;
   children: ReactNode;
   contentInnerClassName?: string;
   showSurfaceStatusBadge?: boolean;
-  showBootstrapEntry: boolean;
+  showConnectionEntry: boolean;
   statusLabel: string;
   statusTone: StatusTone;
   surfaceClassName?: string;
@@ -225,16 +198,16 @@ export function P2PRemotePageScaffold({
 }) {
   return (
     <>
-      {showBootstrapEntry ? (
+      {showConnectionEntry ? (
         <P2PRemotePageHeader title={title} statusLabel={statusLabel} statusTone={statusTone} />
       ) : null}
 
       <DashContent
-        className={showBootstrapEntry ? "flex-1 overflow-auto" : "flex-1 overflow-hidden"}
-        innerClassName={showBootstrapEntry ? "p-0 sm:p-3" : (contentInnerClassName ?? "h-full p-0 sm:p-3")}
+        className={showConnectionEntry ? "flex-1 overflow-auto" : "flex-1 overflow-hidden"}
+        innerClassName={showConnectionEntry ? "p-0 sm:p-3" : (contentInnerClassName ?? "h-full p-0 sm:p-3")}
       >
-        {showBootstrapEntry ? (
-          <P2PBootstrapEntryCard {...bootstrapEntry} />
+        {showConnectionEntry ? (
+          <P2PConnectionEntryCard {...connectionEntry} />
         ) : (
           <P2PRemoteSurfaceShell
             surfaceClassName={surfaceClassName}

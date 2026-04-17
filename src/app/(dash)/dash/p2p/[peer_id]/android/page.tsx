@@ -13,25 +13,20 @@ function P2PAndroidWorkspace({ peerId }: { peerId: string }) {
     session.nativeRemoteV2.capability.reason,
   );
   const surfaceError = session.targetSessionError ?? session.errorMessage;
-  const shouldShowBootstrapEntry =
+  const shouldShowConnectionEntry =
     !session.isConnected && !["loading", "joining", "discovering"].includes(session.status);
 
   return (
     <P2PRemotePageScaffold
-      bootstrapEntry={{
-        activeBootstrapAddr: session.activeBootstrapAddr,
-        bootstrapInput: session.bootstrapInput,
-        canConnect: session.canConnect,
+      connectionEntry={{
+        activeConnectionAddr: session.activeConnectionAddr,
         entryLabel: "Android",
         joiningDetail: "接入后自动进入 Android 原生控制。",
-        onBootstrapInputChange: session.setBootstrapInput,
-        onConnect: () => {
-          void session.connect();
-        },
+        onBackToP2P: "/dash/p2p",
         status: session.status,
         surfaceError,
       }}
-      showBootstrapEntry={shouldShowBootstrapEntry}
+      showConnectionEntry={shouldShowConnectionEntry}
       contentInnerClassName="h-full p-0"
       showSurfaceStatusBadge={false}
       statusLabel={statusMeta.label}

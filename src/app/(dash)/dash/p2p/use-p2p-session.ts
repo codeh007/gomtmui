@@ -109,7 +109,7 @@ export function getP2PStatusMeta(status: P2PStatus) {
 
 export type ResolvedPeerTruthMap = Record<string, PeerCapabilityTruth>;
 
-export function formatBootstrapPathLabel(path: "direct" | "relay" | null | undefined) {
+export function formatConnectionPathLabel(path: "direct" | "relay" | null | undefined) {
   if (path === "direct") {
     return "入网路径=直连";
   }
@@ -119,12 +119,12 @@ export function formatBootstrapPathLabel(path: "direct" | "relay" | null | undef
   return "入网路径=未知";
 }
 
-export function getBootstrapPathLabel(address: string | null | undefined) {
-  return formatBootstrapPathLabel((address?.trim() ?? "") === "" ? null : "relay");
+export function getConnectionPathLabel(address: string | null | undefined) {
+  return formatConnectionPathLabel((address?.trim() ?? "") === "" ? null : "relay");
 }
 
-export function getPreferredPeerBootstrapPathLabel(multiaddrs: string[], bootstrapPath?: "direct" | "relay" | null) {
-  const path = bootstrapPath ?? getPreferredBrowserConnectionPath(multiaddrs);
+export function getPreferredPeerConnectionPathLabel(multiaddrs: string[], connectionPath?: "direct" | "relay" | null) {
+  const path = connectionPath ?? getPreferredBrowserConnectionPath(multiaddrs);
   if (path === "direct") {
     return "入网=直连";
   }
@@ -505,10 +505,10 @@ function getRendezvousDiscoveryService(node: BrowserNodeSession["node"]) {
 function useP2PSessionState() {
   const [serverUrl, setServerUrl] = useState("");
   const [serverUrlInput, setServerUrlInput] = useState("");
-  const liveBootstrap = useLiveBrowserConnectionTruth(serverUrl);
-  const liveBootstrapAddr = useMemo(() => liveBootstrap.truthQuery.data?.candidates[0]?.addr?.trim() ?? "", [liveBootstrap]);
-  const liveBootstrapStatus = liveBootstrap.truthQuery.status;
-  const liveBootstrapGeneration = liveBootstrap.truthQuery.data?.generation ?? "";
+  const liveConnection = useLiveBrowserConnectionTruth(serverUrl);
+  const liveConnectionAddr = useMemo(() => liveConnection.truthQuery.data?.candidates[0]?.addr?.trim() ?? "", [liveConnection]);
+  const liveConnectionStatus = liveConnection.truthQuery.status;
+  const liveConnectionGeneration = liveConnection.truthQuery.data?.generation ?? "";
   const sessionRef = useRef<BrowserNodeSession | null>(null);
   const connectAttemptRef = useRef(0);
   const resolvedPeerTruthRef = useRef<ResolvedPeerTruthMap>({});
@@ -732,7 +732,7 @@ function useP2PSessionState() {
 
     async function init() {
       const storedServerUrl = readStoredServerUrl().trim();
-      const storedBootstrapAddr = "";
+      const storedConnectionAddr = "";
       if (cancelled) {
         return;
       }
@@ -745,18 +745,18 @@ function useP2PSessionState() {
         return;
       }
 
-      if (liveBootstrapStatus === "pending") {
+      if (liveConnectionStatus === "pending") {
         setStatus("fetching-connection-truth");
         return;
       }
 
-      if (liveBootstrapStatus === "error") {
+      if (liveConnectionStatus === "error") {
         setStatus("error");
-        setErrorMessage(liveBootstrap.truthQuery.error instanceof Error ? liveBootstrap.truthQuery.error.message : "读取后端 连接信息失败");
+        setErrorMessage(liveConnection.truthQuery.error instanceof Error ? liveConnection.truthQuery.error.message : "读取后端 连接信息失败");
         return;
       }
 
-      const initialInput = liveBootstrapAddr.trim();
+      const initialInput = liveConnectionAddr.trim();
 
       if (initialInput === "") {
         setStatus("error");
@@ -764,21 +764,21 @@ function useP2PSessionState() {
         return;
       }
 
-      const shouldAutoConnectLiveBootstrap =
-        storedBootstrapAddr === "" &&
-        liveBootstrapAddr !== "" &&
+      const shouldAutoConnectLiveConnection =
+        storedConnectionAddr === "" &&
+        liveConnectionAddr !== "" &&
         activeConnectionAddr.trim() === "" &&
         status !== "joining" &&
         status !== "discovering" &&
         status !== "peer_candidates_ready";
 
-      const shouldReconnectForBootstrapChange =
-        liveBootstrapAddr !== "" &&
+      const shouldReconnectForConnectionChange =
+        liveConnectionAddr !== "" &&
         activeConnectionAddr.trim() !== "" &&
-        activeConnectionAddr.trim() !== liveBootstrapAddr &&
-        storedBootstrapAddr === "";
+        activeConnectionAddr.trim() !== liveConnectionAddr &&
+        storedConnectionAddr === "";
 
-      if (shouldAutoConnectLiveBootstrap || shouldReconnectForBootstrapChange) {
+      if (shouldAutoConnectLiveConnection || shouldReconnectForConnectionChange) {
         await connectToBootstrap({ input: initialInput });
       }
     }
@@ -792,10 +792,10 @@ function useP2PSessionState() {
   }, [
     activeConnectionAddr,
     connectToBootstrap,
-    liveBootstrapAddr,
-    liveBootstrapGeneration,
-    liveBootstrapStatus,
-    liveBootstrap.truthQuery.error,
+    liveConnectionAddr,
+    liveConnectionGeneration,
+    liveConnectionStatus,
+    liveConnection.truthQuery.error,
     status,
     stopNode,
   ]);
@@ -907,10 +907,10 @@ function useP2PSessionState() {
     activeConnectionAddr,
     canConnect: status !== "loading" && status !== "joining" && status !== "discovering" && serverUrl.trim() !== "",
     connect: async () => {
-      if (liveBootstrapAddr.trim() === "") {
+      if (liveConnectionAddr.trim() === "") {
         return false;
       }
-      return connectToBootstrap({ input: liveBootstrapAddr.trim() });
+      return connectToBootstrap({ input: liveConnectionAddr.trim() });
     },
     debugConnectPhase,
     debugLastError,

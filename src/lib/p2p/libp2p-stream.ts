@@ -180,20 +180,20 @@ export function getPreferredBrowserConnectionPath(multiaddrs: string[]) {
   return classifyBrowserConnectionPath(orderBrowserAddressCandidates(multiaddrs)[0]);
 }
 
-export function deriveBrowserRelayAddressFromBootstrap(params: {
-  activeBootstrapAddr: string | null | undefined;
+export function deriveBrowserRelayAddressFromConnectionEntry(params: {
+  activeConnectionAddr: string | null | undefined;
   peerId: string;
   multiaddrs: string[];
 }) {
-  const bootstrapAddr = params.activeBootstrapAddr?.trim() ?? "";
+  const connectionAddr = params.activeConnectionAddr?.trim() ?? "";
   const peerId = params.peerId.trim();
-  if (bootstrapAddr === "" || peerId === "") {
+  if (connectionAddr === "" || peerId === "") {
     return null;
   }
-  if (!bootstrapAddr.startsWith("/") || !bootstrapAddr.includes("/webtransport") || !bootstrapAddr.includes("/p2p/")) {
+  if (!connectionAddr.startsWith("/") || !connectionAddr.includes("/webtransport") || !connectionAddr.includes("/p2p/")) {
     return null;
   }
-  return `${bootstrapAddr}/p2p-circuit/p2p/${peerId}`;
+  return `${connectionAddr}/p2p-circuit/p2p/${peerId}`;
 }
 
 function orderBrowserAddressCandidates(multiaddrs: string[]) {

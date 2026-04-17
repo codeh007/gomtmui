@@ -32,7 +32,7 @@ function SessionProbe() {
   return (
     <>
       <div data-testid="status">{session.status}</div>
-      <div data-testid="active-bootstrap">{session.activeConnectionAddr}</div>
+      <div data-testid="active-connection">{session.activeConnectionAddr}</div>
       <div data-testid="candidate-count">{String(session.peerCandidates.length)}</div>
       <div data-testid="error-message">{session.errorMessage ?? ""}</div>
       <div data-testid="is-connected">{String(session.isConnected)}</div>
@@ -148,7 +148,7 @@ describe("P2PSessionProvider", () => {
       expect(screen.getByTestId("status").textContent).toBe("peer_candidates_ready");
     });
 
-    expect(screen.getByTestId("active-bootstrap").textContent).toBe(connectionAddr);
+    expect(screen.getByTestId("active-connection").textContent).toBe(connectionAddr);
     expect(screen.getByTestId("candidate-count").textContent).toBe("1");
     expect(screen.getByTestId("is-connected").textContent).toBe("true");
     expect(screen.getByTestId("can-connect").textContent).toBe("true");
@@ -227,7 +227,7 @@ describe("P2PSessionProvider", () => {
       expect(screen.getByTestId("status").textContent).toBe("peer_candidates_ready");
     });
 
-    expect(screen.getByTestId("active-bootstrap").textContent).toBe(connectionAddr);
+    expect(screen.getByTestId("active-connection").textContent).toBe(connectionAddr);
     expect(screen.getByTestId("is-connected").textContent).toBe("true");
     expect(screen.getByTestId("can-connect").textContent).toBe("true");
     expect(screen.getByTestId("server-url").textContent).toBe(serverUrl);
@@ -312,7 +312,7 @@ describe("P2PSessionProvider", () => {
       connectionAddr,
       transport: "ws",
     });
-    expect(screen.getByTestId("active-bootstrap").textContent).toBe(connectionAddr);
+    expect(screen.getByTestId("active-connection").textContent).toBe(connectionAddr);
   });
 
   it("stays in joining when connection success never commits discovery state", async () => {
@@ -383,7 +383,7 @@ describe("P2PSessionProvider", () => {
       expect(screen.getByTestId("status").textContent).toBe("peer_candidates_ready");
     });
 
-    expect(screen.getByTestId("active-bootstrap").textContent).toBe(connectionAddr);
+    expect(screen.getByTestId("active-connection").textContent).toBe(connectionAddr);
     expect(screen.getByTestId("candidate-count").textContent).toBe("0");
     expect(screen.getByTestId("is-connected").textContent).toBe("true");
     expect(screen.getByTestId("can-connect").textContent).toBe("true");

@@ -1,10 +1,10 @@
-const BOOTSTRAP_STORAGE_KEY = "gomtm:p2p:bootstrap-target";
-const BOOTSTRAP_SERVER_URL_STORAGE_KEY = "gomtm:p2p:bootstrap-server-url";
+const CONNECTION_RUNTIME_STORAGE_KEY = "gomtm:p2p:connection-runtime";
+const SERVER_URL_STORAGE_KEY = "gomtm:p2p:server-url";
 const BROWSER_IDENTITY_STORAGE_KEY = "gomtm:p2p:browser-identity-v1";
 const DEFAULT_SERVER_URL = (process.env.NEXT_PUBLIC_GOMTM_PUBLIC_URL ?? "").trim();
 
-export type ResolvedBootstrapTarget = {
-  bootstrapAddr: string;
+export type ResolvedConnectionEntryTarget = {
+  connectionAddr: string;
   transport: "webtransport" | "ws";
 };
 
@@ -12,7 +12,7 @@ function hasProtocolSegment(value: string, protocol: string) {
   return value.split("/").includes(protocol);
 }
 
-function isBrowserDialableBootstrapAddr(value: string) {
+function isBrowserDialableConnectionAddr(value: string) {
   if (!hasProtocolSegment(value, "p2p")) {
     return false;
   }
@@ -24,7 +24,7 @@ function isBrowserDialableBootstrapAddr(value: string) {
   return hasProtocolSegment(value, "ws") || hasProtocolSegment(value, "wss");
 }
 
-export function normalizeBrowserBootstrapAddr(value: string) {
+export function normalizeBrowserConnectionAddr(value: string) {
   const trimmed = value.trim();
   if (trimmed === "") {
     return trimmed;
@@ -69,21 +69,21 @@ export function normalizeBrowserBootstrapAddr(value: string) {
   return normalized.join("/");
 }
 
-export function shouldAllowPrivateBootstrapMultiaddr(candidate: string, bootstrapAddr: string) {
-  const normalizedCandidate = normalizeBrowserBootstrapAddr(candidate);
+export function shouldAllowPrivateConnectionEntryMultiaddr(candidate: string, connectionAddr: string) {
+  const normalizedCandidate = normalizeBrowserConnectionAddr(candidate);
   if (normalizedCandidate === "") {
     return false;
   }
-  return normalizedCandidate === normalizeBrowserBootstrapAddr(bootstrapAddr);
+  return normalizedCandidate === normalizeBrowserConnectionAddr(connectionAddr);
 }
 
-export function readStoredBootstrapServerUrl() {
+export function readStoredServerUrl() {
   if (typeof window === "undefined") {
     return DEFAULT_SERVER_URL;
   }
 
   try {
-    const rawServerUrl = window.localStorage.getItem(BOOTSTRAP_SERVER_URL_STORAGE_KEY);
+    const rawServerUrl = window.localStorage.getItem(SERVER_URL_STORAGE_KEY);
     const serverUrl = rawServerUrl?.trim() ?? "";
     return serverUrl === "" ? DEFAULT_SERVER_URL : serverUrl;
   } catch {
@@ -91,7 +91,7 @@ export function readStoredBootstrapServerUrl() {
   }
 }
 
-export function persistStoredBootstrapServerUrl(serverUrl: string | null | undefined) {
+export function persistStoredServerUrl(serverUrl: string | null | undefined) {
   if (typeof window === "undefined") {
     return;
   }
@@ -99,22 +99,22 @@ export function persistStoredBootstrapServerUrl(serverUrl: string | null | undef
   try {
     const normalized = serverUrl?.trim() ?? "";
     if (normalized === "") {
-      window.localStorage.removeItem(BOOTSTRAP_SERVER_URL_STORAGE_KEY);
+      window.localStorage.removeItem(SERVER_URL_STORAGE_KEY);
       return;
     }
-    window.localStorage.setItem(BOOTSTRAP_SERVER_URL_STORAGE_KEY, normalized);
+    window.localStorage.setItem(SERVER_URL_STORAGE_KEY, normalized);
   } catch {
     // best effort only
   }
 }
 
-export function clearStoredBootstrapRuntime() {
+export function clearStoredConnectionRuntime() {
   if (typeof window === "undefined") {
     return;
   }
 
   try {
-    window.localStorage.removeItem(BOOTSTRAP_STORAGE_KEY);
+    window.localStorage.removeItem(CONNECTION_RUNTIME_STORAGE_KEY);
   } catch {
     // best effort only
   }
@@ -184,19 +184,19 @@ export async function loadOrCreateBrowserPrivateKey() {
   return privateKey;
 }
 
-export function resolveBootstrapTarget(input: string): ResolvedBootstrapTarget {
-  const trimmed = normalizeBrowserBootstrapAddr(input);
+export function resolveConnectionEntryTargetAddress(input: string): ResolvedConnectionEntryTarget {
+  const trimmed = normalizeBrowserConnectionAddr(input);
   if (trimmed === "") {
-    throw new Error("missing bootstrap input");
+    throw new Error("missing connection input");
   }
   if (!trimmed.startsWith("/")) {
-    throw new Error("bootstrap 地址必须使用完整 auto_bootstrap multiaddr。");
+    throw new Error("连接地址必须使用完整 auto_connection multiaddr。");
   }
-  if (!isBrowserDialableBootstrapAddr(trimmed)) {
-    throw new Error("bootstrap 地址必须是浏览器可拨的 multiaddr（包含 /p2p，且传输为 /webtransport 或 /ws）。");
+  if (!isBrowserDialableConnectionAddr(trimmed)) {
+    throw new Error("连接地址必须是浏览器可拨的 multiaddr（包含 /p2p，且传输为 /webtransport 或 /ws）。");
   }
   return {
-    bootstrapAddr: trimmed,
+    connectionAddr: trimmed,
     transport: hasProtocolSegment(trimmed, "webtransport") ? "webtransport" : "ws",
   };
 }

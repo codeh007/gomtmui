@@ -13,20 +13,15 @@ export function P2PVncPageView({ peerId }: { peerId: string }) {
 
   return (
     <P2PRemotePageScaffold
-      bootstrapEntry={{
-        activeBootstrapAddr: session.activeBootstrapAddr,
-        bootstrapInput: session.bootstrapInput,
-        canConnect: session.canConnect,
+      connectionEntry={{
+        activeConnectionAddr: session.activeConnectionAddr,
         entryLabel: "VNC",
         joiningDetail: "接入后自动进入桌面。",
-        onBootstrapInputChange: session.setBootstrapInput,
-        onConnect: () => {
-          void session.connect();
-        },
+        onBackToP2P: "/dash/p2p",
         status: session.status,
         surfaceError,
       }}
-      showBootstrapEntry={!session.isConnected}
+      showConnectionEntry={!session.isConnected}
       statusLabel={statusMeta.label}
       statusTone={statusMeta.tone}
       title="VNC View"

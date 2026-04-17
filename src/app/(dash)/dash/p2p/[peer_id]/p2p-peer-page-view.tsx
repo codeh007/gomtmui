@@ -13,7 +13,6 @@ import {
 } from "mtxuilib/ui/breadcrumb";
 import { Button } from "mtxuilib/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "mtxuilib/ui/card";
-import { Input } from "mtxuilib/ui/input";
 import Link from "next/link";
 import { DashContent, DashHeaders } from "@/components/dash-layout";
 import { getPeerDisplayTitle } from "@/lib/p2p/discovery-contracts";
@@ -97,28 +96,14 @@ export function P2PPeerPageView({ peerId }: { peerId: string }) {
             </CardHeader>
 
             <CardContent className="space-y-4 pt-0">
-              <form
-                className="space-y-2"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void session.connect();
-                }}
-              >
-                <Input
-                  value={session.bootstrapInput}
-                  onChange={(event) => session.setBootstrapInput(event.target.value)}
-                  placeholder="浏览器可拨 multiaddr（WebTransport/WSS）"
-                  spellCheck={false}
-                />
-                <Button type="submit" disabled={!session.canConnect} className="w-full">
-                  {session.isConnected ? "重新连接" : "连接"}
-                </Button>
-              </form>
+              <div className="rounded-lg border bg-muted/20 px-3 py-3 text-xs text-muted-foreground">
+                节点详情页不再支持手工输入连接地址；请回到 P2P 主页面连接服务器，会话建立后这里会自动复用当前连接。
+              </div>
 
-              {session.activeBootstrapAddr ? (
+              {session.activeConnectionAddr ? (
                 <div className="rounded-lg border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-                  <div className="text-[11px] uppercase tracking-wide">Relay</div>
-                  <div className="mt-1 break-all font-mono">{session.activeBootstrapAddr}</div>
+                  <div className="text-[11px] uppercase tracking-wide">当前连接入口</div>
+                  <div className="mt-1 break-all font-mono">{session.activeConnectionAddr}</div>
                 </div>
               ) : null}
               {session.errorMessage ? (
@@ -160,7 +145,7 @@ export function P2PPeerPageView({ peerId }: { peerId: string }) {
                 </CardHeader>
                 <CardContent>
                   <div className="rounded-xl border border-dashed px-4 py-10 text-sm text-muted-foreground">
-                    {session.isConnected ? `尚未发现 ${peerId}` : "先连接 relay。"}
+                    {session.isConnected ? `尚未发现 ${peerId}` : "请先回到 P2P 主页面连接服务器。"}
                   </div>
                 </CardContent>
               </Card>

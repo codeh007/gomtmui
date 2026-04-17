@@ -33,7 +33,7 @@ import {
 } from "@/lib/p2p/discovery-contracts";
 import {
   getP2PStatusMeta,
-  getPreferredPeerBootstrapPathLabel,
+  getPreferredPeerConnectionPathLabel,
   type P2PStatus,
   useP2PSession,
 } from "./use-p2p-session";
@@ -285,9 +285,9 @@ export default function P2PPage() {
                                 </Badge>
                               ) : null}
                               <Badge variant="outline" className="text-[10px] uppercase text-muted-foreground">
-                                {getPreferredPeerBootstrapPathLabel(
+                                {getPreferredPeerConnectionPathLabel(
                                   peer.multiaddrs,
-                                  truth?.bootstrapConnectionPath?.path,
+                                  truth?.connectionPath?.path,
                                 )}
                               </Badge>
                               {featureLabels.length > 0 ? (
@@ -343,9 +343,9 @@ export default function P2PPage() {
                                       </Badge>
                                     ) : null}
                                     <Badge variant="outline" className="text-[10px] uppercase text-muted-foreground">
-                                      {getPreferredPeerBootstrapPathLabel(
+                                      {getPreferredPeerConnectionPathLabel(
                                         peer.multiaddrs,
-                                        truth?.bootstrapConnectionPath?.path,
+                                        truth?.connectionPath?.path,
                                       )}
                                     </Badge>
                                     {featureLabels.length > 0 ? (

@@ -54,8 +54,8 @@ vi.mock("mtxuilib/ui/popover", () => ({
   PopoverContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   PopoverTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
-vi.mock("./use-live-browser-bootstrap-truth", () => ({
-  useLiveBrowserBootstrapTruth: () => ({
+vi.mock("./use-live-browser-connection-truth", () => ({
+  useLiveBrowserConnectionTruth: () => ({
     accessUrl: null,
     readyServers: [],
     truthQuery: {
@@ -78,7 +78,7 @@ describe("P2PPage server-url-only UI", () => {
     cleanup();
   });
 
-  it("默认网络面板不再暴露 bootstrap 与高级连接 UI", async () => {
+  it("默认网络面板不再暴露旧连接入口与高级连接 UI", async () => {
     render(
       <P2PSessionProvider>
         <P2PPage />

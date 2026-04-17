@@ -9,8 +9,8 @@ import {
   useP2PSession,
 } from "./use-p2p-session";
 
-vi.mock("./use-live-browser-bootstrap-truth", () => ({
-  useLiveBrowserBootstrapTruth: vi.fn(() => ({
+vi.mock("./use-live-browser-connection-truth", () => ({
+  useLiveBrowserConnectionTruth: vi.fn(() => ({
     accessUrl: null,
     readyServers: [],
     truthQuery: {
@@ -21,7 +21,7 @@ vi.mock("./use-live-browser-bootstrap-truth", () => ({
   })),
 }));
 
-import { useLiveBrowserBootstrapTruth } from "./use-live-browser-bootstrap-truth";
+import { useLiveBrowserConnectionTruth } from "./use-live-browser-connection-truth";
 
 function SessionProbe() {
   const session = useP2PSession();
@@ -29,7 +29,7 @@ function SessionProbe() {
   return (
     <>
       <div data-testid="status">{session.status}</div>
-      <div data-testid="active-bootstrap">{session.activeBootstrapAddr}</div>
+      <div data-testid="active-connection">{session.activeConnectionAddr}</div>
       <div data-testid="candidate-count">{String(session.peerCandidates.length)}</div>
       <div data-testid="error-message">{session.errorMessage ?? ""}</div>
       <div data-testid="is-connected">{String(session.isConnected)}</div>
@@ -48,10 +48,10 @@ afterEach(() => {
 });
 
 describe("P2PSessionProvider", () => {
-  it("当后端未返回浏览器可用 bootstrap truth 时停在 error 而不是 needs-bootstrap", async () => {
+  it("当后端未返回浏览器可用 connection truth 时停在 error 而不是 needs-server-url", async () => {
     const serverUrl = "https://gomtm2.yuepa8.com";
 
-    vi.mocked(useLiveBrowserBootstrapTruth).mockImplementation((inputServerUrl: string) => ({
+    vi.mocked(useLiveBrowserConnectionTruth).mockImplementation((inputServerUrl: string) => ({
       accessUrl: inputServerUrl === serverUrl ? serverUrl : null,
       readyServers: inputServerUrl === serverUrl ? [{ id: "server-1", accessUrl: serverUrl }] : [],
       truthQuery:
@@ -70,9 +70,9 @@ describe("P2PSessionProvider", () => {
               status: "pending",
               error: null,
             },
-    }) as ReturnType<typeof useLiveBrowserBootstrapTruth>);
+    }) as ReturnType<typeof useLiveBrowserConnectionTruth>);
 
-    localStorage.setItem("gomtm:p2p:bootstrap-server-url", serverUrl);
+    localStorage.setItem("gomtm:p2p:server-url", serverUrl);
 
     render(
       <P2PSessionProvider>
