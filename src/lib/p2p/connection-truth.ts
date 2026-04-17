@@ -18,10 +18,10 @@ const browserConnectionCandidateBaseSchema = z
       return;
     }
 
-    if (hasProtocolSegment(candidate.addr, "tls") || hasProtocolSegment(candidate.addr, "wss")) {
+    if (!hasProtocolSegment(candidate.addr, "tls") || hasProtocolSegment(candidate.addr, "wss")) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'ws transport must use canonical /ws multiaddr without legacy secure websocket segments',
+        message: 'ws transport must use canonical secure websocket multiaddr with /tls/ws and without legacy /wss',
         path: ["addr"],
       });
     }

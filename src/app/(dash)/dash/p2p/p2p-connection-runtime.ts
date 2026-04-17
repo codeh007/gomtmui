@@ -21,7 +21,7 @@ function isBrowserDialableConnectionAddr(value: string) {
     return true;
   }
 
-  return hasProtocolSegment(value, "ws") || hasProtocolSegment(value, "wss");
+  return hasProtocolSegment(value, "webtransport") || (hasProtocolSegment(value, "tls") && hasProtocolSegment(value, "ws")) || hasProtocolSegment(value, "wss");
 }
 
 export function normalizeBrowserConnectionAddr(value: string) {
@@ -39,6 +39,10 @@ export function normalizeBrowserConnectionAddr(value: string) {
         index += 1;
       }
     }
+  }
+  if (trimmed.includes("/tcp/443/ws/") && !trimmed.includes("/tls/ws/")) {
+    const joined = normalizedSegments.join("/");
+    return joined.replace("/tcp/443/ws/", "/tcp/443/tls/ws/");
   }
   const normalizedInput = normalizedSegments.join("/");
 

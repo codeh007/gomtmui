@@ -22,7 +22,7 @@ describe("parsePublicConnectionMetadata", () => {
           candidates: [
             {
               transport: "ws",
-              addr: "/dns4/gomtm2.yuepa8.com/tcp/443/ws/p2p/12D3KooWBootstrap",
+              addr: "/dns4/gomtm2.yuepa8.com/tcp/443/tls/ws/p2p/12D3KooWBootstrap",
               priority: 50,
             },
           ],
@@ -60,7 +60,7 @@ describe("parsePublicConnectionMetadata", () => {
             candidates: [
               {
                 transport: "ws",
-                addr: "/dns4/gomtm2.yuepa8.com/tcp/443/ws/p2p/12D3KooWBootstrap",
+                addr: "/dns4/gomtm2.yuepa8.com/tcp/443/tls/ws/p2p/12D3KooWBootstrap",
                 priority: 50,
               },
             ],

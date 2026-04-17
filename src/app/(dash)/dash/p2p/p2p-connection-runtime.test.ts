@@ -25,16 +25,18 @@ describe("p2p-connection-runtime", () => {
 
   it("accepts browser dialable webtransport connection multiaddr", () => {
     expect(
-      resolveConnectionEntryTargetAddress("/dns4/p2p.example.com/udp/8443/quic-v1/webtransport/certhash/uEiTest/p2p/12D3KooWBootstrap"),
+      resolveConnectionEntryTargetAddress(
+        "/dns4/p2p.example.com/udp/8443/quic-v1/webtransport/certhash/uEiTest/p2p/12D3KooWBootstrap",
+      ),
     ).toEqual({
       connectionAddr: "/dns4/p2p.example.com/udp/8443/quic-v1/webtransport/certhash/uEiTest/p2p/12D3KooWBootstrap",
       transport: "webtransport",
     });
   });
 
-  it("accepts browser dialable ws connection multiaddr", () => {
+  it("normalizes browser ws connection multiaddr to secure tls/ws", () => {
     expect(resolveConnectionEntryTargetAddress("/dns4/p2p.example.com/tcp/443/ws/p2p/12D3KooWBootstrap")).toEqual({
-      connectionAddr: "/dns4/p2p.example.com/tcp/443/ws/p2p/12D3KooWBootstrap",
+      connectionAddr: "/dns4/p2p.example.com/tcp/443/tls/ws/p2p/12D3KooWBootstrap",
       transport: "ws",
     });
   });
