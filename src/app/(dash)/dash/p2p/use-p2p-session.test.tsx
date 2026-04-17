@@ -101,31 +101,44 @@ describe("P2PSessionProvider", () => {
       },
     }));
 
-    vi.mocked(useLiveBrowserBootstrapTruth).mockReturnValue({
-      accessUrl: "https://gomtm2.yuepa8.com",
-      readyServers: [{ id: "server-1", accessUrl: "https://gomtm2.yuepa8.com" }],
-      truthQuery: {
-        data: {
-          generation: "gen-1",
-          primaryTransport: "webtransport",
-          candidates: [
-            {
-              transport: "webtransport",
-              addr: "/dns4/gomtm2.yuepa8.com/udp/8443/quic-v1/webtransport/certhash/uEiTest/p2p/12D3KooWBootstrap",
-              priority: 100,
+    const serverUrl = "https://gomtm2.yuepa8.com";
+    const bootstrapAddr =
+      "/dns4/gomtm2.yuepa8.com/udp/8443/quic-v1/webtransport/certhash/uEiTest/p2p/12D3KooWBootstrap";
+
+    vi.mocked(useLiveBrowserBootstrapTruth).mockImplementation((inputServerUrl: string) => ({
+      accessUrl: inputServerUrl === serverUrl ? serverUrl : null,
+      readyServers: inputServerUrl === serverUrl ? [{ id: "server-1", accessUrl: serverUrl }] : [],
+      truthQuery:
+        inputServerUrl === serverUrl
+          ? {
+              data: {
+                generation: "gen-1",
+                primaryTransport: "webtransport",
+                candidates: [
+                  {
+                    transport: "webtransport",
+                    addr: bootstrapAddr,
+                    priority: 100,
+                  },
+                ],
+              },
+              status: "success",
+              error: null,
+            }
+          : {
+              data: null,
+              status: "pending",
+              error: null,
             },
-          ],
-        },
-        status: "success",
-        error: null,
-      },
-    } as ReturnType<typeof useLiveBrowserBootstrapTruth>);
+    }) as ReturnType<typeof useLiveBrowserBootstrapTruth>);
 
     __setP2PSessionDepsForTest({
       createBrowserNode,
       readStoredBootstrapTarget: () => ({}),
       assertBrowserP2PSupport: () => {},
     });
+
+    localStorage.setItem("gomtm:p2p:bootstrap-server-url", serverUrl);
 
     render(
       <P2PSessionProvider>
@@ -134,10 +147,16 @@ describe("P2PSessionProvider", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId("status").textContent).toBe("needs-server-url");
+      expect(screen.getByTestId("status").textContent).toBe("peer_candidates_ready");
     });
 
-    expect(screen.getByTestId("candidate-count").textContent).toBe("0");
+    expect(screen.getByTestId("bootstrap-input").textContent).toBe(bootstrapAddr);
+    expect(screen.getByTestId("active-bootstrap").textContent).toBe(bootstrapAddr);
+    expect(screen.getByTestId("candidate-count").textContent).toBe("1");
+    expect(createBrowserNode).toHaveBeenCalledWith({
+      bootstrapAddr,
+      transport: "webtransport",
+    });
   });
 
   it("passes ws bootstrap target to createBrowserNode", async () => {
@@ -161,12 +180,42 @@ describe("P2PSessionProvider", () => {
       },
     }));
 
+    const serverUrl = "https://gomtm2.yuepa8.com";
+    const bootstrapAddr = "/dns4/p2p.example.com/tcp/443/ws/p2p/12D3KooWBootstrap";
+
+    vi.mocked(useLiveBrowserBootstrapTruth).mockImplementation((inputServerUrl: string) => ({
+      accessUrl: inputServerUrl === serverUrl ? serverUrl : null,
+      readyServers: inputServerUrl === serverUrl ? [{ id: "server-1", accessUrl: serverUrl }] : [],
+      truthQuery:
+        inputServerUrl === serverUrl
+          ? {
+              data: {
+                generation: "gen-1",
+                primaryTransport: "ws",
+                candidates: [
+                  {
+                    transport: "ws",
+                    addr: bootstrapAddr,
+                    priority: 50,
+                  },
+                ],
+              },
+              status: "success",
+              error: null,
+            }
+          : {
+              data: null,
+              status: "pending",
+              error: null,
+            },
+    }) as ReturnType<typeof useLiveBrowserBootstrapTruth>);
+
     __setP2PSessionDepsForTest({
       createBrowserNode,
-      readStoredBootstrapTarget: () => ({
-        bootstrapAddr: "/dns4/p2p.example.com/tcp/443/ws/p2p/12D3KooWBootstrap",
-      }),
+      readStoredBootstrapTarget: () => ({}),
     });
+
+    localStorage.setItem("gomtm:p2p:bootstrap-server-url", serverUrl);
 
     render(
       <P2PSessionProvider>
@@ -175,7 +224,12 @@ describe("P2PSessionProvider", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId("status").textContent).toBe("needs-server-url");
+      expect(screen.getByTestId("status").textContent).toBe("peer_candidates_ready");
+    });
+
+    expect(createBrowserNode).toHaveBeenCalledWith({
+      bootstrapAddr,
+      transport: "ws",
     });
   });
 

@@ -518,6 +518,7 @@ function useP2PSessionState() {
   const liveBootstrap = useLiveBrowserBootstrapTruth(serverUrl);
   const liveBootstrapAddr = useMemo(() => liveBootstrap.truthQuery.data?.candidates[0]?.addr?.trim() ?? "", [liveBootstrap]);
   const liveBootstrapStatus = liveBootstrap.truthQuery.status;
+  const liveBootstrapGeneration = liveBootstrap.truthQuery.data?.generation ?? "";
   const sessionRef = useRef<BrowserNodeSession | null>(null);
   const connectAttemptRef = useRef(0);
   const resolvedPeerTruthRef = useRef<ResolvedPeerTruthMap>({});
@@ -737,7 +738,6 @@ function useP2PSessionState() {
 
       setServerUrl(storedServerUrl);
       setServerUrlInput(storedServerUrl);
-      setBootstrapInput(storedBootstrapAddr);
 
       if (storedServerUrl === "") {
         setStatus("needs-server-url");
@@ -758,13 +758,29 @@ function useP2PSessionState() {
       const initialInput = (storedBootstrapAddr || liveBootstrapAddr).trim();
       setBootstrapInput(initialInput);
 
-      if (initialInput !== "") {
-        await connectToBootstrap({ input: initialInput });
+      if (initialInput === "") {
+        setStatus("needs-bootstrap");
+        setErrorMessage("当前后端未返回可用于浏览器的 bootstrap 地址。请检查 gomtm server 配置或使用高级覆盖输入 multiaddr。");
         return;
       }
 
-      setStatus("needs-bootstrap");
-      setErrorMessage("当前后端未返回可用于浏览器的 bootstrap 地址。请检查 gomtm server 配置或使用高级覆盖输入 multiaddr。");
+      const shouldAutoConnectLiveBootstrap =
+        storedBootstrapAddr === "" &&
+        liveBootstrapAddr !== "" &&
+        activeBootstrapAddr.trim() === "" &&
+        status !== "joining" &&
+        status !== "discovering" &&
+        status !== "peer_candidates_ready";
+
+      const shouldReconnectForBootstrapChange =
+        liveBootstrapAddr !== "" &&
+        activeBootstrapAddr.trim() !== "" &&
+        activeBootstrapAddr.trim() !== liveBootstrapAddr &&
+        storedBootstrapAddr === "";
+
+      if (shouldAutoConnectLiveBootstrap || shouldReconnectForBootstrapChange) {
+        await connectToBootstrap({ input: initialInput });
+      }
     }
 
     void init();
@@ -773,7 +789,16 @@ function useP2PSessionState() {
       cancelled = true;
       void stopNode();
     };
-  }, [connectToBootstrap, liveBootstrapAddr, liveBootstrapStatus, liveBootstrap.truthQuery.error, stopNode]);
+  }, [
+    activeBootstrapAddr,
+    connectToBootstrap,
+    liveBootstrapAddr,
+    liveBootstrapGeneration,
+    liveBootstrapStatus,
+    liveBootstrap.truthQuery.error,
+    status,
+    stopNode,
+  ]);
 
   const resolveDialableAddress = useCallback(async (multiaddrs: string[]) => {
     const node = sessionRef.current?.node;
