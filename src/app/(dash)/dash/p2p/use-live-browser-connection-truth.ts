@@ -46,10 +46,10 @@ export function useLiveBrowserConnectionTruth(serverUrl: string | null | undefin
     queryFn: async () => {
       const payload = await liveConnectionDeps.fetchJson(`${normalizedServerUrl}/.well-known/gomtm-connection`);
       const metadata = parsePublicConnectionMetadata(payload);
-      if (metadata.p2p.browser == null) {
+      if (metadata.browser == null) {
         throw new Error(`gomtm server ${normalizedServerUrl} 未返回浏览器连接 truth`);
       }
-      return metadata.p2p.browser;
+      return metadata.browser;
     },
   });
 

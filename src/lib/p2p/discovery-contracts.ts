@@ -226,6 +226,10 @@ export function canOpenAndroidView(remoteControl: RemoteControlState | null | un
   return (remoteControl?.capabilities.nativeRemoteV2?.state?.trim().toLowerCase() ?? "") === "available";
 }
 
+export function supportsAndroidRemoteControl(remoteControl: RemoteControlState | null | undefined) {
+  return canOpenAndroidView(remoteControl);
+}
+
 export function listPeerFeatureLabels(vnc: CapabilityState | null | undefined, remoteControl: RemoteControlState | null | undefined) {
   const labels: string[] = [];
   if (supportsVncView(vnc)) {

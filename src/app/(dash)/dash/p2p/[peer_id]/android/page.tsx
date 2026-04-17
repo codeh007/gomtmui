@@ -34,7 +34,7 @@ function P2PAndroidWorkspace({ peerId }: { peerId: string }) {
       surfaceClassName="bg-zinc-950 sm:rounded-none sm:border-0"
       title="Android View"
     >
-      {shouldShowBootstrapEntry ? null : <P2PAndroidNativeV2WebRtcPanel session={session} />}
+      {shouldShowConnectionEntry ? null : <P2PAndroidNativeV2WebRtcPanel session={session} />}
     </P2PRemotePageScaffold>
   );
 }

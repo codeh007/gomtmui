@@ -11,7 +11,6 @@ import {
   Smartphone,
   Waypoints,
   Wifi,
-  WifiOff,
 } from "lucide-react";
 import { Badge } from "mtxuilib/ui/badge";
 import { Button } from "mtxuilib/ui/button";
