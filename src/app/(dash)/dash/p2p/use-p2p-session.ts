@@ -25,8 +25,11 @@ import {
 import { logP2PConsole, summarizePeerCandidates } from "@/lib/p2p/p2p-console.ts";
 import { requestPeerCapabilityTruth, WorkerControlRequestError } from "@/lib/p2p/worker-control.ts";
 import {
+  clearStoredBootstrapRuntime,
   loadOrCreateBrowserPrivateKey,
+  persistStoredBootstrapServerUrl,
   persistStoredBootstrapTarget,
+  readStoredBootstrapServerUrl,
   readStoredBootstrapTarget,
   resolveBootstrapTarget,
   shouldAllowPrivateBootstrapMultiaddr,
@@ -47,7 +50,15 @@ type BrowserNodeSession = {
   disposeDiscoveryListener?: () => void;
 };
 
-export type P2PStatus = "loading" | "needs-bootstrap" | "joining" | "discovering" | "peer_candidates_ready" | "error";
+export type P2PStatus =
+  | "loading"
+  | "needs-server-url"
+  | "fetching-bootstrap-truth"
+  | "needs-bootstrap"
+  | "joining"
+  | "discovering"
+  | "peer_candidates_ready"
+  | "error";
 
 export function getP2PStatusMeta(status: P2PStatus) {
   if (status === "peer_candidates_ready") {
@@ -64,10 +75,24 @@ export function getP2PStatusMeta(status: P2PStatus) {
       tone: "default" as const,
     };
   }
+  if (status === "fetching-bootstrap-truth") {
+    return {
+      dotClass: "bg-amber-500",
+      label: "正在读取后端 bootstrap 信息",
+      tone: "secondary" as const,
+    };
+  }
   if (status === "joining") {
     return {
       dotClass: "bg-amber-500",
       label: "正在入网",
+      tone: "secondary" as const,
+    };
+  }
+  if (status === "needs-server-url") {
+    return {
+      dotClass: "bg-amber-500",
+      label: "等待后端地址",
       tone: "secondary" as const,
     };
   }
@@ -124,6 +149,7 @@ type P2PSessionValue = ReturnType<typeof useP2PSessionState>;
 type P2PSessionDeps = {
   assertBrowserP2PSupport: typeof assertBrowserP2PSupport;
   createBrowserNode: typeof createBrowserNode;
+  logP2PConsole: typeof logP2PConsole;
   readStoredBootstrapTarget: typeof readStoredBootstrapTarget;
   persistStoredBootstrapTarget: typeof persistStoredBootstrapTarget;
 };
@@ -131,6 +157,7 @@ type P2PSessionDeps = {
 const defaultP2PSessionDeps: P2PSessionDeps = {
   assertBrowserP2PSupport,
   createBrowserNode,
+  logP2PConsole,
   readStoredBootstrapTarget,
   persistStoredBootstrapTarget,
 };
@@ -369,6 +396,7 @@ type BootstrapConnectFailureStateHandlers = {
 };
 
 type BootstrapConnectResetStateHandlers = {
+  logP2PConsole: typeof logP2PConsole;
   setErrorMessage: (value: string | null) => void;
   setPeerCandidates: (value: PeerCandidate[]) => void;
   setStatus: (value: P2PStatus) => void;
@@ -385,7 +413,7 @@ function resetBootstrapConnectState(params: {
   params.handlers.setStatus("joining");
   params.handlers.setErrorMessage(null);
   params.handlers.setPeerCandidates([]);
-  logP2PConsole("info", "正在加入 P2P 网络", params.target, { verboseOnly: true });
+  params.handlers.logP2PConsole("info", "正在加入 P2P 网络", params.target, { verboseOnly: true });
 }
 
 async function commitBootstrapConnectFailure(params: {
@@ -485,7 +513,9 @@ function getRendezvousDiscoveryService(node: BrowserNodeSession["node"]) {
 }
 
 function useP2PSessionState() {
-  const liveBootstrap = useLiveBrowserBootstrapTruth();
+  const [serverUrl, setServerUrl] = useState("");
+  const [serverUrlInput, setServerUrlInput] = useState("");
+  const liveBootstrap = useLiveBrowserBootstrapTruth(serverUrl);
   const liveBootstrapAddr = useMemo(() => liveBootstrap.truthQuery.data?.candidates[0]?.addr?.trim() ?? "", [liveBootstrap]);
   const liveBootstrapStatus = liveBootstrap.truthQuery.status;
   const sessionRef = useRef<BrowserNodeSession | null>(null);
@@ -580,6 +610,7 @@ function useP2PSessionState() {
       }
       resetBootstrapConnectState({
         handlers: {
+          logP2PConsole: p2pSessionDeps.logP2PConsole,
           setErrorMessage,
           setPeerCandidates,
           setStatus,
@@ -592,7 +623,7 @@ function useP2PSessionState() {
       try {
         const node = await p2pSessionDeps.createBrowserNode(target);
         createdNode = node;
-        logP2PConsole("info", "browser node created", {
+        p2pSessionDeps.logP2PConsole("info", "browser node created", {
           bootstrapAddr: target.bootstrapAddr,
           transport: target.transport,
         });
@@ -602,7 +633,7 @@ function useP2PSessionState() {
         }
         if (node.status !== "started") {
           await node.start();
-          logP2PConsole("info", "browser node started", {
+          p2pSessionDeps.logP2PConsole("info", "browser node started", {
             bootstrapAddr: target.bootstrapAddr,
             transport: target.transport,
           });
@@ -615,11 +646,11 @@ function useP2PSessionState() {
         if (discovery == null) {
           throw new Error("browser rendezvous discovery service is missing");
         }
-        logP2PConsole("info", "awaiting rendezvous ready", {
+        p2pSessionDeps.logP2PConsole("info", "awaiting rendezvous ready", {
           bootstrapAddr: target.bootstrapAddr,
         });
         await discovery.awaitReady();
-        logP2PConsole("info", "rendezvous ready", {
+        p2pSessionDeps.logP2PConsole("info", "rendezvous ready", {
           bootstrapAddr: target.bootstrapAddr,
         });
         if (!isCurrentAttempt()) {
@@ -697,29 +728,43 @@ function useP2PSessionState() {
     let cancelled = false;
 
     async function init() {
+      const storedServerUrl = readStoredBootstrapServerUrl().trim();
       const storedTarget = p2pSessionDeps.readStoredBootstrapTarget();
       const storedBootstrapAddr = storedTarget.bootstrapAddr?.trim() ?? "";
-      const initialInput = (storedBootstrapAddr || liveBootstrapAddr).trim();
       if (cancelled) {
         return;
       }
 
-      setBootstrapInput(initialInput);
+      setServerUrl(storedServerUrl);
+      setServerUrlInput(storedServerUrl);
+      setBootstrapInput(storedBootstrapAddr);
 
-      if (initialInput !== "") {
-        if (cancelled) {
-          return;
-        }
-
-        await connectToBootstrap({ input: initialInput });
+      if (storedServerUrl === "") {
+        setStatus("needs-server-url");
         return;
       }
 
       if (liveBootstrapStatus === "pending") {
+        setStatus("fetching-bootstrap-truth");
+        return;
+      }
+
+      if (liveBootstrapStatus === "error") {
+        setStatus("error");
+        setErrorMessage(liveBootstrap.truthQuery.error instanceof Error ? liveBootstrap.truthQuery.error.message : "读取后端 bootstrap 信息失败");
+        return;
+      }
+
+      const initialInput = (storedBootstrapAddr || liveBootstrapAddr).trim();
+      setBootstrapInput(initialInput);
+
+      if (initialInput !== "") {
+        await connectToBootstrap({ input: initialInput });
         return;
       }
 
       setStatus("needs-bootstrap");
+      setErrorMessage("当前后端未返回可用于浏览器的 bootstrap 地址。请检查 gomtm server 配置或使用高级覆盖输入 multiaddr。");
     }
 
     void init();
@@ -728,7 +773,7 @@ function useP2PSessionState() {
       cancelled = true;
       void stopNode();
     };
-  }, [connectToBootstrap, liveBootstrapAddr, liveBootstrapStatus, stopNode]);
+  }, [connectToBootstrap, liveBootstrapAddr, liveBootstrapStatus, liveBootstrap.truthQuery.error, stopNode]);
 
   const resolveDialableAddress = useCallback(async (multiaddrs: string[]) => {
     const node = sessionRef.current?.node;
@@ -836,7 +881,7 @@ function useP2PSessionState() {
   return {
     activeBootstrapAddr,
     bootstrapInput,
-    canConnect: status !== "loading" && status !== "joining" && status !== "discovering",
+    canConnect: status !== "loading" && status !== "joining" && status !== "discovering" && serverUrl.trim() !== "",
     connect: async () => {
       await connectToBootstrap({ input: bootstrapInput.trim() });
     },
@@ -848,7 +893,23 @@ function useP2PSessionState() {
     rememberPeerTruth,
     resolveDialableAddress,
     resolvedPeerTruth,
+    serverUrl,
+    serverUrlInput,
     setBootstrapInput,
+    setServerUrlInput,
+    saveServerUrl: async () => {
+      const normalized = serverUrlInput.trim();
+      persistStoredBootstrapServerUrl(normalized);
+      clearStoredBootstrapRuntime();
+      await stopNode();
+      setActiveBootstrapAddr("");
+      setPeerCandidates([]);
+      updateResolvedPeerTruth({});
+      setErrorMessage(null);
+      setServerUrl(normalized);
+      setBootstrapInput("");
+      setStatus(normalized === "" ? "needs-server-url" : "fetching-bootstrap-truth");
+    },
     status,
   };
 }

@@ -1,6 +1,7 @@
 const BOOTSTRAP_STORAGE_KEY = "gomtm:p2p:bootstrap-target";
 const BOOTSTRAP_SERVER_URL_STORAGE_KEY = "gomtm:p2p:bootstrap-server-url";
 const BROWSER_IDENTITY_STORAGE_KEY = "gomtm:p2p:browser-identity-v1";
+const DEFAULT_SERVER_URL = (process.env.NEXT_PUBLIC_GOMTM_PUBLIC_URL ?? "").trim();
 
 export type StoredBootstrapTarget = {
   bootstrapAddr?: string;
@@ -79,6 +80,49 @@ export function shouldAllowPrivateBootstrapMultiaddr(candidate: string, bootstra
     return false;
   }
   return normalizedCandidate === normalizeBrowserBootstrapAddr(bootstrapAddr);
+}
+
+export function readStoredBootstrapServerUrl() {
+  if (typeof window === "undefined") {
+    return DEFAULT_SERVER_URL;
+  }
+
+  try {
+    const rawServerUrl = window.localStorage.getItem(BOOTSTRAP_SERVER_URL_STORAGE_KEY);
+    const serverUrl = rawServerUrl?.trim() ?? "";
+    return serverUrl === "" ? DEFAULT_SERVER_URL : serverUrl;
+  } catch {
+    return DEFAULT_SERVER_URL;
+  }
+}
+
+export function persistStoredBootstrapServerUrl(serverUrl: string | null | undefined) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    const normalized = serverUrl?.trim() ?? "";
+    if (normalized === "") {
+      window.localStorage.removeItem(BOOTSTRAP_SERVER_URL_STORAGE_KEY);
+      return;
+    }
+    window.localStorage.setItem(BOOTSTRAP_SERVER_URL_STORAGE_KEY, normalized);
+  } catch {
+    // best effort only
+  }
+}
+
+export function clearStoredBootstrapRuntime() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.removeItem(BOOTSTRAP_STORAGE_KEY);
+  } catch {
+    // best effort only
+  }
 }
 
 export function readStoredBootstrapTarget(): StoredBootstrapTarget {

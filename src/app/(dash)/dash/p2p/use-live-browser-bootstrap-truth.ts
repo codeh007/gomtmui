@@ -1,15 +1,12 @@
-"use client";
-
-import { createElement, useMemo } from "react";
+import { createElement } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { parsePublicBootstrapMetadata } from "@/lib/p2p/bootstrap-truth";
 
 type LiveBootstrapDeps = {
-  getCandidateOrigins: () => string[];
   fetchJson: (url: string) => Promise<unknown>;
 };
 
-function normalizeOrigin(value: string | null | undefined) {
+function normalizeServerUrl(value: string | null | undefined) {
   const trimmed = value?.trim();
   if (!trimmed) {
     return null;
@@ -17,31 +14,7 @@ function normalizeOrigin(value: string | null | undefined) {
   return trimmed.replace(/\/$/, "");
 }
 
-function listCandidateOrigins() {
-  const seen = new Set<string>();
-  const results: string[] = [];
-
-  const add = (value: string | null | undefined) => {
-    const normalized = normalizeOrigin(value);
-    if (normalized == null || seen.has(normalized)) {
-      return;
-    }
-    seen.add(normalized);
-    results.push(normalized);
-  };
-
-  if (typeof window !== "undefined") {
-    add(window.location.origin);
-  }
-
-  add(process.env.NEXT_PUBLIC_GOMTM_PUBLIC_URL);
-  add("https://gomtm2.yuepa8.com");
-
-  return results;
-}
-
 const defaultLiveBootstrapDeps: LiveBootstrapDeps = {
-  getCandidateOrigins: listCandidateOrigins,
   fetchJson: async (url) => {
     const response = await fetch(url, { credentials: "omit" });
     if (!response.ok) {
@@ -65,51 +38,30 @@ export function __resetLiveBootstrapDepsForTest() {
   liveBootstrapDeps = defaultLiveBootstrapDeps;
 }
 
-function useCandidateOrigins() {
-  return useMemo(() => liveBootstrapDeps.getCandidateOrigins(), []);
-}
-
-export function useLiveBrowserBootstrapTruth() {
-  const candidateOrigins = useCandidateOrigins();
+export function useLiveBrowserBootstrapTruth(serverUrl: string | null | undefined) {
+  const normalizedServerUrl = normalizeServerUrl(serverUrl);
   const truthQuery = useQuery({
-    queryKey: ["live-browser-bootstrap-truth", candidateOrigins],
-    enabled: candidateOrigins.length > 0,
+    queryKey: ["live-browser-bootstrap-truth", normalizedServerUrl],
+    enabled: normalizedServerUrl != null,
     queryFn: async () => {
-      let lastError: unknown = null;
-
-      for (const origin of candidateOrigins) {
-        try {
-          const payload = await liveBootstrapDeps.fetchJson(`${origin}/.well-known/gomtm-bootstrap`);
-          const metadata = parsePublicBootstrapMetadata(payload);
-          if (metadata.p2p.browser != null) {
-            return {
-              accessUrl: origin,
-              truth: metadata.p2p.browser,
-            };
-          }
-        } catch (error) {
-          lastError = error;
-        }
+      const payload = await liveBootstrapDeps.fetchJson(`${normalizedServerUrl}/.well-known/gomtm-bootstrap`);
+      const metadata = parsePublicBootstrapMetadata(payload);
+      if (metadata.p2p.browser == null) {
+        throw new Error(`gomtm server ${normalizedServerUrl} 未返回浏览器 bootstrap truth`);
       }
-
-      throw lastError ?? new Error("missing live gomtm bootstrap metadata origin");
+      return metadata.p2p.browser;
     },
   });
 
-  const selectedOrigin = truthQuery.data?.accessUrl ?? candidateOrigins[0] ?? null;
-
   return {
-    accessUrl: selectedOrigin,
-    readyServers: selectedOrigin == null ? [] : [{ id: "origin-1", accessUrl: selectedOrigin }],
-    truthQuery: {
-      ...truthQuery,
-      data: truthQuery.data?.truth ?? null,
-    },
+    accessUrl: normalizedServerUrl,
+    readyServers: normalizedServerUrl == null ? [] : [{ id: "selected-server", accessUrl: normalizedServerUrl }],
+    truthQuery,
   };
 }
 
-export function LiveBootstrapProbe() {
-  const { truthQuery } = useLiveBrowserBootstrapTruth();
+export function LiveBootstrapProbe(props: { serverUrl?: string | null }) {
+  const { truthQuery } = useLiveBrowserBootstrapTruth(props.serverUrl ?? null);
 
   return createElement("div", { "data-testid": "live-bootstrap-state" }, truthQuery.status);
 }

@@ -195,12 +195,41 @@ export default function P2PPage() {
 
                   <div className="space-y-1">
                     <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
-                      当前地址
+                      后端地址
+                    </div>
+                    <div className="break-all rounded-md border bg-muted/20 px-3 py-2 font-mono text-[11px] text-muted-foreground">
+                      {session.serverUrl.trim() === "" ? "未配置" : session.serverUrl}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                      当前 bootstrap
                     </div>
                     <div className="break-all rounded-md border bg-muted/20 px-3 py-2 font-mono text-[11px] text-muted-foreground">
                       {session.activeBootstrapAddr.trim() === "" ? "未连接" : session.activeBootstrapAddr}
                     </div>
                   </div>
+
+                  <form
+                    className="space-y-2"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void session.saveServerUrl();
+                    }}
+                  >
+                    <Input
+                      value={session.serverUrlInput}
+                      onChange={(event) => session.setServerUrlInput(event.target.value)}
+                      placeholder="gomtm server 公网地址，例如 https://gomtm2.yuepa8.com"
+                      spellCheck={false}
+                    />
+                    <div className="flex justify-end">
+                      <Button type="submit" size="sm" className="min-w-24">
+                        保存并连接
+                      </Button>
+                    </div>
+                  </form>
 
                   <form
                     className="space-y-2"
@@ -212,12 +241,12 @@ export default function P2PPage() {
                     <Input
                       value={session.bootstrapInput}
                       onChange={(event) => session.setBootstrapInput(event.target.value)}
-                      placeholder="浏览器可拨 multiaddr（WebTransport/WSS）"
+                      placeholder="高级：手工覆盖浏览器可拨 multiaddr（WebTransport/WSS）"
                       spellCheck={false}
                     />
                     <div className="flex justify-end">
-                      <Button type="submit" size="sm" disabled={!session.canConnect} className="min-w-24">
-                        {session.isConnected ? "重新连接" : "连接"}
+                      <Button type="submit" size="sm" disabled={!session.canConnect} variant="outline" className="min-w-24">
+                        {session.isConnected ? "重新连接" : "高级连接"}
                       </Button>
                     </div>
                   </form>
