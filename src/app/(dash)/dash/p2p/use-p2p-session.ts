@@ -487,6 +487,7 @@ function getRendezvousDiscoveryService(node: BrowserNodeSession["node"]) {
 function useP2PSessionState() {
   const liveBootstrap = useLiveBrowserBootstrapTruth();
   const liveBootstrapAddr = useMemo(() => liveBootstrap.truthQuery.data?.candidates[0]?.addr?.trim() ?? "", [liveBootstrap]);
+  const liveBootstrapStatus = liveBootstrap.truthQuery.status;
   const sessionRef = useRef<BrowserNodeSession | null>(null);
   const connectAttemptRef = useRef(0);
   const resolvedPeerTruthRef = useRef<ResolvedPeerTruthMap>({});
@@ -683,7 +684,8 @@ function useP2PSessionState() {
 
     async function init() {
       const storedTarget = p2pSessionDeps.readStoredBootstrapTarget();
-      const initialInput = (storedTarget.bootstrapAddr?.trim() || liveBootstrapAddr).trim();
+      const storedBootstrapAddr = storedTarget.bootstrapAddr?.trim() ?? "";
+      const initialInput = (storedBootstrapAddr || liveBootstrapAddr).trim();
       if (cancelled) {
         return;
       }
@@ -695,10 +697,11 @@ function useP2PSessionState() {
           return;
         }
 
-        const connected = await connectToBootstrap({ input: initialInput });
-        if (cancelled || connected) {
-          return;
-        }
+        await connectToBootstrap({ input: initialInput });
+        return;
+      }
+
+      if (liveBootstrapStatus === "pending") {
         return;
       }
 
@@ -711,7 +714,7 @@ function useP2PSessionState() {
       cancelled = true;
       void stopNode();
     };
-  }, [connectToBootstrap, liveBootstrapAddr, stopNode]);
+  }, [connectToBootstrap, liveBootstrapAddr, liveBootstrapStatus, stopNode]);
 
   const resolveDialableAddress = useCallback(async (multiaddrs: string[]) => {
     const node = sessionRef.current?.node;

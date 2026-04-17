@@ -49,6 +49,15 @@ describe("P2PSessionProvider", () => {
     const fetchMock = vi.fn();
     globalThis.fetch = fetchMock as typeof globalThis.fetch;
 
+    vi.mocked(useLiveBrowserBootstrapTruth).mockReturnValue({
+      accessUrl: null,
+      readyServers: [],
+      truthQuery: {
+        data: null,
+        status: "success",
+      },
+    } as ReturnType<typeof useLiveBrowserBootstrapTruth>);
+
     __setP2PSessionDepsForTest({
       readStoredBootstrapTarget: () => ({}),
     });
@@ -171,17 +180,23 @@ describe("P2PSessionProvider", () => {
     });
   });
 
-  it("rejects legacy tls websocket bootstrap target from storage", async () => {
+  it("normalizes wss bootstrap target from storage before joining", async () => {
+    const start = vi.fn(async () => {});
+    const stop = vi.fn(async () => {});
+    const awaitReady = vi.fn(async () => {});
+    const listPeerCandidates = vi.fn(async () => []);
+    const addEventListener = vi.fn();
+    const removeEventListener = vi.fn();
     const createBrowserNode = vi.fn(async () => ({
-      status: "started",
-      start: vi.fn(async () => {}),
-      stop: vi.fn(async () => {}),
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
+      status: "stopped",
+      start,
+      stop,
+      addEventListener,
+      removeEventListener,
       services: {
         rendezvousDiscovery: {
-          awaitReady: vi.fn(async () => {}),
-          listPeerCandidates: vi.fn(async () => []),
+          awaitReady,
+          listPeerCandidates,
         },
       },
     }));
@@ -189,7 +204,7 @@ describe("P2PSessionProvider", () => {
     __setP2PSessionDepsForTest({
       createBrowserNode,
       readStoredBootstrapTarget: () => ({
-        bootstrapAddr: "/dns4/p2p.example.com/tcp/443/tls/ws/p2p/12D3KooWBootstrap",
+        bootstrapAddr: "/dns4/p2p.example.com/tcp/443/wss/p2p/12D3KooWBootstrap",
       }),
     });
 
@@ -200,13 +215,15 @@ describe("P2PSessionProvider", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId("status").textContent).toBe("needs-bootstrap");
+      expect(createBrowserNode).toHaveBeenCalledWith({
+        bootstrapAddr: "/dns4/p2p.example.com/tcp/443/tls/ws/p2p/12D3KooWBootstrap",
+        transport: "ws",
+      });
     });
 
-    expect(screen.getByTestId("error-message").textContent).toBe(
-      "bootstrap 地址必须是浏览器可拨的 multiaddr（包含 /p2p，且传输为 /webtransport 或 /ws）。",
-    );
-    expect(createBrowserNode).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(screen.getByTestId("status").textContent).toBe("peer_candidates_ready");
+    });
   });
 
   it("returns a transport-neutral bootstrap join error message", () => {

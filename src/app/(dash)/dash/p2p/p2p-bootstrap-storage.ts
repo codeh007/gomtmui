@@ -25,16 +25,32 @@ function isBrowserDialableBootstrapAddr(value: string) {
     return true;
   }
 
-  return hasProtocolSegment(value, "ws") && !hasProtocolSegment(value, "tls") && !hasProtocolSegment(value, "wss");
+  return hasProtocolSegment(value, "ws") || hasProtocolSegment(value, "wss");
 }
 
 export function normalizeBrowserBootstrapAddr(value: string) {
   const trimmed = value.trim();
-  if (trimmed === "" || !trimmed.includes("/webtransport") || !trimmed.includes("/certhash/")) {
+  if (trimmed === "") {
     return trimmed;
   }
 
-  const segments = trimmed.split("/");
+  const normalizedSegments = trimmed.split("/");
+  for (let index = 0; index < normalizedSegments.length; index += 1) {
+    if (normalizedSegments[index] === "wss") {
+      normalizedSegments[index] = "ws";
+      if (normalizedSegments[index - 1] !== "tls") {
+        normalizedSegments.splice(index, 0, "tls");
+        index += 1;
+      }
+    }
+  }
+  const normalizedInput = normalizedSegments.join("/");
+
+  if (!normalizedInput.includes("/webtransport") || !normalizedInput.includes("/certhash/")) {
+    return normalizedInput;
+  }
+
+  const segments = normalizedInput.split("/");
   const normalized: string[] = [];
   let seenCertHash = false;
   for (let index = 0; index < segments.length; index += 1) {
