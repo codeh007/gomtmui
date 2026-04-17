@@ -384,6 +384,8 @@ type BootstrapConnectSuccessStateHandlers = {
   setActiveBootstrapAddr: (value: string) => void;
   setBootstrapInput: (value: string) => void;
   setStatus: (value: P2PStatus) => void;
+  setDebugConnectPhase: (value: string) => void;
+  setDebugLastError: (value: string | null) => void;
 };
 
 type BootstrapConnectFailureStateHandlers = {
@@ -393,6 +395,8 @@ type BootstrapConnectFailureStateHandlers = {
   setStatus: (value: P2PStatus) => void;
   stopNode: (options?: { invalidateAttempt?: boolean }) => Promise<void>;
   updateResolvedPeerTruth: (nextValue: ResolvedPeerTruthMap) => void;
+  setDebugConnectPhase: (value: string) => void;
+  setDebugLastError: (value: string | null) => void;
 };
 
 type BootstrapConnectResetStateHandlers = {
@@ -424,6 +428,8 @@ async function commitBootstrapConnectFailure(params: {
   params.handlers.setActiveBootstrapAddr("");
   params.handlers.setPeerCandidates([]);
   params.handlers.updateResolvedPeerTruth({});
+  params.handlers.setDebugConnectPhase("failed");
+  params.handlers.setDebugLastError(params.message);
   params.handlers.setStatus("error");
   params.handlers.setErrorMessage(params.message);
 }
@@ -435,6 +441,8 @@ async function commitBootstrapConnectSuccess(params: {
   syncPeerCandidates: (node: BrowserNodeSession["node"]) => Promise<void>;
   node: BrowserNodeSession["node"];
 }) {
+  params.handlers.setDebugLastError(null);
+  params.handlers.setDebugConnectPhase("commit-success");
   params.handlers.setActiveBootstrapAddr(params.bootstrapAddr);
   params.handlers.setStatus("discovering");
   await params.syncPeerCandidates(params.node);
@@ -529,6 +537,8 @@ function useP2PSessionState() {
   const [activeBootstrapAddr, setActiveBootstrapAddr] = useState("");
   const [peerCandidates, setPeerCandidates] = useState<PeerCandidate[]>([]);
   const [resolvedPeerTruth, setResolvedPeerTruth] = useState<ResolvedPeerTruthMap>({});
+  const [debugConnectPhase, setDebugConnectPhase] = useState("idle");
+  const [debugLastError, setDebugLastError] = useState<string | null>(null);
 
   const updateResolvedPeerTruth = useCallback((nextValue: ResolvedPeerTruthMap) => {
     resolvedPeerTruthRef.current = nextValue;
@@ -620,9 +630,12 @@ function useP2PSessionState() {
         retryStateRef: peerTruthRetryStateRef,
         target,
       });
+      setDebugLastError(null);
+      setDebugConnectPhase("resolving-node");
 
       try {
         const node = await p2pSessionDeps.createBrowserNode(target);
+        setDebugConnectPhase("node-created");
         createdNode = node;
         p2pSessionDeps.logP2PConsole("info", "browser node created", {
           bootstrapAddr: target.bootstrapAddr,
@@ -633,7 +646,9 @@ function useP2PSessionState() {
           return;
         }
         if (node.status !== "started") {
+          setDebugConnectPhase("starting-node");
           await node.start();
+          setDebugConnectPhase("node-started");
           p2pSessionDeps.logP2PConsole("info", "browser node started", {
             bootstrapAddr: target.bootstrapAddr,
             transport: target.transport,
@@ -644,13 +659,16 @@ function useP2PSessionState() {
           }
         }
         const discovery = getRendezvousDiscoveryService(node);
+        setDebugConnectPhase("discovery-service-ready");
         if (discovery == null) {
           throw new Error("browser rendezvous discovery service is missing");
         }
         p2pSessionDeps.logP2PConsole("info", "awaiting rendezvous ready", {
           bootstrapAddr: target.bootstrapAddr,
         });
+        setDebugConnectPhase("awaiting-rendezvous-ready");
         await discovery.awaitReady();
+        setDebugConnectPhase("rendezvous-ready");
         p2pSessionDeps.logP2PConsole("info", "rendezvous ready", {
           bootstrapAddr: target.bootstrapAddr,
         });
@@ -680,6 +698,7 @@ function useP2PSessionState() {
             node.removeEventListener("peer:disconnect", handlePeerEvent as EventListener);
           },
         };
+        setDebugConnectPhase("session-bound");
         if (!isCurrentAttempt()) {
           await stopCreatedNode();
           return;
@@ -692,6 +711,8 @@ function useP2PSessionState() {
             setActiveBootstrapAddr,
             setBootstrapInput,
             setStatus,
+            setDebugConnectPhase,
+            setDebugLastError,
           },
           syncPeerCandidates,
           node,
@@ -716,6 +737,8 @@ function useP2PSessionState() {
             setStatus,
             stopNode,
             updateResolvedPeerTruth,
+            setDebugConnectPhase,
+            setDebugLastError,
           },
           message,
         });
@@ -910,6 +933,8 @@ function useP2PSessionState() {
     connect: async () => {
       await connectToBootstrap({ input: bootstrapInput.trim() });
     },
+    debugConnectPhase,
+    debugLastError,
     errorMessage,
     getCurrentNode: () => sessionRef.current?.node ?? null,
     getResolvedPeerTruth: (peerId: string) => getResolvedPeerTruth(resolvedPeerTruthRef.current, peerId),

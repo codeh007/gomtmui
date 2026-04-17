@@ -277,6 +277,8 @@ export default function P2PPage() {
                       <div>debug.peerCandidates = {String(session.peerCandidates.length)}</div>
                       <div>debug.isConnected = {String(session.isConnected)}</div>
                       <div>debug.canConnect = {String(session.canConnect)}</div>
+                      <div>debug.connectPhase = {session.debugConnectPhase || "<empty>"}</div>
+                      <div>debug.lastError = {session.debugLastError || "<empty>"}</div>
                     </div>
                   ) : null}
                 </PopoverContent>
