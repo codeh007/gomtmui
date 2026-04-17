@@ -52,6 +52,19 @@ function extractBootstrapPeerId(address: string) {
   return trimmed.slice(index + marker.length).trim();
 }
 
+const P2P_DEBUG_STORAGE_KEY = "gomtm:p2p:debug-panel";
+
+function isP2PDebugPanelEnabled() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  try {
+    return window.localStorage.getItem(P2P_DEBUG_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 function getNetworkStatusDisplay(status: P2PStatus) {
   if (status === "peer_candidates_ready" || status === "discovering") {
     return {
@@ -154,6 +167,7 @@ export default function P2PPage() {
   const networkStatusDisplay = getNetworkStatusDisplay(session.status);
   const NetworkStatusIcon = networkStatusDisplay.icon;
   const activeBootstrapPeerId = extractBootstrapPeerId(session.activeBootstrapAddr);
+  const showDebugPanel = isP2PDebugPanelEnabled();
 
   return (
     <>
@@ -252,6 +266,17 @@ export default function P2PPage() {
                   </form>
 
                   {session.errorMessage ? <div className="text-xs text-rose-500">{session.errorMessage}</div> : null}
+
+                  {showDebugPanel ? (
+                    <div className="space-y-1 rounded-md border bg-muted/20 px-3 py-2 text-[11px] text-muted-foreground">
+                      <div>debug.status = {session.status}</div>
+                      <div>debug.serverUrl = {session.serverUrl || "<empty>"}</div>
+                      <div>debug.serverUrlInput = {session.serverUrlInput || "<empty>"}</div>
+                      <div>debug.bootstrapInput = {session.bootstrapInput || "<empty>"}</div>
+                      <div>debug.activeBootstrapAddr = {session.activeBootstrapAddr || "<empty>"}</div>
+                      <div>debug.peerCandidates = {String(session.peerCandidates.length)}</div>
+                    </div>
+                  ) : null}
                 </PopoverContent>
               </Popover>
             </div>
