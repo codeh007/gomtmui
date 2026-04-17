@@ -28,9 +28,4 @@ export function normalizeError(error: unknown, fallbackMessage = "An unexpected 
 export function logError(error: AppError, context?: string) {
   const prefix = context ? `[${context}]` : "[Error]";
   console.error(`${prefix} ${error.message}`, error.originalError);
-
-  // Placeholder for Sentry integration
-  // if (typeof window !== 'undefined' && (window as any).Sentry) {
-  //   (window as any).Sentry.captureException(error.originalError);
-  // }
 }
