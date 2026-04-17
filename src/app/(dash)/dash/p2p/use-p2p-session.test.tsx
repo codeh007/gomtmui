@@ -5,15 +5,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   __resetP2PSessionDepsForTest,
   __setP2PSessionDepsForTest,
-  describeBootstrapJoinError,
+  describeConnectionEntryError,
   P2PSessionProvider,
   useP2PSession,
 } from "./use-p2p-session";
 
 const originalFetch = globalThis.fetch;
 
-vi.mock("./use-live-browser-bootstrap-truth", () => ({
-  useLiveBrowserBootstrapTruth: vi.fn(() => ({
+vi.mock("./use-live-browser-connection-truth", () => ({
+  useLiveBrowserConnectionTruth: vi.fn(() => ({
     accessUrl: null,
     readyServers: [],
     truthQuery: {
@@ -24,7 +24,7 @@ vi.mock("./use-live-browser-bootstrap-truth", () => ({
   })),
 }));
 
-import { useLiveBrowserBootstrapTruth } from "./use-live-browser-bootstrap-truth";
+import { useLiveBrowserConnectionTruth } from "./use-live-browser-connection-truth";
 
 function SessionProbe() {
   const session = useP2PSession();
@@ -32,7 +32,7 @@ function SessionProbe() {
   return (
     <>
       <div data-testid="status">{session.status}</div>
-      <div data-testid="active-bootstrap">{session.activeBootstrapAddr}</div>
+      <div data-testid="active-bootstrap">{session.activeConnectionAddr}</div>
       <div data-testid="candidate-count">{String(session.peerCandidates.length)}</div>
       <div data-testid="error-message">{session.errorMessage ?? ""}</div>
       <div data-testid="is-connected">{String(session.isConnected)}</div>
@@ -51,11 +51,11 @@ afterEach(() => {
 });
 
 describe("P2PSessionProvider", () => {
-  it("does not request system status when no local bootstrap is stored", async () => {
+  it("does not request system status when no local connection state is stored", async () => {
     const fetchMock = vi.fn();
     globalThis.fetch = fetchMock as typeof globalThis.fetch;
 
-    vi.mocked(useLiveBrowserBootstrapTruth).mockReturnValue({
+    vi.mocked(useLiveBrowserConnectionTruth).mockReturnValue({
       accessUrl: null,
       readyServers: [],
       truthQuery: {
@@ -63,7 +63,7 @@ describe("P2PSessionProvider", () => {
         status: "success",
         error: null,
       },
-    } as ReturnType<typeof useLiveBrowserBootstrapTruth>);
+    } as ReturnType<typeof useLiveBrowserConnectionTruth>);
 
     __setP2PSessionDepsForTest({});
 
@@ -80,7 +80,7 @@ describe("P2PSessionProvider", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("uses live bootstrap truth as default input when local storage is empty", async () => {
+  it("uses live connection truth as default entry when local storage is empty", async () => {
     const createBrowserNode = vi.fn(async () => ({
       status: "started",
       start: vi.fn(async () => {}),
@@ -102,9 +102,9 @@ describe("P2PSessionProvider", () => {
     }));
 
     const serverUrl = "https://gomtm2.yuepa8.com";
-    const bootstrapAddr = "/dns4/gomtm2.yuepa8.com/tcp/443/ws/p2p/12D3KooWBootstrap";
+    const connectionAddr = "/dns4/gomtm2.yuepa8.com/tcp/443/ws/p2p/12D3KooWBootstrap";
 
-    vi.mocked(useLiveBrowserBootstrapTruth).mockImplementation((inputServerUrl: string) => ({
+    vi.mocked(useLiveBrowserConnectionTruth).mockImplementation((inputServerUrl: string) => ({
       accessUrl: inputServerUrl === serverUrl ? serverUrl : null,
       readyServers: inputServerUrl === serverUrl ? [{ id: "server-1", accessUrl: serverUrl }] : [],
       truthQuery:
@@ -116,7 +116,7 @@ describe("P2PSessionProvider", () => {
                 candidates: [
                   {
                     transport: "ws",
-                    addr: bootstrapAddr,
+                    addr: connectionAddr,
                     priority: 50,
                   },
                 ],
@@ -129,14 +129,14 @@ describe("P2PSessionProvider", () => {
               status: "pending",
               error: null,
             },
-    }) as ReturnType<typeof useLiveBrowserBootstrapTruth>);
+    }) as ReturnType<typeof useLiveBrowserConnectionTruth>);
 
     __setP2PSessionDepsForTest({
       createBrowserNode,
       assertBrowserP2PSupport: () => {},
     });
 
-    localStorage.setItem("gomtm:p2p:bootstrap-server-url", serverUrl);
+    localStorage.setItem("gomtm:p2p:server-url", serverUrl);
 
     render(
       <P2PSessionProvider>
@@ -148,19 +148,19 @@ describe("P2PSessionProvider", () => {
       expect(screen.getByTestId("status").textContent).toBe("peer_candidates_ready");
     });
 
-    expect(screen.getByTestId("active-bootstrap").textContent).toBe(bootstrapAddr);
+    expect(screen.getByTestId("active-bootstrap").textContent).toBe(connectionAddr);
     expect(screen.getByTestId("candidate-count").textContent).toBe("1");
     expect(screen.getByTestId("is-connected").textContent).toBe("true");
     expect(screen.getByTestId("can-connect").textContent).toBe("true");
     expect(screen.getByTestId("server-url").textContent).toBe(serverUrl);
     expect(screen.getByTestId("server-url-input").textContent).toBe(serverUrl);
     expect(createBrowserNode).toHaveBeenCalledWith({
-      bootstrapAddr,
+      connectionAddr,
       transport: "ws",
     });
   });
 
-  it("passes ws bootstrap target to createBrowserNode", async () => {
+  it("passes ws connection target to createBrowserNode", async () => {
     const start = vi.fn(async () => {});
     const stop = vi.fn(async () => {});
     const awaitReady = vi.fn(async () => {});
@@ -182,9 +182,9 @@ describe("P2PSessionProvider", () => {
     }));
 
     const serverUrl = "https://gomtm2.yuepa8.com";
-    const bootstrapAddr = "/dns4/p2p.example.com/tcp/443/ws/p2p/12D3KooWBootstrap";
+    const connectionAddr = "/dns4/p2p.example.com/tcp/443/ws/p2p/12D3KooWBootstrap";
 
-    vi.mocked(useLiveBrowserBootstrapTruth).mockImplementation((inputServerUrl: string) => ({
+    vi.mocked(useLiveBrowserConnectionTruth).mockImplementation((inputServerUrl: string) => ({
       accessUrl: inputServerUrl === serverUrl ? serverUrl : null,
       readyServers: inputServerUrl === serverUrl ? [{ id: "server-1", accessUrl: serverUrl }] : [],
       truthQuery:
@@ -196,7 +196,7 @@ describe("P2PSessionProvider", () => {
                 candidates: [
                   {
                     transport: "ws",
-                    addr: bootstrapAddr,
+                    addr: connectionAddr,
                     priority: 50,
                   },
                 ],
@@ -209,13 +209,13 @@ describe("P2PSessionProvider", () => {
               status: "pending",
               error: null,
             },
-    }) as ReturnType<typeof useLiveBrowserBootstrapTruth>);
+    }) as ReturnType<typeof useLiveBrowserConnectionTruth>);
 
     __setP2PSessionDepsForTest({
       createBrowserNode,
     });
 
-    localStorage.setItem("gomtm:p2p:bootstrap-server-url", serverUrl);
+    localStorage.setItem("gomtm:p2p:server-url", serverUrl);
 
     render(
       <P2PSessionProvider>
@@ -227,18 +227,18 @@ describe("P2PSessionProvider", () => {
       expect(screen.getByTestId("status").textContent).toBe("peer_candidates_ready");
     });
 
-    expect(screen.getByTestId("active-bootstrap").textContent).toBe(bootstrapAddr);
+    expect(screen.getByTestId("active-bootstrap").textContent).toBe(connectionAddr);
     expect(screen.getByTestId("is-connected").textContent).toBe("true");
     expect(screen.getByTestId("can-connect").textContent).toBe("true");
     expect(screen.getByTestId("server-url").textContent).toBe(serverUrl);
     expect(screen.getByTestId("server-url-input").textContent).toBe(serverUrl);
     expect(createBrowserNode).toHaveBeenCalledWith({
-      bootstrapAddr,
+      connectionAddr,
       transport: "ws",
     });
   });
 
-  it("ignores legacy stored bootstrap target and only resumes from stored serverUrl", async () => {
+  it("ignores legacy stored connection target and only resumes from stored serverUrl", async () => {
     const start = vi.fn(async () => {});
     const stop = vi.fn(async () => {});
     const awaitReady = vi.fn(async () => {});
@@ -260,9 +260,9 @@ describe("P2PSessionProvider", () => {
     }));
 
     const serverUrl = "https://gomtm2.yuepa8.com";
-    const bootstrapAddr = "/dns4/gomtm2.yuepa8.com/tcp/443/ws/p2p/12D3KooWBootstrap";
+    const connectionAddr = "/dns4/gomtm2.yuepa8.com/tcp/443/ws/p2p/12D3KooWBootstrap";
 
-    vi.mocked(useLiveBrowserBootstrapTruth).mockImplementation((inputServerUrl: string) => ({
+    vi.mocked(useLiveBrowserConnectionTruth).mockImplementation((inputServerUrl: string) => ({
       accessUrl: inputServerUrl === serverUrl ? serverUrl : null,
       readyServers: inputServerUrl === serverUrl ? [{ id: "server-1", accessUrl: serverUrl }] : [],
       truthQuery:
@@ -274,7 +274,7 @@ describe("P2PSessionProvider", () => {
                 candidates: [
                   {
                     transport: "ws",
-                    addr: bootstrapAddr,
+                    addr: connectionAddr,
                     priority: 50,
                   },
                 ],
@@ -287,16 +287,16 @@ describe("P2PSessionProvider", () => {
               status: "pending",
               error: null,
             },
-    }) as ReturnType<typeof useLiveBrowserBootstrapTruth>);
+    }) as ReturnType<typeof useLiveBrowserConnectionTruth>);
 
     __setP2PSessionDepsForTest({
       createBrowserNode,
     });
 
-    localStorage.setItem("gomtm:p2p:bootstrap-target", JSON.stringify({
-      bootstrapAddr: "/dns4/legacy.example.com/tcp/443/ws/p2p/12D3KooWLegacy",
+    localStorage.setItem("gomtm:p2p:connection-runtime", JSON.stringify({
+      connectionAddr: "/dns4/legacy.example.com/tcp/443/ws/p2p/12D3KooWLegacy",
     }));
-    localStorage.setItem("gomtm:p2p:bootstrap-server-url", serverUrl);
+    localStorage.setItem("gomtm:p2p:server-url", serverUrl);
 
     render(
       <P2PSessionProvider>
@@ -309,13 +309,13 @@ describe("P2PSessionProvider", () => {
     });
 
     expect(createBrowserNode).toHaveBeenCalledWith({
-      bootstrapAddr,
+      connectionAddr,
       transport: "ws",
     });
-    expect(screen.getByTestId("active-bootstrap").textContent).toBe(bootstrapAddr);
+    expect(screen.getByTestId("active-bootstrap").textContent).toBe(connectionAddr);
   });
 
-  it("stays in joining when bootstrap connect success never commits discovery state", async () => {
+  it("stays in joining when connection success never commits discovery state", async () => {
     const start = vi.fn(async () => {});
     const stop = vi.fn(async () => {});
     const awaitReady = vi.fn(async () => {});
@@ -337,9 +337,9 @@ describe("P2PSessionProvider", () => {
     }));
 
     const serverUrl = "https://gomtm2.yuepa8.com";
-    const bootstrapAddr = "/dns4/gomtm2.yuepa8.com/tcp/443/ws/p2p/12D3KooWBootstrap";
+    const connectionAddr = "/dns4/gomtm2.yuepa8.com/tcp/443/ws/p2p/12D3KooWBootstrap";
 
-    vi.mocked(useLiveBrowserBootstrapTruth).mockImplementation((inputServerUrl: string) => ({
+    vi.mocked(useLiveBrowserConnectionTruth).mockImplementation((inputServerUrl: string) => ({
       accessUrl: inputServerUrl === serverUrl ? serverUrl : null,
       readyServers: inputServerUrl === serverUrl ? [{ id: "server-1", accessUrl: serverUrl }] : [],
       truthQuery:
@@ -351,7 +351,7 @@ describe("P2PSessionProvider", () => {
                 candidates: [
                   {
                     transport: "ws",
-                    addr: bootstrapAddr,
+                    addr: connectionAddr,
                     priority: 50,
                   },
                 ],
@@ -364,14 +364,14 @@ describe("P2PSessionProvider", () => {
               status: "pending",
               error: null,
             },
-    }) as ReturnType<typeof useLiveBrowserBootstrapTruth>);
+    }) as ReturnType<typeof useLiveBrowserConnectionTruth>);
 
     __setP2PSessionDepsForTest({
       createBrowserNode,
       assertBrowserP2PSupport: () => {},
     });
 
-    localStorage.setItem("gomtm:p2p:bootstrap-server-url", serverUrl);
+    localStorage.setItem("gomtm:p2p:server-url", serverUrl);
 
     render(
       <P2PSessionProvider>
@@ -383,7 +383,7 @@ describe("P2PSessionProvider", () => {
       expect(screen.getByTestId("status").textContent).toBe("peer_candidates_ready");
     });
 
-    expect(screen.getByTestId("active-bootstrap").textContent).toBe(bootstrapAddr);
+    expect(screen.getByTestId("active-bootstrap").textContent).toBe(connectionAddr);
     expect(screen.getByTestId("candidate-count").textContent).toBe("0");
     expect(screen.getByTestId("is-connected").textContent).toBe("true");
     expect(screen.getByTestId("can-connect").textContent).toBe("true");
@@ -392,14 +392,14 @@ describe("P2PSessionProvider", () => {
     expect(awaitReady).toHaveBeenCalledTimes(1);
   });
 
-  it("returns a transport-neutral bootstrap join error message", () => {
+  it("returns a transport-neutral connection entry error message", () => {
     expect(
-      describeBootstrapJoinError({
-        bootstrapAddr: "/dns4/p2p.example.com/tcp/443/ws/p2p/12D3KooWBootstrap",
+      describeConnectionEntryError({
+        connectionAddr: "/dns4/p2p.example.com/tcp/443/ws/p2p/12D3KooWBootstrap",
         error: new Error("connection failed"),
       }),
     ).toBe(
-      "无法连接到 bootstrap 节点 /dns4/p2p.example.com/tcp/443/ws/p2p/12D3KooWBootstrap，请确认地址可用且当前网络支持该地址所需的传输。",
+      "无法连接到 连接入口 /dns4/p2p.example.com/tcp/443/ws/p2p/12D3KooWBootstrap，请确认地址可用且当前网络支持该地址所需的传输。",
     );
   });
 });

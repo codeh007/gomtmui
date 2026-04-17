@@ -38,7 +38,7 @@ import {
   useP2PSession,
 } from "./use-p2p-session";
 
-function extractBootstrapPeerId(address: string) {
+function extractConnectionPeerId(address: string) {
   const trimmed = address.trim();
   if (trimmed === "") {
     return "";
@@ -72,7 +72,7 @@ function getNetworkStatusDisplay(status: P2PStatus) {
     };
   }
 
-  if (status === "joining" || status === "loading" || status === "fetching-bootstrap-truth") {
+  if (status === "joining" || status === "loading" || status === "fetching-connection-truth") {
     return {
       icon: LoaderCircle,
       iconClassName: "animate-spin text-amber-500",
@@ -158,7 +158,7 @@ export default function P2PPage() {
   const statusMeta = getP2PStatusMeta(session.status);
   const networkStatusDisplay = getNetworkStatusDisplay(session.status);
   const NetworkStatusIcon = networkStatusDisplay.icon;
-  const activeBootstrapPeerId = extractBootstrapPeerId(session.activeBootstrapAddr);
+  const activeConnectionPeerId = extractConnectionPeerId(session.activeConnectionAddr);
   const showDebugPanel = isP2PDebugPanelEnabled();
 
   return (
@@ -231,7 +231,7 @@ export default function P2PPage() {
                       <div>debug.status = {session.status}</div>
                       <div>debug.serverUrl = {session.serverUrl || "<empty>"}</div>
                       <div>debug.serverUrlInput = {session.serverUrlInput || "<empty>"}</div>
-                      <div>debug.activeBootstrapAddr = {session.activeBootstrapAddr || "<empty>"}</div>
+                      <div>debug.activeConnectionAddr = {session.activeConnectionAddr || "<empty>"}</div>
                       <div>debug.peerCandidates = {String(session.peerCandidates.length)}</div>
                       <div>debug.isConnected = {String(session.isConnected)}</div>
                       <div>debug.canConnect = {String(session.canConnect)}</div>
@@ -248,7 +248,7 @@ export default function P2PPage() {
               <div className="rounded-xl border border-dashed bg-muted/10 px-4 py-8 text-sm text-muted-foreground">
                 {session.status === "needs-server-url"
                   ? "请先输入服务器地址。"
-                  : session.status === "fetching-bootstrap-truth" || session.status === "joining"
+                  : session.status === "fetching-connection-truth" || session.status === "joining"
                     ? "正在连接服务器并加入网络。"
                     : session.isConnected
                       ? "已连接服务器，等待节点。"
@@ -268,7 +268,7 @@ export default function P2PPage() {
                     <Item key={peer.peerId}>
                       <ItemMedia className="pt-1">
                         <div
-                          className={`rounded-full border p-2 ${peer.peerId === activeBootstrapPeerId ? "border-emerald-200 bg-emerald-50 text-emerald-600 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300" : "bg-muted/20 text-muted-foreground"}`}
+                          className={`rounded-full border p-2 ${peer.peerId === activeConnectionPeerId ? "border-emerald-200 bg-emerald-50 text-emerald-600 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300" : "bg-muted/20 text-muted-foreground"}`}
                         >
                           <PeerKindIcon className="size-4" />
                         </div>
@@ -279,7 +279,7 @@ export default function P2PPage() {
                           <div className="min-w-0 flex-1 space-y-2">
                             <div className="flex flex-wrap items-center gap-2">
                               <ItemTitle className="text-base font-semibold tracking-tight">…{peerShortId}</ItemTitle>
-                              {peer.peerId === activeBootstrapPeerId ? (
+                              {peer.peerId === activeConnectionPeerId ? (
                                 <Badge variant="outline" className="text-[10px] uppercase text-muted-foreground">
                                   Relay
                                 </Badge>
@@ -337,7 +337,7 @@ export default function P2PPage() {
 
                                 <div className="space-y-4 text-sm">
                                   <div className="flex flex-wrap gap-1">
-                                    {peer.peerId === activeBootstrapPeerId ? (
+                                    {peer.peerId === activeConnectionPeerId ? (
                                       <Badge variant="outline" className="text-[10px] uppercase text-muted-foreground">
                                         Relay
                                       </Badge>

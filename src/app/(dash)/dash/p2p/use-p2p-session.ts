@@ -25,14 +25,14 @@ import {
 import { logP2PConsole, summarizePeerCandidates } from "@/lib/p2p/p2p-console.ts";
 import { requestPeerCapabilityTruth, WorkerControlRequestError } from "@/lib/p2p/worker-control.ts";
 import {
-  clearStoredBootstrapRuntime,
+  clearStoredConnectionRuntime,
   loadOrCreateBrowserPrivateKey,
-  persistStoredBootstrapServerUrl,
-  readStoredBootstrapServerUrl,
-  resolveBootstrapTarget,
-  shouldAllowPrivateBootstrapMultiaddr,
-} from "./p2p-bootstrap-storage";
-import { useLiveBrowserBootstrapTruth } from "./use-live-browser-bootstrap-truth";
+  persistStoredServerUrl,
+  readStoredServerUrl,
+  resolveConnectionEntryTargetAddress,
+  shouldAllowPrivateConnectionEntryMultiaddr,
+} from "./p2p-connection-runtime";
+import { useLiveBrowserConnectionTruth } from "./use-live-browser-connection-truth";
 
 const TRANSIENT_PEER_TRUTH_RETRY_DELAY_MS = 250;
 const UNRESOLVED_PEER_TRUTH_RETRY_DELAY_MS = 1_000;
@@ -51,7 +51,7 @@ type BrowserNodeSession = {
 export type P2PStatus =
   | "loading"
   | "needs-server-url"
-  | "fetching-bootstrap-truth"
+  | "fetching-connection-truth"
   | "joining"
   | "discovering"
   | "peer_candidates_ready"
@@ -72,10 +72,10 @@ export function getP2PStatusMeta(status: P2PStatus) {
       tone: "default" as const,
     };
   }
-  if (status === "fetching-bootstrap-truth") {
+  if (status === "fetching-connection-truth") {
     return {
       dotClass: "bg-amber-500",
-      label: "正在读取后端 bootstrap 信息",
+      label: "正在读取后端 连接信息",
       tone: "secondary" as const,
     };
   }
@@ -315,20 +315,20 @@ export async function resolveMissingPeerTruth(params: {
   };
 }
 
-export function describeBootstrapJoinError(input: { bootstrapAddr: string; error: unknown }) {
+export function describeConnectionEntryError(input: { connectionAddr: string; error: unknown }) {
   const message = input.error instanceof Error ? input.error.message.trim() : String(input.error).trim();
   if (
     message.includes("unreachable bootstrap") ||
     message.includes("stream reset") ||
     message.includes("connection failed")
   ) {
-    return `无法连接到 bootstrap 节点 ${input.bootstrapAddr}，请确认地址可用且当前网络支持该地址所需的传输。`;
+    return `无法连接到 连接入口 ${input.connectionAddr}，请确认地址可用且当前网络支持该地址所需的传输。`;
   }
-  return message === "" ? `无法连接到 bootstrap 节点 ${input.bootstrapAddr}。` : message;
+  return message === "" ? `无法连接到 连接入口 ${input.connectionAddr}。` : message;
 }
 
-function resolveBootstrapConnectTarget(input: string):
-  | { kind: "ok"; target: ReturnType<typeof resolveBootstrapTarget> }
+function resolveConnectionEntryTarget(input: string):
+  | { kind: "ok"; target: ReturnType<typeof resolveConnectionEntryTargetAddress> }
   | { kind: "error"; status: P2PStatus; message: string } {
   const rawInput = input.trim();
   if (rawInput === "") {
@@ -342,7 +342,7 @@ function resolveBootstrapConnectTarget(input: string):
   try {
     return {
       kind: "ok",
-      target: resolveBootstrapTarget(rawInput),
+      target: resolveConnectionEntryTargetAddress(rawInput),
     };
   } catch (error) {
     return {
@@ -353,7 +353,7 @@ function resolveBootstrapConnectTarget(input: string):
   }
 }
 
-function assertBrowserP2PSupport(transport: ReturnType<typeof resolveBootstrapTarget>["transport"]) {
+function assertBrowserP2PSupport(transport: ReturnType<typeof resolveConnectionEntryTargetAddress>["transport"]) {
   if (transport !== "webtransport") {
     return;
   }
@@ -365,15 +365,15 @@ function assertBrowserP2PSupport(transport: ReturnType<typeof resolveBootstrapTa
   }
 }
 
-type BootstrapConnectSuccessStateHandlers = {
-  setActiveBootstrapAddr: (value: string) => void;
+type ConnectionSuccessStateHandlers = {
+  setActiveConnectionAddr: (value: string) => void;
   setStatus: (value: P2PStatus) => void;
   setDebugConnectPhase: (value: string) => void;
   setDebugLastError: (value: string | null) => void;
 };
 
-type BootstrapConnectFailureStateHandlers = {
-  setActiveBootstrapAddr: (value: string) => void;
+type ConnectionFailureStateHandlers = {
+  setActiveConnectionAddr: (value: string) => void;
   setErrorMessage: (value: string | null) => void;
   setPeerCandidates: (value: PeerCandidate[]) => void;
   setStatus: (value: P2PStatus) => void;
@@ -383,7 +383,7 @@ type BootstrapConnectFailureStateHandlers = {
   setDebugLastError: (value: string | null) => void;
 };
 
-type BootstrapConnectResetStateHandlers = {
+type ConnectionResetStateHandlers = {
   logP2PConsole: typeof logP2PConsole;
   setErrorMessage: (value: string | null) => void;
   setPeerCandidates: (value: PeerCandidate[]) => void;
@@ -391,10 +391,10 @@ type BootstrapConnectResetStateHandlers = {
   updateResolvedPeerTruth: (nextValue: ResolvedPeerTruthMap) => void;
 };
 
-function resetBootstrapConnectState(params: {
-  handlers: BootstrapConnectResetStateHandlers;
+function resetConnectionState(params: {
+  handlers: ConnectionResetStateHandlers;
   retryStateRef: React.MutableRefObject<Record<string, PeerTruthRetryState>>;
-  target: ReturnType<typeof resolveBootstrapTarget>;
+  target: ReturnType<typeof resolveConnectionEntryTargetAddress>;
 }) {
   params.retryStateRef.current = {};
   params.handlers.updateResolvedPeerTruth({});
@@ -404,12 +404,12 @@ function resetBootstrapConnectState(params: {
   params.handlers.logP2PConsole("info", "正在加入 P2P 网络", params.target, { verboseOnly: true });
 }
 
-async function commitBootstrapConnectFailure(params: {
-  handlers: BootstrapConnectFailureStateHandlers;
+async function commitConnectionFailure(params: {
+  handlers: ConnectionFailureStateHandlers;
   message: string;
 }) {
   await params.handlers.stopNode({ invalidateAttempt: false });
-  params.handlers.setActiveBootstrapAddr("");
+  params.handlers.setActiveConnectionAddr("");
   params.handlers.setPeerCandidates([]);
   params.handlers.updateResolvedPeerTruth({});
   params.handlers.setDebugConnectPhase("failed");
@@ -418,16 +418,16 @@ async function commitBootstrapConnectFailure(params: {
   params.handlers.setErrorMessage(params.message);
 }
 
-async function commitBootstrapConnectSuccess(params: {
-  bootstrapAddr: string;
+async function commitConnectionSuccess(params: {
+  connectionAddr: string;
   discovery: BrowserRendezvousDiscoveryService;
-  handlers: BootstrapConnectSuccessStateHandlers;
+  handlers: ConnectionSuccessStateHandlers;
   syncPeerCandidates: (node: BrowserNodeSession["node"]) => Promise<void>;
   node: BrowserNodeSession["node"];
 }) {
   params.handlers.setDebugLastError(null);
   params.handlers.setDebugConnectPhase("commit-success");
-  params.handlers.setActiveBootstrapAddr(params.bootstrapAddr);
+  params.handlers.setActiveConnectionAddr(params.connectionAddr);
   params.handlers.setStatus("discovering");
   await params.syncPeerCandidates(params.node);
   params.handlers.setStatus("peer_candidates_ready");
@@ -435,7 +435,7 @@ async function commitBootstrapConnectSuccess(params: {
     "info",
     "已接入 P2P 网络",
     {
-      bootstrapAddr: params.bootstrapAddr,
+      connectionAddr: params.connectionAddr,
       peerCandidates: (await params.discovery.listPeerCandidates()).length,
     },
     { verboseOnly: true },
@@ -444,7 +444,7 @@ async function commitBootstrapConnectSuccess(params: {
 
 type BrowserTransportFactory = (components: any) => any;
 
-async function createBrowserNode(target: { bootstrapAddr: string; transport: "webtransport" | "ws" }) {
+async function createBrowserNode(target: { connectionAddr: string; transport: "webtransport" | "ws" }) {
   const [
     { createLibp2p },
     webTransportModule,
@@ -466,7 +466,7 @@ async function createBrowserNode(target: { bootstrapAddr: string; transport: "we
   ]);
 
   const privateKey = await loadOrCreateBrowserPrivateKey();
-  const rendezvousPoint = target.bootstrapAddr;
+  const rendezvousPoint = target.connectionAddr;
   const transportFactories: BrowserTransportFactory[] = [circuitRelayTransport() as BrowserTransportFactory];
   if (target.transport === "webtransport") {
     transportFactories.unshift(webTransportModule.webTransport() as BrowserTransportFactory);
@@ -479,7 +479,7 @@ async function createBrowserNode(target: { bootstrapAddr: string; transport: "we
     connectionGater: {
       denyDialMultiaddr: (candidate) => {
         const candidateAddr = candidate.toString();
-        if (shouldAllowPrivateBootstrapMultiaddr(candidateAddr, rendezvousPoint)) {
+        if (shouldAllowPrivateConnectionEntryMultiaddr(candidateAddr, rendezvousPoint)) {
           return false;
         }
         return isPrivate(candidate);
@@ -505,7 +505,7 @@ function getRendezvousDiscoveryService(node: BrowserNodeSession["node"]) {
 function useP2PSessionState() {
   const [serverUrl, setServerUrl] = useState("");
   const [serverUrlInput, setServerUrlInput] = useState("");
-  const liveBootstrap = useLiveBrowserBootstrapTruth(serverUrl);
+  const liveBootstrap = useLiveBrowserConnectionTruth(serverUrl);
   const liveBootstrapAddr = useMemo(() => liveBootstrap.truthQuery.data?.candidates[0]?.addr?.trim() ?? "", [liveBootstrap]);
   const liveBootstrapStatus = liveBootstrap.truthQuery.status;
   const liveBootstrapGeneration = liveBootstrap.truthQuery.data?.generation ?? "";
@@ -515,7 +515,7 @@ function useP2PSessionState() {
   const peerTruthRetryStateRef = useRef<Record<string, PeerTruthRetryState>>({});
   const [status, setStatus] = useState<P2PStatus>("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [activeBootstrapAddr, setActiveBootstrapAddr] = useState("");
+  const [activeConnectionAddr, setActiveConnectionAddr] = useState("");
   const [peerCandidates, setPeerCandidates] = useState<PeerCandidate[]>([]);
   const [resolvedPeerTruth, setResolvedPeerTruth] = useState<ResolvedPeerTruthMap>({});
   const [debugConnectPhase, setDebugConnectPhase] = useState("idle");
@@ -562,7 +562,7 @@ function useP2PSessionState() {
 
   const connectToBootstrap = useCallback(
     async (options: { input: string }) => {
-      let target: ReturnType<typeof resolveBootstrapTarget> | null = null;
+      let target: ReturnType<typeof resolveConnectionEntryTargetAddress> | null = null;
       const attemptId = connectAttemptRef.current + 1;
       connectAttemptRef.current = attemptId;
       let createdNode: BrowserNodeSession["node"] | null = null;
@@ -576,7 +576,7 @@ function useP2PSessionState() {
         });
       };
 
-      const bootstrapTarget = resolveBootstrapConnectTarget(options.input);
+      const bootstrapTarget = resolveConnectionEntryTarget(options.input);
       if (bootstrapTarget.kind === "error") {
         setStatus(bootstrapTarget.status);
         setErrorMessage(bootstrapTarget.message);
@@ -600,7 +600,7 @@ function useP2PSessionState() {
       if (!isCurrentAttempt()) {
         return;
       }
-      resetBootstrapConnectState({
+      resetConnectionState({
         handlers: {
           logP2PConsole: p2pSessionDeps.logP2PConsole,
           setErrorMessage,
@@ -619,7 +619,7 @@ function useP2PSessionState() {
         setDebugConnectPhase("node-created");
         createdNode = node;
         p2pSessionDeps.logP2PConsole("info", "browser node created", {
-          bootstrapAddr: target.bootstrapAddr,
+          connectionAddr: target.connectionAddr,
           transport: target.transport,
         });
         if (!isCurrentAttempt()) {
@@ -631,7 +631,7 @@ function useP2PSessionState() {
           await node.start();
           setDebugConnectPhase("node-started");
           p2pSessionDeps.logP2PConsole("info", "browser node started", {
-            bootstrapAddr: target.bootstrapAddr,
+            connectionAddr: target.connectionAddr,
             transport: target.transport,
           });
           if (!isCurrentAttempt()) {
@@ -645,13 +645,13 @@ function useP2PSessionState() {
           throw new Error("browser rendezvous discovery service is missing");
         }
         p2pSessionDeps.logP2PConsole("info", "awaiting rendezvous ready", {
-          bootstrapAddr: target.bootstrapAddr,
+          connectionAddr: target.connectionAddr,
         });
         setDebugConnectPhase("awaiting-rendezvous-ready");
         await discovery.awaitReady();
         setDebugConnectPhase("rendezvous-ready");
         p2pSessionDeps.logP2PConsole("info", "rendezvous ready", {
-          bootstrapAddr: target.bootstrapAddr,
+          connectionAddr: target.connectionAddr,
         });
         if (!isCurrentAttempt()) {
           await stopCreatedNode();
@@ -684,11 +684,11 @@ function useP2PSessionState() {
           await stopCreatedNode();
           return;
         }
-        await commitBootstrapConnectSuccess({
-          bootstrapAddr: target.bootstrapAddr,
+        await commitConnectionSuccess({
+          connectionAddr: target.connectionAddr,
           discovery,
           handlers: {
-            setActiveBootstrapAddr,
+            setActiveConnectionAddr,
             setStatus,
             setDebugConnectPhase,
             setDebugLastError,
@@ -706,11 +706,11 @@ function useP2PSessionState() {
           await stopCreatedNode();
           return;
         }
-        const message = describeBootstrapJoinError({ bootstrapAddr: target.bootstrapAddr, error });
+        const message = describeConnectionEntryError({ connectionAddr: target.connectionAddr, error });
         logP2PConsole("error", "接入 P2P 网络失败", message);
-        await commitBootstrapConnectFailure({
+        await commitConnectionFailure({
           handlers: {
-            setActiveBootstrapAddr,
+            setActiveConnectionAddr,
             setErrorMessage,
             setPeerCandidates,
             setStatus,
@@ -731,7 +731,7 @@ function useP2PSessionState() {
     let cancelled = false;
 
     async function init() {
-      const storedServerUrl = readStoredBootstrapServerUrl().trim();
+      const storedServerUrl = readStoredServerUrl().trim();
       const storedBootstrapAddr = "";
       if (cancelled) {
         return;
@@ -746,13 +746,13 @@ function useP2PSessionState() {
       }
 
       if (liveBootstrapStatus === "pending") {
-        setStatus("fetching-bootstrap-truth");
+        setStatus("fetching-connection-truth");
         return;
       }
 
       if (liveBootstrapStatus === "error") {
         setStatus("error");
-        setErrorMessage(liveBootstrap.truthQuery.error instanceof Error ? liveBootstrap.truthQuery.error.message : "读取后端 bootstrap 信息失败");
+        setErrorMessage(liveBootstrap.truthQuery.error instanceof Error ? liveBootstrap.truthQuery.error.message : "读取后端 连接信息失败");
         return;
       }
 
@@ -767,15 +767,15 @@ function useP2PSessionState() {
       const shouldAutoConnectLiveBootstrap =
         storedBootstrapAddr === "" &&
         liveBootstrapAddr !== "" &&
-        activeBootstrapAddr.trim() === "" &&
+        activeConnectionAddr.trim() === "" &&
         status !== "joining" &&
         status !== "discovering" &&
         status !== "peer_candidates_ready";
 
       const shouldReconnectForBootstrapChange =
         liveBootstrapAddr !== "" &&
-        activeBootstrapAddr.trim() !== "" &&
-        activeBootstrapAddr.trim() !== liveBootstrapAddr &&
+        activeConnectionAddr.trim() !== "" &&
+        activeConnectionAddr.trim() !== liveBootstrapAddr &&
         storedBootstrapAddr === "";
 
       if (shouldAutoConnectLiveBootstrap || shouldReconnectForBootstrapChange) {
@@ -790,7 +790,7 @@ function useP2PSessionState() {
       void stopNode();
     };
   }, [
-    activeBootstrapAddr,
+    activeConnectionAddr,
     connectToBootstrap,
     liveBootstrapAddr,
     liveBootstrapGeneration,
@@ -904,7 +904,7 @@ function useP2PSessionState() {
   }, [isConnected, peerCandidates, resolveDialableAddress, updateResolvedPeerTruth]);
 
   return {
-    activeBootstrapAddr,
+    activeConnectionAddr,
     canConnect: status !== "loading" && status !== "joining" && status !== "discovering" && serverUrl.trim() !== "",
     connect: async () => {
       if (liveBootstrapAddr.trim() === "") {
@@ -927,15 +927,15 @@ function useP2PSessionState() {
     setServerUrlInput,
     saveServerUrl: async () => {
       const normalized = serverUrlInput.trim();
-      persistStoredBootstrapServerUrl(normalized);
-      clearStoredBootstrapRuntime();
+      persistStoredServerUrl(normalized);
+      clearStoredConnectionRuntime();
       await stopNode();
-      setActiveBootstrapAddr("");
+      setActiveConnectionAddr("");
       setPeerCandidates([]);
       updateResolvedPeerTruth({});
       setErrorMessage(null);
       setServerUrl(normalized);
-      setStatus(normalized === "" ? "needs-server-url" : "fetching-bootstrap-truth");
+      setStatus(normalized === "" ? "needs-server-url" : "fetching-connection-truth");
     },
     status,
   };
