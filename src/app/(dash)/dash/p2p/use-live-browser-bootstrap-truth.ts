@@ -71,8 +71,6 @@ function useCandidateOrigins() {
 
 export function useLiveBrowserBootstrapTruth() {
   const candidateOrigins = useCandidateOrigins();
-  const primaryOrigin = candidateOrigins[0] ?? null;
-
   const truthQuery = useQuery({
     queryKey: ["live-browser-bootstrap-truth", candidateOrigins],
     enabled: candidateOrigins.length > 0,
@@ -84,7 +82,10 @@ export function useLiveBrowserBootstrapTruth() {
           const payload = await liveBootstrapDeps.fetchJson(`${origin}/.well-known/gomtm-bootstrap`);
           const metadata = parsePublicBootstrapMetadata(payload);
           if (metadata.p2p.browser != null) {
-            return metadata.p2p.browser;
+            return {
+              accessUrl: origin,
+              truth: metadata.p2p.browser,
+            };
           }
         } catch (error) {
           lastError = error;
@@ -95,10 +96,15 @@ export function useLiveBrowserBootstrapTruth() {
     },
   });
 
+  const selectedOrigin = truthQuery.data?.accessUrl ?? candidateOrigins[0] ?? null;
+
   return {
-    accessUrl: primaryOrigin,
-    readyServers: candidateOrigins.map((origin, index) => ({ id: `origin-${index + 1}`, accessUrl: origin })),
-    truthQuery,
+    accessUrl: selectedOrigin,
+    readyServers: selectedOrigin == null ? [] : [{ id: "origin-1", accessUrl: selectedOrigin }],
+    truthQuery: {
+      ...truthQuery,
+      data: truthQuery.data?.truth ?? null,
+    },
   };
 }
 
