@@ -275,6 +275,8 @@ export default function P2PPage() {
                       <div>debug.bootstrapInput = {session.bootstrapInput || "<empty>"}</div>
                       <div>debug.activeBootstrapAddr = {session.activeBootstrapAddr || "<empty>"}</div>
                       <div>debug.peerCandidates = {String(session.peerCandidates.length)}</div>
+                      <div>debug.isConnected = {String(session.isConnected)}</div>
+                      <div>debug.canConnect = {String(session.canConnect)}</div>
                     </div>
                   ) : null}
                 </PopoverContent>
