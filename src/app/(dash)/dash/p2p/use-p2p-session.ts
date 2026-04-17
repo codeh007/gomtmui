@@ -28,9 +28,7 @@ import {
   clearStoredBootstrapRuntime,
   loadOrCreateBrowserPrivateKey,
   persistStoredBootstrapServerUrl,
-  persistStoredBootstrapTarget,
   readStoredBootstrapServerUrl,
-  readStoredBootstrapTarget,
   resolveBootstrapTarget,
   shouldAllowPrivateBootstrapMultiaddr,
 } from "./p2p-bootstrap-storage";
@@ -54,7 +52,6 @@ export type P2PStatus =
   | "loading"
   | "needs-server-url"
   | "fetching-bootstrap-truth"
-  | "needs-bootstrap"
   | "joining"
   | "discovering"
   | "peer_candidates_ready"
@@ -93,13 +90,6 @@ export function getP2PStatusMeta(status: P2PStatus) {
     return {
       dotClass: "bg-amber-500",
       label: "等待后端地址",
-      tone: "secondary" as const,
-    };
-  }
-  if (status === "needs-bootstrap") {
-    return {
-      dotClass: "bg-amber-500",
-      label: "等待 bootstrap 地址",
       tone: "secondary" as const,
     };
   }
@@ -150,16 +140,12 @@ type P2PSessionDeps = {
   assertBrowserP2PSupport: typeof assertBrowserP2PSupport;
   createBrowserNode: typeof createBrowserNode;
   logP2PConsole: typeof logP2PConsole;
-  readStoredBootstrapTarget: typeof readStoredBootstrapTarget;
-  persistStoredBootstrapTarget: typeof persistStoredBootstrapTarget;
 };
 
 const defaultP2PSessionDeps: P2PSessionDeps = {
   assertBrowserP2PSupport,
   createBrowserNode,
   logP2PConsole,
-  readStoredBootstrapTarget,
-  persistStoredBootstrapTarget,
 };
 
 let p2pSessionDeps: P2PSessionDeps = defaultP2PSessionDeps;
@@ -348,8 +334,8 @@ function resolveBootstrapConnectTarget(input: string):
   if (rawInput === "") {
     return {
       kind: "error",
-      status: "needs-bootstrap",
-      message: "请输入 gomtm server 公网地址，或输入浏览器可拨的 bootstrap multiaddr。",
+      status: "error",
+      message: "请输入 gomtm server 公网地址。",
     };
   }
 
@@ -361,7 +347,7 @@ function resolveBootstrapConnectTarget(input: string):
   } catch (error) {
     return {
       kind: "error",
-      status: "needs-bootstrap",
+      status: "error",
       message: error instanceof Error ? error.message : String(error),
     };
   }
@@ -380,9 +366,7 @@ function assertBrowserP2PSupport(transport: ReturnType<typeof resolveBootstrapTa
 }
 
 type BootstrapConnectSuccessStateHandlers = {
-  persistStoredBootstrapTarget: typeof persistStoredBootstrapTarget;
   setActiveBootstrapAddr: (value: string) => void;
-  setBootstrapInput: (value: string) => void;
   setStatus: (value: P2PStatus) => void;
   setDebugConnectPhase: (value: string) => void;
   setDebugLastError: (value: string | null) => void;
@@ -447,8 +431,6 @@ async function commitBootstrapConnectSuccess(params: {
   params.handlers.setStatus("discovering");
   await params.syncPeerCandidates(params.node);
   params.handlers.setStatus("peer_candidates_ready");
-  params.handlers.setBootstrapInput(params.bootstrapAddr);
-  params.handlers.persistStoredBootstrapTarget({ bootstrapAddr: params.bootstrapAddr });
   logP2PConsole(
     "info",
     "已接入 P2P 网络",
@@ -533,7 +515,6 @@ function useP2PSessionState() {
   const peerTruthRetryStateRef = useRef<Record<string, PeerTruthRetryState>>({});
   const [status, setStatus] = useState<P2PStatus>("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [bootstrapInput, setBootstrapInput] = useState("");
   const [activeBootstrapAddr, setActiveBootstrapAddr] = useState("");
   const [peerCandidates, setPeerCandidates] = useState<PeerCandidate[]>([]);
   const [resolvedPeerTruth, setResolvedPeerTruth] = useState<ResolvedPeerTruthMap>({});
@@ -707,9 +688,7 @@ function useP2PSessionState() {
           bootstrapAddr: target.bootstrapAddr,
           discovery,
           handlers: {
-            persistStoredBootstrapTarget: p2pSessionDeps.persistStoredBootstrapTarget,
             setActiveBootstrapAddr,
-            setBootstrapInput,
             setStatus,
             setDebugConnectPhase,
             setDebugLastError,
@@ -753,8 +732,7 @@ function useP2PSessionState() {
 
     async function init() {
       const storedServerUrl = readStoredBootstrapServerUrl().trim();
-      const storedTarget = p2pSessionDeps.readStoredBootstrapTarget();
-      const storedBootstrapAddr = storedTarget.bootstrapAddr?.trim() ?? "";
+      const storedBootstrapAddr = "";
       if (cancelled) {
         return;
       }
@@ -778,12 +756,11 @@ function useP2PSessionState() {
         return;
       }
 
-      const initialInput = (storedBootstrapAddr || liveBootstrapAddr).trim();
-      setBootstrapInput(initialInput);
+      const initialInput = liveBootstrapAddr.trim();
 
       if (initialInput === "") {
-        setStatus("needs-bootstrap");
-        setErrorMessage("当前后端未返回可用于浏览器的 bootstrap 地址。请检查 gomtm server 配置或使用高级覆盖输入 multiaddr。");
+        setStatus("error");
+        setErrorMessage("当前后端未返回可用于浏览器的连接信息，请检查 gomtm server 状态。");
         return;
       }
 
@@ -928,10 +905,12 @@ function useP2PSessionState() {
 
   return {
     activeBootstrapAddr,
-    bootstrapInput,
     canConnect: status !== "loading" && status !== "joining" && status !== "discovering" && serverUrl.trim() !== "",
     connect: async () => {
-      await connectToBootstrap({ input: bootstrapInput.trim() });
+      if (liveBootstrapAddr.trim() === "") {
+        return false;
+      }
+      return connectToBootstrap({ input: liveBootstrapAddr.trim() });
     },
     debugConnectPhase,
     debugLastError,
@@ -945,7 +924,6 @@ function useP2PSessionState() {
     resolvedPeerTruth,
     serverUrl,
     serverUrlInput,
-    setBootstrapInput,
     setServerUrlInput,
     saveServerUrl: async () => {
       const normalized = serverUrlInput.trim();
@@ -957,7 +935,6 @@ function useP2PSessionState() {
       updateResolvedPeerTruth({});
       setErrorMessage(null);
       setServerUrl(normalized);
-      setBootstrapInput("");
       setStatus(normalized === "" ? "needs-server-url" : "fetching-bootstrap-truth");
     },
     status,

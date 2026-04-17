@@ -2,6 +2,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  clearStoredBootstrapRuntime,
   normalizeBrowserBootstrapAddr,
   persistStoredBootstrapServerUrl,
   readStoredBootstrapServerUrl,
@@ -66,5 +67,18 @@ describe("p2p-bootstrap-storage", () => {
     vi.stubEnv("NEXT_PUBLIC_GOMTM_PUBLIC_URL", "https://gomtm2.yuepa8.com");
     persistStoredBootstrapServerUrl("https://alt.example.com");
     expect(readStoredBootstrapServerUrl()).toBe("https://alt.example.com");
+  });
+
+  it("clearStoredBootstrapRuntime only removes legacy runtime bootstrap target", () => {
+    window.localStorage.setItem(
+      "gomtm:p2p:bootstrap-target",
+      JSON.stringify({ bootstrapAddr: "/dns4/legacy.example.com/tcp/443/ws/p2p/12D3KooWLegacy" }),
+    );
+    persistStoredBootstrapServerUrl("https://gomtm2.yuepa8.com");
+
+    clearStoredBootstrapRuntime();
+
+    expect(window.localStorage.getItem("gomtm:p2p:bootstrap-target")).toBeNull();
+    expect(readStoredBootstrapServerUrl()).toBe("https://gomtm2.yuepa8.com");
   });
 });

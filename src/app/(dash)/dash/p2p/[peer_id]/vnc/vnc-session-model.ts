@@ -204,13 +204,6 @@ export function buildP2PVncSessionModel(input: BuildP2PVncSessionModelInput): P2
     };
   }
 
-  if (input.networkStatus === "needs-bootstrap") {
-    return {
-      phase: "connecting",
-      availability: "preparing",
-    };
-  }
-
   return {
     phase: "error",
     availability: "unavailable",

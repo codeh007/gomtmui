@@ -32,7 +32,6 @@ import {
   supportsVncView,
 } from "@/lib/p2p/discovery-contracts";
 import {
-  getBootstrapPathLabel,
   getP2PStatusMeta,
   getPreferredPeerBootstrapPathLabel,
   type P2PStatus,
@@ -73,14 +72,7 @@ function getNetworkStatusDisplay(status: P2PStatus) {
     };
   }
 
-  if (status === "needs-bootstrap") {
-    return {
-      icon: WifiOff,
-      iconClassName: "text-amber-500",
-    };
-  }
-
-  if (status === "joining" || status === "loading") {
+  if (status === "joining" || status === "loading" || status === "fetching-bootstrap-truth") {
     return {
       icon: LoaderCircle,
       iconClassName: "animate-spin text-amber-500",
@@ -201,10 +193,6 @@ export default function P2PPage() {
                       <div className="text-sm font-medium">网络</div>
                       <div className="text-xs text-muted-foreground">{statusMeta.label}</div>
                     </div>
-                    <div className="inline-flex items-center gap-2 rounded-full border bg-muted/20 px-2.5 py-1 text-[11px] text-muted-foreground">
-                      <NetworkStatusIcon className={`size-3.5 ${networkStatusDisplay.iconClassName}`} />
-                      <span>{getBootstrapPathLabel(session.activeBootstrapAddr)}</span>
-                    </div>
                   </div>
 
                   <div className="space-y-1">
@@ -213,15 +201,6 @@ export default function P2PPage() {
                     </div>
                     <div className="break-all rounded-md border bg-muted/20 px-3 py-2 font-mono text-[11px] text-muted-foreground">
                       {session.serverUrl.trim() === "" ? "未配置" : session.serverUrl}
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
-                      当前 bootstrap
-                    </div>
-                    <div className="break-all rounded-md border bg-muted/20 px-3 py-2 font-mono text-[11px] text-muted-foreground">
-                      {session.activeBootstrapAddr.trim() === "" ? "未连接" : session.activeBootstrapAddr}
                     </div>
                   </div>
 
@@ -245,26 +224,6 @@ export default function P2PPage() {
                     </div>
                   </form>
 
-                  <form
-                    className="space-y-2"
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      void session.connect();
-                    }}
-                  >
-                    <Input
-                      value={session.bootstrapInput}
-                      onChange={(event) => session.setBootstrapInput(event.target.value)}
-                      placeholder="高级：手工覆盖浏览器可拨 multiaddr（WebTransport/WSS）"
-                      spellCheck={false}
-                    />
-                    <div className="flex justify-end">
-                      <Button type="submit" size="sm" disabled={!session.canConnect} variant="outline" className="min-w-24">
-                        {session.isConnected ? "重新连接" : "高级连接"}
-                      </Button>
-                    </div>
-                  </form>
-
                   {session.errorMessage ? <div className="text-xs text-rose-500">{session.errorMessage}</div> : null}
 
                   {showDebugPanel ? (
@@ -272,7 +231,6 @@ export default function P2PPage() {
                       <div>debug.status = {session.status}</div>
                       <div>debug.serverUrl = {session.serverUrl || "<empty>"}</div>
                       <div>debug.serverUrlInput = {session.serverUrlInput || "<empty>"}</div>
-                      <div>debug.bootstrapInput = {session.bootstrapInput || "<empty>"}</div>
                       <div>debug.activeBootstrapAddr = {session.activeBootstrapAddr || "<empty>"}</div>
                       <div>debug.peerCandidates = {String(session.peerCandidates.length)}</div>
                       <div>debug.isConnected = {String(session.isConnected)}</div>
@@ -288,7 +246,13 @@ export default function P2PPage() {
           <CardContent className="pt-0">
             {session.peerCandidates.length === 0 ? (
               <div className="rounded-xl border border-dashed bg-muted/10 px-4 py-8 text-sm text-muted-foreground">
-                {session.isConnected ? "已接入 relay，等待节点。" : "先连接 relay。"}
+                {session.status === "needs-server-url"
+                  ? "请先输入服务器地址。"
+                  : session.status === "fetching-bootstrap-truth" || session.status === "joining"
+                    ? "正在连接服务器并加入网络。"
+                    : session.isConnected
+                      ? "已连接服务器，等待节点。"
+                      : "请先连接服务器。"}
               </div>
             ) : (
               <ItemGroup>
