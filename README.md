@@ -26,7 +26,7 @@ bun run build
 bun run build:worker
 ```
 
-`cp .env.example .env.local` 是本地运行的前置步骤；示例文件只保留变量名，不包含任何真实凭据。复制后必须填写 `.env.local` 中当前构建实际需要的变量，至少包括 `NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_ANON_KEY`，以及至少一种服务端基地址来源：`NEXT_PUBLIC_SITE_URL`、`NEXT_PUBLIC_BASE_URL`、`BASE_URL`，或 `CODESPACE_NAME` + `PORT` 组合。构建期不会在代码中伪造这些值，缺少必需 env 时 `bun run build` 与 `bun run build:worker` 会直接失败。
+`cp .env.example .env.local` 是本地运行的前置步骤；示例文件只保留变量名，不包含任何真实凭据。复制后必须填写 `.env.local` 中当前构建实际需要的变量，至少包括 `NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_ANON_KEY`，以及至少一种服务端基地址来源：`NEXT_PUBLIC_SITE_URL`、`NEXT_PUBLIC_BASE_URL`、`BASE_URL`，或 `CODESPACE_NAME` + `PORT` 组合。若要使用公开 `/wiki` 页面，还需要提供 `GOMTM_SERVER_URL`（或等价的 `NEXT_PUBLIC_GOMTM_SERVER_URL`）指向可访问的 gomtm server。构建期不会在代码中伪造这些值，缺少必需 env 时 `bun run build` 与 `bun run build:worker` 会直接失败。
 
 公开仓当前采用 `bun` 作为包管理器，并使用 `bun run tsgo --noEmit` 作为显式类型检查入口。`next build` 已关闭重复的内建类型校验，避免在大体量依赖图上重复做第二次类型检查；因此标准验收顺序必须先跑 `bun run typecheck`，再跑 `bun run build`。
 
@@ -64,6 +64,7 @@ wrangler secret put SUPABASE_SERVICE_ROLE_KEY
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `NEXT_PUBLIC_SITE_URL`
 - `NEXT_PUBLIC_BASE_URL`
+- `NEXT_PUBLIC_GOMTM_SERVER_URL`
 - `NEXT_PUBLIC_GITHUB_CLIENT_ID`
 - `NEXT_PUBLIC_GOOGLE_CLIENT_ID`
 - `NEXT_PUBLIC_QWEN_CLIENT_ID`
@@ -72,6 +73,7 @@ wrangler secret put SUPABASE_SERVICE_ROLE_KEY
 ## Optional Local Helper Variables
 
 - `BASE_URL`
+- `GOMTM_SERVER_URL`
 - `PORT`
 
 `BASE_URL` 用于显式指定服务端基地址；若未提供，则只有在同时提供 `CODESPACE_NAME` 与 `PORT` 时才会自动拼出 Codespaces URL，否则运行时会直接报错。`.env.example` 仅包含当前仓库实际读取且需要由开发者显式提供的环境变量；像 `CODESPACE_NAME` 这类平台注入变量不放入示例文件，但仍由运行时代码处理。

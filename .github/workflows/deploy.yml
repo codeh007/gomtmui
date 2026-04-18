@@ -30,6 +30,7 @@ jobs:
       NEXT_PUBLIC_SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL }}
       NEXT_PUBLIC_BASE_URL: ${{ vars.NEXT_PUBLIC_BASE_URL }}
       BASE_URL: ${{ vars.BASE_URL }}
+      GOMTM_SERVER_URL: ${{ vars.GOMTM_SERVER_URL }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -90,6 +91,7 @@ jobs:
           --var NEXT_PUBLIC_SITE_URL:${NEXT_PUBLIC_SITE_URL}
           --var NEXT_PUBLIC_BASE_URL:${NEXT_PUBLIC_BASE_URL}
           --var BASE_URL:${BASE_URL}
+          --var GOMTM_SERVER_URL:${GOMTM_SERVER_URL}
 
       - name: Remove runtime secrets file
         if: always()
@@ -105,6 +107,6 @@ jobs:
             echo '- Branch: `${{ github.ref_name }}`'
             echo '- Domain: `https://gomtmui-dev.yuepa8.com`'
             echo '- Runtime secrets delivery: `wrangler deploy --secrets-file` from GitHub Secrets (`SUPABASE_SERVICE_ROLE_KEY` only)'
-            echo '- Public runtime config source: `wrangler deploy --var` from GitHub Variables (site/base URLs and public Supabase config only)'
+            echo '- Public runtime config source: `wrangler deploy --var` from GitHub Variables (site/base URLs, gomtm server URL, and public Supabase config only)'
             echo '- Caches: `~/.bun/install/cache`, `.next/cache`, `.open-next/cache`'
           } >> "$GITHUB_STEP_SUMMARY"
