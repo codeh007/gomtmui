@@ -31,4 +31,12 @@ describe("fetchWikiPage", () => {
       { cache: "no-store" },
     );
   });
+
+  it("adapts bare wiki slugs to backend concept paths", async () => {
+    await fetchWikiPage(["9router-的-cloudflare-worker-与-vercel-适配边界结论"]);
+    expect(global.fetch).toHaveBeenCalledWith(
+      "https://gomtm2.yuepa8.com/api/wiki/page/concepts/9router-%E7%9A%84-cloudflare-worker-%E4%B8%8E-vercel-%E9%80%82%E9%85%8D%E8%BE%B9%E7%95%8C%E7%BB%93%E8%AE%BA",
+      { cache: "no-store" },
+    );
+  });
 });

@@ -14,6 +14,8 @@ export type WikiPagePayload = {
   kind: "page" | "index";
 };
 
+import { resolveWikiApiSlug } from "./wiki-links";
+
 function getGomtmServerUrl() {
   const configuredUrl = process.env.GOMTM_SERVER_URL?.trim() || process.env.NEXT_PUBLIC_GOMTM_SERVER_URL?.trim();
   if (!configuredUrl) {
@@ -24,17 +26,7 @@ function getGomtmServerUrl() {
 
 export async function fetchWikiPage(slug: string[]) {
   const baseUrl = getGomtmServerUrl();
-  const cleanSegments = slug
-    .map((segment) => segment.trim())
-    .filter(Boolean)
-    .map((segment) => {
-      try {
-        return decodeURIComponent(segment);
-      } catch {
-        return segment;
-      }
-    })
-    .map(encodeURIComponent);
+  const cleanSegments = resolveWikiApiSlug(slug).map(encodeURIComponent);
   const url = cleanSegments.length === 0 ? `${baseUrl}/api/wiki/page` : `${baseUrl}/api/wiki/page/${cleanSegments.join("/")}`;
   return fetch(url, { cache: "no-store" });
 }

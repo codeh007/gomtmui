@@ -1,6 +1,7 @@
-import path from "node:path";
+import * as path from "node:path";
 
 const WIKI_ROOT = "/wiki";
+const WIKI_SECTION_PREFIXES = ["concepts", "queries", "comparisons", "reports", "entities"] as const;
 
 function splitHash(input: string) {
   const hashIndex = input.indexOf("#");
@@ -14,7 +15,7 @@ function splitHash(input: string) {
 }
 
 function normalizeWikiTarget(target: string) {
-  const normalized = target.trim().replaceAll("\\", "/");
+  const normalized = target.trim().replace(/\\/g, "/");
   const { pathname, hash } = splitHash(normalized);
   const withoutPrefix = pathname.replace(/^\/+/, "").replace(/\.md$/i, "");
   const clean = path.posix.normalize(`/${withoutPrefix}`).replace(/^\/+/, "");
@@ -27,6 +28,15 @@ function normalizeWikiTarget(target: string) {
 
 function isExternalHref(href: string) {
   return /^(?:[a-z][a-z0-9+.-]*:)?\/\//i.test(href) || /^[a-z][a-z0-9+.-]*:/i.test(href);
+}
+
+function hasWikiSectionPrefix(target: string) {
+  const normalized = normalizeWikiTarget(target).pathname;
+  if (normalized === "") {
+    return true;
+  }
+  const firstSegment = normalized.split("/")[0];
+  return WIKI_SECTION_PREFIXES.includes(firstSegment as (typeof WIKI_SECTION_PREFIXES)[number]);
 }
 
 export function rewriteWikiLinks(markdown: string) {
@@ -55,4 +65,27 @@ export function resolveWikiHref(currentPath: string, href: string) {
   const currentRelative = currentPath === WIKI_ROOT ? "" : currentPath.replace(`${WIKI_ROOT}/`, "");
   const baseDir = currentRelative === "" ? "/" : `/${path.posix.dirname(currentRelative)}`;
   return normalizeWikiTarget(path.posix.join(baseDir, trimmed)).href;
+}
+
+export function resolveWikiApiSlug(slug: string[]) {
+  const cleaned = slug
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+    .map((segment) => {
+      try {
+        return decodeURIComponent(segment);
+      } catch {
+        return segment;
+      }
+    });
+
+  if (cleaned.length === 0) {
+    return [];
+  }
+
+  if (hasWikiSectionPrefix(cleaned.join("/"))) {
+    return cleaned;
+  }
+
+  return ["concepts", ...cleaned];
 }
