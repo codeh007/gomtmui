@@ -65,10 +65,19 @@ describe("p2p-connection-runtime", () => {
     expect(readStoredServerUrl()).toBe("");
   });
 
-  it("prefers stored server url over default env", () => {
+  it("reads default server url from env when nothing is stored", async () => {
+    vi.resetModules();
     vi.stubEnv("NEXT_PUBLIC_GOMTM_PUBLIC_URL", "https://gomtm2.yuepa8.com");
-    persistStoredServerUrl("https://alt.example.com");
-    expect(readStoredServerUrl()).toBe("https://alt.example.com");
+    const runtime = await import("./p2p-connection-runtime");
+    expect(runtime.readStoredServerUrl()).toBe("https://gomtm2.yuepa8.com");
+  });
+
+  it("prefers stored server url over default env", async () => {
+    vi.resetModules();
+    vi.stubEnv("NEXT_PUBLIC_GOMTM_PUBLIC_URL", "https://gomtm2.yuepa8.com");
+    const runtime = await import("./p2p-connection-runtime");
+    runtime.persistStoredServerUrl("https://alt.example.com");
+    expect(runtime.readStoredServerUrl()).toBe("https://alt.example.com");
   });
 
   it("clearStoredConnectionRuntime only removes legacy runtime connection target", () => {

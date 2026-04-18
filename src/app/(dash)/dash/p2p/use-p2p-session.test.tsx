@@ -315,7 +315,171 @@
        expect(screen.getByTestId("active-connection").textContent).toBe(connectionAddr);
      });
    
-     it("stays in joining when connection success never commits discovery state", async () => {
+     it("keeps joining with resolving-node when browser node creation never resolves", async () => {
+      let resolveCreate: ((value: {
+        status: "started";
+        start: ReturnType<typeof vi.fn>;
+        stop: ReturnType<typeof vi.fn>;
+        addEventListener: ReturnType<typeof vi.fn>;
+        removeEventListener: ReturnType<typeof vi.fn>;
+        services: {
+          rendezvousDiscovery: {
+            awaitReady: ReturnType<typeof vi.fn>;
+            listPeerCandidates: ReturnType<typeof vi.fn>;
+          };
+        };
+      }) => void) | null = null;
+      const createBrowserNode = vi.fn(
+        () =>
+          new Promise((resolve) => {
+            resolveCreate = resolve;
+          }),
+      );
+
+      const serverUrl = "https://gomtm2.yuepa8.com";
+      const connectionAddr = "/dns4/gomtm2.yuepa8.com/tcp/443/tls/ws/p2p/12D3KooWBootstrap";
+
+      vi.mocked(useLiveBrowserConnectionTruth).mockImplementation((inputServerUrl: string) => ({
+        accessUrl: inputServerUrl === serverUrl ? serverUrl : null,
+        readyServers: inputServerUrl === serverUrl ? [{ id: "server-1", accessUrl: serverUrl }] : [],
+        truthQuery:
+          inputServerUrl === serverUrl
+            ? {
+                data: {
+                  generation: "gen-1",
+                  primaryTransport: "ws",
+                  candidates: [
+                    {
+                      transport: "ws",
+                      addr: connectionAddr,
+                      priority: 50,
+                    },
+                  ],
+                },
+                status: "success",
+                error: null,
+              }
+            : {
+                data: null,
+                status: "pending",
+                error: null,
+              },
+      }) as ReturnType<typeof useLiveBrowserConnectionTruth>);
+
+      __setP2PSessionDepsForTest({
+        createBrowserNode,
+        assertBrowserP2PSupport: () => {},
+      });
+
+      localStorage.setItem("gomtm:p2p:server-url", serverUrl);
+
+      render(
+        <P2PSessionProvider>
+          <SessionProbe />
+        </P2PSessionProvider>,
+      );
+
+      await waitFor(() => {
+        expect(createBrowserNode).toHaveBeenCalledWith({
+          connectionAddr,
+          transport: "ws",
+        });
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("status").textContent).toBe("joining");
+      });
+
+      expect(screen.getByTestId("active-connection").textContent).toBe("");
+      expect(screen.getByTestId("candidate-count").textContent).toBe("0");
+      expect(screen.getByTestId("is-connected").textContent).toBe("false");
+      expect(screen.getByTestId("can-connect").textContent).toBe("false");
+      expect(resolveCreate).not.toBeNull();
+    });
+
+    it("surfaces awaiting-rendezvous-ready when discovery readiness never resolves", async () => {
+      const start = vi.fn(async () => {});
+      const stop = vi.fn(async () => {});
+      const awaitReady = vi.fn(() => new Promise<void>(() => {}));
+      const listPeerCandidates = vi.fn(async () => []);
+      const addEventListener = vi.fn();
+      const removeEventListener = vi.fn();
+      const createBrowserNode = vi.fn(async () => ({
+        status: "started",
+        start,
+        stop,
+        addEventListener,
+        removeEventListener,
+        services: {
+          rendezvousDiscovery: {
+            awaitReady,
+            listPeerCandidates,
+          },
+        },
+      }));
+
+      const serverUrl = "https://gomtm2.yuepa8.com";
+      const connectionAddr = "/dns4/gomtm2.yuepa8.com/tcp/443/tls/ws/p2p/12D3KooWBootstrap";
+
+      vi.mocked(useLiveBrowserConnectionTruth).mockImplementation((inputServerUrl: string) => ({
+        accessUrl: inputServerUrl === serverUrl ? serverUrl : null,
+        readyServers: inputServerUrl === serverUrl ? [{ id: "server-1", accessUrl: serverUrl }] : [],
+        truthQuery:
+          inputServerUrl === serverUrl
+            ? {
+                data: {
+                  generation: "gen-1",
+                  primaryTransport: "ws",
+                  candidates: [
+                    {
+                      transport: "ws",
+                      addr: connectionAddr,
+                      priority: 50,
+                    },
+                  ],
+                },
+                status: "success",
+                error: null,
+              }
+            : {
+                data: null,
+                status: "pending",
+                error: null,
+              },
+      }) as ReturnType<typeof useLiveBrowserConnectionTruth>);
+
+      __setP2PSessionDepsForTest({
+        createBrowserNode,
+        assertBrowserP2PSupport: () => {},
+      });
+
+      localStorage.setItem("gomtm:p2p:server-url", serverUrl);
+
+      render(
+        <P2PSessionProvider>
+          <SessionProbe />
+        </P2PSessionProvider>,
+      );
+
+      await waitFor(() => {
+        expect(createBrowserNode).toHaveBeenCalledWith({
+          connectionAddr,
+          transport: "ws",
+        });
+      });
+
+      await waitFor(() => {
+        expect(awaitReady).toHaveBeenCalledTimes(1);
+      });
+
+      expect(screen.getByTestId("status").textContent).toBe("joining");
+      expect(screen.getByTestId("active-connection").textContent).toBe("");
+      expect(screen.getByTestId("candidate-count").textContent).toBe("0");
+      expect(screen.getByTestId("is-connected").textContent).toBe("false");
+      expect(screen.getByTestId("can-connect").textContent).toBe("false");
+    });
+
+    it("stays in joining when connection success never commits discovery state", async () => {
        const start = vi.fn(async () => {});
        const stop = vi.fn(async () => {});
        const awaitReady = vi.fn(async () => {});
