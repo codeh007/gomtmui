@@ -24,7 +24,17 @@ function getGomtmServerUrl() {
 
 export async function fetchWikiPage(slug: string[]) {
   const baseUrl = getGomtmServerUrl();
-  const cleanSegments = slug.map((segment) => segment.trim()).filter(Boolean).map(encodeURIComponent);
+  const cleanSegments = slug
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+    .map((segment) => {
+      try {
+        return decodeURIComponent(segment);
+      } catch {
+        return segment;
+      }
+    })
+    .map(encodeURIComponent);
   const url = cleanSegments.length === 0 ? `${baseUrl}/api/wiki/page` : `${baseUrl}/api/wiki/page/${cleanSegments.join("/")}`;
   return fetch(url, { cache: "no-store" });
 }
