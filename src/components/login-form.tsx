@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "mtxui
 import { Input } from "mtxuilib/ui/input";
 import { Label } from "mtxuilib/ui/label";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 function getSupabaseAuthCookieName() {
@@ -46,6 +47,7 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const supabase = useSupabaseBrowser();
+  const router = useRouter();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,7 +65,11 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
       });
       if (error) throw error;
       await waitForSupabaseAuthCookie();
-      window.location.assign("/dash");
+      // Use client-side navigation to avoid full reload and keep auth state in sync
+      // with the current app instance and any in-memory listeners.
+      // This prevents potential race conditions where a full page reload loses
+      // in-memory auth state before the header components can update.
+      router.push("/dash");
       return;
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");
