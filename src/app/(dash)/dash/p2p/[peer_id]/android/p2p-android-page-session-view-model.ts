@@ -5,7 +5,6 @@ import type { NativeRemoteV2ViewState } from "./use-p2p-android-page-session";
 type CapabilityTruthLike = {
   remoteControl?: {
     capabilities?: {
-      nativeRemoteV2?: CapabilityState;
       nativeRemoteV2WebRTC?: CapabilityState;
     };
     nativeRemoteV2WebRTCSession?: {
