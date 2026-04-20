@@ -1,23 +1,20 @@
 "use client";
 
 import { useMemo } from "react";
-import { useP2PPeerPageSession } from "../use-p2p-peer-page-session";
-import { deriveNativeRemoteV2Capability } from "./p2p-android-page-session-view-model";
+import { deriveNativeRemoteV2Capability, resolveTargetSessionError } from "./p2p-android-page-session-view-model";
 import { useAndroidDirectLane } from "./use-android-direct-lane";
+import { useP2PPeerPageSession } from "../use-p2p-peer-page-session";
 
 export function useP2PAndroidPageSession(peerId: string) {
   const peerSession = useP2PPeerPageSession(peerId);
   const targetAddress = peerSession.targetAddress;
   const capabilityTruth = peerSession.capabilityTruth;
-  const targetSessionError = useMemo(() => {
-    if (!peerSession.isConnected) {
-      return null;
-    }
-    if (targetAddress == null) {
-      return "目标节点当前没有 browser-dialable multiaddr。";
-    }
-    return peerSession.peerTruthErrorMessage ?? peerSession.errorMessage ?? null;
-  }, [peerSession.errorMessage, peerSession.isConnected, peerSession.peerTruthErrorMessage, targetAddress]);
+  const targetSessionError = resolveTargetSessionError({
+    errorMessage: peerSession.errorMessage,
+    isConnected: peerSession.isConnected,
+    peerTruthErrorMessage: peerSession.peerTruthErrorMessage,
+    targetAddress,
+  });
   const directLane = useAndroidDirectLane({
     address: targetAddress,
     node: peerSession.getCurrentNode,

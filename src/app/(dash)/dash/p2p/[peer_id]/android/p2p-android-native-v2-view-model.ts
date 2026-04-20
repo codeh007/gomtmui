@@ -42,21 +42,7 @@ export function buildNativeV2RemoteStatus(params: {
   return { detail: "准备中", label: "Connecting", showBusyIndicator: false };
 }
 
-export function buildNativeV2SessionInfoItems(params: {
-  peerId: string;
-  streamStatus: StreamStatus;
-  videoHeight: number;
-  videoWidth: number;
-}) {
-  return [
-    { label: "Peer ID", value: params.peerId },
-    { label: "模式", value: "原生" },
-    { label: "状态", value: params.streamStatus },
-    { label: "画面尺寸", value: `${params.videoWidth} x ${params.videoHeight}` },
-  ];
-}
-
-export function buildNativeV2UnavailableHint(detail: string) {
+export function createNativeV2UnavailableHint(detail: string) {
   return {
     detail,
     op: "rotate" as const,

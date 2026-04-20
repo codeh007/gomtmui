@@ -175,19 +175,6 @@ export function P2PPeerPageView({ peerId }: { peerId: string }) {
                       <PeerStat label="最近发现" value={session.targetPeer.lastDiscoveredAt || "未知"} />
                     </div>
 
-                    <div className="space-y-2">
-                      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">协议</div>
-                      <div className="flex flex-wrap gap-2">
-                        {session.canOpenAndroid ? (
-                          <Badge variant="secondary" className="uppercase">
-                            Android
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline">未声明高级协议</Badge>
-                        )}
-                      </div>
-                    </div>
-
                     {remoteControl ? (
                       <div className="space-y-2">
                         <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Android</div>

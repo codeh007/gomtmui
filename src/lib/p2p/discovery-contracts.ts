@@ -22,7 +22,6 @@ export type RemoteControlState = {
 export type PeerCapabilityTruth = {
   connectionPath?: ConnectionPathObservation;
   remoteControl?: RemoteControlState;
-  platform?: string;
 };
 
 export type DeviceStatus = PeerCapabilityTruth & {
@@ -97,7 +96,6 @@ export function parseDeviceStatus(value: unknown): DeviceStatus | undefined {
 
   return {
     connectionPath: parseConnectionPathObservation(record.connection_path),
-    platform: asString(record.platform).trim() || undefined,
     remoteControl: parseRemoteControlState(record.remote_control),
     runtimeStatus: asString(record.runtime_status).trim() || undefined,
     lastError: asString(record.last_error).trim() || undefined,
@@ -112,7 +110,6 @@ export function toPeerCapabilityTruth(status: DeviceStatus | null | undefined): 
   const truth: PeerCapabilityTruth = {
     connectionPath: status.connectionPath,
     remoteControl: status.remoteControl,
-    platform: status.platform,
   };
 
   if (truth.connectionPath == null && truth.remoteControl == null) {

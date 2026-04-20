@@ -1,21 +1,15 @@
 "use client";
 
 import { type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
-import {
-  ensureNativeRemoteV2Stream,
-  type NativeRemoteV2StreamDescriptor,
-  openNativeRemoteV2VideoStream,
-} from "@/lib/p2p/worker-control";
 import { AndroidNativeV2StatusOverlay } from "./android-native-v2-status-overlay";
 import { getAndroidNativeRemoteV2AvailabilityMeta } from "./android-session-model";
-import { createNativeAndroidCanvasRenderer } from "./native-android-video-renderer";
-import { getBrowserNodeInstanceKey, isScreenCapturePermissionError, type NativeCanvasPoint } from "./p2p-android-native-v2-webrtc-panel-utils";
+import { getBrowserNodeInstanceKey, type NativeCanvasPoint } from "./p2p-android-native-v2-webrtc-panel-utils";
 import { createNativeV2ActionController, createNativeV2PointerHandlers } from "./p2p-android-native-v2-panel-actions";
+import { createNativeV2LifecycleController } from "./p2p-android-native-v2-lifecycle";
 import {
   buildNativeV2DirectExperiment,
   buildNativeV2RemoteStatus,
-  buildNativeV2SessionInfoItems,
-  buildNativeV2UnavailableHint,
+  createNativeV2UnavailableHint,
 } from "./p2p-android-native-v2-view-model";
 import type { NativeViewportSessionLike, StreamStatus } from "./p2p-android-native-v2-webrtc-panel-shared";
 import { AndroidDeviceNavigationBar } from "./android-device-navigation-bar";
@@ -33,7 +27,7 @@ export function P2PAndroidNativeV2WebRtcPanel({ session }: { session: NativeView
   const cleanupRef = useRef<null | (() => Promise<void>)>(null);
   const pendingBootstrapRef = useRef<null | {
     key: string;
-    promise: Promise<NativeRemoteV2StreamDescriptor>;
+    promise: Promise<import("@/lib/p2p/worker-control").NativeRemoteV2StreamDescriptor>;
   }>(null);
   const effectiveCapability = capabilityOverride ?? session.nativeRemoteV2.capability;
   const capabilityState = effectiveCapability.state?.trim().toLowerCase() ?? "";
@@ -46,14 +40,14 @@ export function P2PAndroidNativeV2WebRtcPanel({ session }: { session: NativeView
 
   const directExperiment = buildNativeV2DirectExperiment(session);
 
-  const sessionInfoItems = buildNativeV2SessionInfoItems({
-    peerId: session.peerId,
-    streamStatus,
-    videoHeight: videoMeta.height,
-    videoWidth: videoMeta.width,
-  });
+  const sessionInfoItems = [
+    { label: "Peer ID", value: session.peerId },
+    { label: "模式", value: "原生" },
+    { label: "状态", value: streamStatus },
+    { label: "画面尺寸", value: `${videoMeta.width} x ${videoMeta.height}` },
+  ];
 
-  const unavailableHint = buildNativeV2UnavailableHint(capabilityMeta.detail);
+  const unavailableHint = createNativeV2UnavailableHint(capabilityMeta.detail);
 
   const remoteStatus = buildNativeV2RemoteStatus({
     capabilityDetail: capabilityMeta.detail,
@@ -82,156 +76,19 @@ export function P2PAndroidNativeV2WebRtcPanel({ session }: { session: NativeView
     session,
   });
 
-  async function closeActiveStream() {
-    const cleanup = cleanupRef.current;
-    cleanupRef.current = null;
-    await cleanup?.().catch(() => undefined);
-  }
-
-  async function ensureDescriptorSingleFlight(params: {
-    address: string;
-    forceRefresh?: boolean;
-    node: NonNullable<ReturnType<NativeViewportSession["getCurrentNode"]>>;
-    nodeKey: string;
-    peerId: string;
-  }) {
-    const key = `${params.peerId}::${params.address}::${params.nodeKey}`;
-    if (params.forceRefresh) {
-      pendingBootstrapRef.current = null;
-    }
-
-    const existing = pendingBootstrapRef.current;
-    if (existing != null && existing.key === key) {
-      return await existing.promise;
-    }
-
-    const promise = (async () => {
-      const descriptor = await ensureNativeRemoteV2Stream({
-        address: params.address,
-        node: params.node,
-        peerId: params.peerId,
-      });
-      if (descriptor == null) {
-        throw new Error("native remote descriptor missing");
-      }
-      return descriptor;
-    })();
-    pendingBootstrapRef.current = { key, promise };
-
-    try {
-      return await promise;
-    } finally {
-      if (pendingBootstrapRef.current?.promise === promise) {
-        pendingBootstrapRef.current = null;
-      }
-    }
-  }
-
-  async function startNativeStream(options?: { forceRetry?: boolean }) {
-    const generation = generationRef.current + 1;
-    generationRef.current = generation;
-    await closeActiveStream();
-    setCapabilityOverride(null);
-
-    if (!options?.forceRetry && (capabilityState === "permission_required" || capabilityState === "unavailable")) {
-      setStreamStatus("idle");
-      return;
-    }
-
-    const node = currentNode;
-    const address = session.targetAddress;
-    if (node == null || address == null) {
-      setStreamStatus("error");
-      return;
-    }
-
-    setStreamStatus("connecting");
-
-    try {
-      const descriptor = await ensureDescriptorSingleFlight({
-        address,
-        forceRefresh: options?.forceRetry === true,
-        node,
-        nodeKey: currentNodeKey,
-        peerId: session.peerId,
-      });
-      if (generationRef.current !== generation) {
-        return;
-      }
-
-      const videoStream = await openNativeRemoteV2VideoStream({
-        address,
-        descriptor,
-        node,
-        peerId: session.peerId,
-      });
-      if (generationRef.current !== generation) {
-        await videoStream.close();
-        return;
-      }
-
-      const canvas = canvasRef.current;
-      if (canvas == null) {
-        await videoStream.close();
-        throw new Error("canvas not mounted");
-      }
-
-      const width = descriptor.channel?.width ?? 1080;
-      const height = descriptor.channel?.height ?? 1920;
-      canvas.width = width;
-      canvas.height = height;
-      setVideoMeta({ height, width });
-
-      const renderer = createNativeAndroidCanvasRenderer({
-        canvas,
-        metadata: {
-          codec: descriptor.channel?.codec,
-          height,
-          rotation: descriptor.channel?.rotation,
-          width,
-        },
-        onError: (error) => {
-          if (generationRef.current !== generation) {
-            return;
-          }
-          console.error("native v2 render error", error);
-          setStreamStatus("error");
-        },
-      });
-
-      cleanupRef.current = async () => {
-        await renderer.close();
-        await videoStream.close();
-      };
-
-      setStreamStatus("connected");
-
-      for await (const packet of videoStream.packets) {
-        if (generationRef.current !== generation) {
-          break;
-        }
-        await renderer.renderPacket(packet);
-      }
-
-      if (generationRef.current === generation) {
-        setStreamStatus("error");
-      }
-    } catch (error) {
-      if (generationRef.current !== generation) {
-        return;
-      }
-      if (isScreenCapturePermissionError(error)) {
-        setCapabilityOverride({
-          reason: "screen_capture_not_granted",
-          state: "permission_required",
-        });
-        setStreamStatus("idle");
-        return;
-      }
-      console.error("native v2 connect error", error);
-      setStreamStatus("error");
-    }
-  }
+  const lifecycleController = createNativeV2LifecycleController({
+    canvasRef,
+    cleanupRef,
+    currentNode,
+    currentNodeKey,
+    generationRef,
+    getCapabilityState: () => capabilityState,
+    pendingBootstrapRef,
+    session,
+    setCapabilityOverride,
+    setStreamStatus,
+    setVideoMeta,
+  });
 
   useEffect(() => {
     setCapabilityOverride(null);
@@ -245,10 +102,10 @@ export function P2PAndroidNativeV2WebRtcPanel({ session }: { session: NativeView
   }, [session.nativeRemoteV2.capability.state]);
 
   useEffect(() => {
-    void startNativeStream();
+    void lifecycleController.startNativeStream();
     return () => {
       generationRef.current += 1;
-      void closeActiveStream();
+      void lifecycleController.closeActiveStream();
     };
   }, [capabilityState, currentNodeKey, session.peerId, session.targetAddress]);
 
@@ -321,7 +178,7 @@ export function P2PAndroidNativeV2WebRtcPanel({ session }: { session: NativeView
           <AndroidControlRail
             directExperiment={directExperiment}
             onReconnect={() => {
-              void startNativeStream({ forceRetry: true });
+              void lifecycleController.startNativeStream({ forceRetry: true });
             }}
             reconnectEnabled={streamStatus !== "connecting"}
             onRotate={() => undefined}

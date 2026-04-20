@@ -81,10 +81,7 @@ function getNetworkStatusDisplay(status: P2PStatus) {
 }
 
 function getPeerKindIcon(truth: PeerCapabilityTruth | null | undefined) {
-  if (canOpenAndroidView(truth?.remoteControl)) {
-    return Smartphone;
-  }
-  return Cpu;
+  return canOpenAndroidView(truth?.remoteControl) ? Smartphone : Cpu;
 }
 
 function getPeerShortId(peerId: string | null | undefined) {
@@ -319,11 +316,7 @@ export default function P2PPage() {
                                       <Badge variant="secondary" className="text-[10px] uppercase">
                                         Android
                                       </Badge>
-                                    ) : (
-                                      <Badge variant="outline" className="text-[10px] uppercase text-muted-foreground">
-                                        基础
-                                      </Badge>
-                                    )}
+                                    ) : null}
                                   </div>
 
                                   <div className="grid gap-3 sm:grid-cols-2">

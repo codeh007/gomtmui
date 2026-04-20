@@ -8,6 +8,21 @@ type CapabilityTruthLike = {
   };
 };
 
+export function resolveTargetSessionError(input: {
+  errorMessage: string | null;
+  isConnected: boolean;
+  peerTruthErrorMessage: string | null;
+  targetAddress: string | null;
+}) {
+  if (!input.isConnected) {
+    return null;
+  }
+  if (input.targetAddress == null) {
+    return "目标节点当前没有 browser-dialable multiaddr。";
+  }
+  return input.peerTruthErrorMessage ?? input.errorMessage ?? null;
+}
+
 function resolveNativeRemoteCapability(capabilityTruth: CapabilityTruthLike | null) {
   return capabilityTruth?.remoteControl?.capabilities?.nativeRemoteV2WebRTC ?? null;
 }
