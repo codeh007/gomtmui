@@ -9,6 +9,16 @@ export type ConnectionPathObservation = {
   viaAddr?: string;
 };
 
+export type RemoteControlCapabilityState = CapabilityState;
+
+export type RemoteControlCapabilities = {
+  nativeRemoteV2WebRTC?: RemoteControlCapabilityState;
+};
+
+export type RemoteControlState = {
+  capabilities: RemoteControlCapabilities;
+};
+
 export type PeerCapabilityTruth = {
   connectionPath?: ConnectionPathObservation;
   remoteControl?: RemoteControlState;
@@ -20,38 +30,7 @@ export type DeviceStatus = PeerCapabilityTruth & {
   lastError?: string;
 };
 
-export type RemoteControlCapabilityState = {
-  state?: string;
-  reason?: string;
-};
-
-export type RemoteControlCapabilities = {
-  nativeRemoteV2WebRTC?: RemoteControlCapabilityState;
-};
-
-export type RemoteControlSession = {
-  controllerMode: "single_controller";
-  controllerState: "idle" | "occupied";
-  activeControllerPeerId?: string;
-};
-
-export type RemoteControlState = {
-  nativeRemoteV2Session?: {
-    state?: string;
-    lastError?: string;
-  };
-  nativeRemoteV2WebRTCSession?: {
-    state?: string;
-    topology?: string;
-    sessionId?: string;
-    lastError?: string;
-  };
-  platform?: string;
-  capabilities: RemoteControlCapabilities;
-  session: RemoteControlSession;
-};
-
-function hasCapabilityState(value: RemoteControlCapabilityState | undefined) {
+function hasCapabilityState(value: CapabilityState | undefined) {
   return (value?.state?.trim() ?? "") !== "";
 }
 
@@ -73,7 +52,7 @@ function asString(value: unknown) {
   return typeof value === "string" ? value : "";
 }
 
-function parseRemoteControlCapabilityState(value: unknown): RemoteControlCapabilityState {
+function parseRemoteControlCapabilityState(value: unknown): CapabilityState {
   const record = asRecord(value) ?? {};
   return {
     state: asString(record.state).trim() || undefined,
@@ -153,74 +132,19 @@ export function parseRemoteControlState(value: unknown): RemoteControlState | un
     return undefined;
   }
   const capabilitiesRecord = asRecord(record.capabilities) ?? {};
-  const sessionRecord = asRecord(record.session) ?? {};
 
   const nativeRemoteV2WebRTC = parseRemoteControlCapabilityState(capabilitiesRecord.native_remote_v2_webrtc);
   if (!hasCapabilityState(nativeRemoteV2WebRTC)) {
     return undefined;
   }
 
-  const controllerMode = asString(sessionRecord.controller_mode).trim().toLowerCase();
-  const controllerState = asString(sessionRecord.controller_state).trim().toLowerCase();
-  if (controllerMode !== "single_controller") {
-    return undefined;
-  }
-  if (controllerState !== "idle" && controllerState !== "occupied") {
-    return undefined;
-  }
-
-  const activeControllerPeerId = asString(sessionRecord.active_controller_peer_id).trim() || undefined;
-  if (controllerState === "occupied" && activeControllerPeerId == null) {
-    return undefined;
-  }
-
   return {
-    platform: "android",
     capabilities: {
       nativeRemoteV2WebRTC,
-    },
-    nativeRemoteV2Session: (() => {
-      const sessionRecordV2 = asRecord(record.native_remote_v2_session);
-      if (sessionRecordV2 == null) {
-        return undefined;
-      }
-      return {
-        lastError: asString(sessionRecordV2.last_error).trim() || undefined,
-        state: asString(sessionRecordV2.state).trim() || undefined,
-      };
-    })(),
-    nativeRemoteV2WebRTCSession: (() => {
-      const sessionRecordV2WebRTC = asRecord(record.native_remote_v2_webrtc_session);
-      if (sessionRecordV2WebRTC == null) {
-        return undefined;
-      }
-      return {
-        lastError: asString(sessionRecordV2WebRTC.last_error).trim() || undefined,
-        sessionId: asString(sessionRecordV2WebRTC.session_id).trim() || undefined,
-        state: asString(sessionRecordV2WebRTC.state).trim() || undefined,
-        topology: asString(sessionRecordV2WebRTC.topology).trim() || undefined,
-      };
-    })(),
-    session: {
-      controllerMode: "single_controller",
-      controllerState,
-      activeControllerPeerId: controllerState === "occupied" ? activeControllerPeerId : undefined,
     },
   };
 }
 
 export function canOpenAndroidView(remoteControl: RemoteControlState | null | undefined) {
   return (remoteControl?.capabilities.nativeRemoteV2WebRTC?.state?.trim().toLowerCase() ?? "") === "available";
-}
-
-export function supportsAndroidRemoteControl(remoteControl: RemoteControlState | null | undefined) {
-  return canOpenAndroidView(remoteControl);
-}
-
-export function listPeerFeatureLabels(remoteControl: RemoteControlState | null | undefined) {
-  const labels: string[] = [];
-  if (canOpenAndroidView(remoteControl)) {
-    labels.push("android");
-  }
-  return labels;
 }

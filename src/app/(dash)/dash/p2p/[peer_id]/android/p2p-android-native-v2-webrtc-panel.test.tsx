@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, waitFor } from "@testing-library/react";
 import { createElement, useState } from "react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { render as renderBrowser } from "vitest-browser-react";
 import { P2PAndroidNativeV2WebRtcPanel } from "./p2p-android-native-v2-webrtc-panel";
 
 const controlRailState = vi.hoisted(() => ({
@@ -122,6 +123,29 @@ function NodeReplacementHarness() {
   );
 }
 
+function createConnectedStreamMocks() {
+  workerControlMocks.ensureNativeRemoteV2Stream.mockResolvedValue({
+    channel: {
+      height: 1920,
+      width: 1080,
+    },
+    resolved: {
+      host: "127.0.0.1",
+      kind: "loopback_tcp",
+      port: 9200,
+    },
+    status: "streaming",
+  });
+  workerControlMocks.openNativeRemoteV2VideoStream.mockResolvedValue({
+    close: vi.fn(async () => undefined),
+    metadata: {
+      height: 1920,
+      width: 1080,
+    },
+    packets: createPendingPackets(),
+  });
+}
+
 describe("P2PAndroidNativeV2WebRtcPanel", () => {
   beforeEach(() => {
     controlRailState.lastProps = null;
@@ -145,45 +169,22 @@ describe("P2PAndroidNativeV2WebRtcPanel", () => {
       }),
     );
 
-    render(createElement(PermissionHarness));
+    const rendered = renderBrowser(createElement(PermissionHarness));
 
-    await waitFor(() => {
-      expect(screen.getByText("待授权")).toBeTruthy();
-      expect(screen.getByText("screen_capture_not_granted")).toBeTruthy();
-    });
+    await expect.element(rendered.getByText("待授权")).toBeInTheDocument();
+    await expect.element(rendered.getByText("screen_capture_not_granted")).toBeInTheDocument();
     expect(workerControlMocks.ensureNativeRemoteV2Stream).toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "mutate capability" }));
+    await rendered.getByRole("button", { name: "mutate capability" }).click();
 
-    await waitFor(() => {
-      expect(screen.getByText("待授权")).toBeTruthy();
-      expect(screen.getByText("screen_capture_not_granted")).toBeTruthy();
-    });
+    await expect.element(rendered.getByText("待授权")).toBeInTheDocument();
+    await expect.element(rendered.getByText("screen_capture_not_granted")).toBeInTheDocument();
     expect(workerControlMocks.ensureNativeRemoteV2Stream).toHaveBeenCalled();
     expect(workerControlMocks.openNativeRemoteV2VideoStream).not.toHaveBeenCalled();
   });
 
   test("连接成功后发送文本会调用 native remote v2 text 命令", async () => {
-    workerControlMocks.ensureNativeRemoteV2Stream.mockResolvedValue({
-      channel: {
-        height: 1920,
-        width: 1080,
-      },
-      resolved: {
-        host: "127.0.0.1",
-        kind: "loopback_tcp",
-        port: 9200,
-      },
-      status: "streaming",
-    });
-    workerControlMocks.openNativeRemoteV2VideoStream.mockResolvedValue({
-      close: vi.fn(async () => undefined),
-      metadata: {
-        height: 1920,
-        width: 1080,
-      },
-      packets: createPendingPackets(),
-    });
+    createConnectedStreamMocks();
     workerControlMocks.invokeNativeRemoteV2Text.mockResolvedValue(undefined);
 
     render(createElement(P2PAndroidNativeV2WebRtcPanel, { session: createSession({ state: "available" }) }));
@@ -240,7 +241,8 @@ describe("P2PAndroidNativeV2WebRtcPanel", () => {
     );
 
     nextNode = nodeB;
-    fireEvent.click(screen.getByRole("button", { name: "replace node" }));
+    const rendered = renderBrowser(createElement(NodeReplacementHarness));
+    await rendered.getByRole("button", { name: "replace node" }).click();
 
     await waitFor(() => {
       expect(workerControlMocks.ensureNativeRemoteV2Stream).toHaveBeenCalledTimes(2);

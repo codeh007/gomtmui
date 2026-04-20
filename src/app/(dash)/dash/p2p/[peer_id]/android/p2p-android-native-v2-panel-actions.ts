@@ -20,25 +20,48 @@ type ActionContext = {
   onActionError: (message: string, error: unknown) => void;
 };
 
-export function createNativeV2ActionController(context: ActionContext) {
-  function getReadyTarget() {
-    const session = context.getSession();
-    const node = session.getCurrentNode();
-    const address = session.targetAddress;
-    if (node == null || address == null || context.getStreamStatus() !== "connected") {
-      return null;
-    }
-    return {
-      address,
-      node,
-      peerId: session.peerId,
-      session,
-    };
-  }
+type ReadyTarget = {
+  address: string;
+  node: NonNullable<ReturnType<NativeViewportSessionLike["getCurrentNode"]>>;
+  peerId: string;
+};
 
+function resolveReadyTarget(context: ActionContext): ReadyTarget | null {
+  const session = context.getSession();
+  const node = session.getCurrentNode();
+  const address = session.targetAddress;
+  if (node == null || address == null || context.getStreamStatus() !== "connected") {
+    return null;
+  }
+  return {
+    address,
+    node,
+    peerId: session.peerId,
+  };
+}
+
+type PointerActionTargetParams = {
+  getStreamStatus: () => StreamStatus;
+  session: NativeViewportSessionLike;
+};
+
+function resolvePointerActionTarget(params: PointerActionTargetParams) {
+  const node = params.session.getCurrentNode();
+  const address = params.session.targetAddress;
+  if (node == null || address == null || params.getStreamStatus() !== "connected") {
+    return null;
+  }
+  return {
+    address,
+    node,
+    peerId: params.session.peerId,
+  };
+}
+
+export function createNativeV2ActionController(context: ActionContext) {
   return {
     async captureScreenshot() {
-      const target = getReadyTarget();
+      const target = resolveReadyTarget(context);
       if (target == null) {
         return;
       }
@@ -62,7 +85,7 @@ export function createNativeV2ActionController(context: ActionContext) {
     },
 
     async invokeKey(key: string) {
-      const target = getReadyTarget();
+      const target = resolveReadyTarget(context);
       if (target == null) {
         return;
       }
@@ -80,7 +103,7 @@ export function createNativeV2ActionController(context: ActionContext) {
     },
 
     async sendText(text: string) {
-      const target = getReadyTarget();
+      const target = resolveReadyTarget(context);
       if (target == null) {
         return false;
       }
@@ -146,12 +169,14 @@ export function createNativeV2PointerHandlers(params: {
     },
 
     async handlePointerUp(event: { clientX: number; clientY: number; timeStamp: number }) {
-      const node = params.session.getCurrentNode();
-      const address = params.session.targetAddress;
+      const target = resolvePointerActionTarget({
+        getStreamStatus: params.getStreamStatus,
+        session: params.session,
+      });
       const canvas = params.canvasRef.current;
       const gestureStart = params.gestureRef.current;
       params.gestureRef.current = null;
-      if (node == null || address == null || canvas == null || params.getStreamStatus() !== "connected") {
+      if (target == null || canvas == null) {
         return;
       }
 
@@ -169,23 +194,35 @@ export function createNativeV2PointerHandlers(params: {
 
       try {
         if (gestureStart == null) {
-          await invokeNativeRemoteV2Tap({ address, node, peerId: params.session.peerId, x: point.x, y: point.y });
+          await invokeNativeRemoteV2Tap({
+            address: target.address,
+            node: target.node,
+            peerId: target.peerId,
+            x: point.x,
+            y: point.y,
+          });
           return;
         }
 
         const maxDelta = Math.max(Math.abs(point.x - gestureStart.x), Math.abs(point.y - gestureStart.y));
         if (maxDelta < 12) {
-          await invokeNativeRemoteV2Tap({ address, node, peerId: params.session.peerId, x: point.x, y: point.y });
+          await invokeNativeRemoteV2Tap({
+            address: target.address,
+            node: target.node,
+            peerId: target.peerId,
+            x: point.x,
+            y: point.y,
+          });
           return;
         }
 
         await invokeNativeRemoteV2Swipe({
-          address,
+          address: target.address,
           durationMs: Math.max(120, Math.round(event.timeStamp - gestureStart.startedAt)),
           endX: point.x,
           endY: point.y,
-          node,
-          peerId: params.session.peerId,
+          node: target.node,
+          peerId: target.peerId,
           startX: gestureStart.x,
           startY: gestureStart.y,
         });

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { canOpenAndroidView, listPeerFeatureLabels } from "@/lib/p2p/discovery-contracts";
+import { useEffect, useRef, useState } from "react";
+import { canOpenAndroidView } from "@/lib/p2p/discovery-contracts";
 import { deriveBrowserRelayAddressFromConnectionEntry } from "@/lib/p2p/libp2p-stream";
 import { logP2PConsole } from "@/lib/p2p/p2p-console";
 import { requestPeerCapabilityTruth } from "@/lib/p2p/worker-control";
@@ -205,16 +205,12 @@ export function useP2PPeerPageSession(peerId: string) {
     targetPeer?.peerId,
   ]);
 
-  const featureLabels = useMemo(() => {
-    return listPeerFeatureLabels(capabilityTruth?.remoteControl);
-  }, [capabilityTruth?.remoteControl]);
-  const visibleMultiaddrs = useMemo(() => targetPeer?.multiaddrs ?? [], [targetPeer]);
+  const canOpenAndroid = canOpenAndroidView(capabilityTruth?.remoteControl);
 
   return {
     ...p2pSession,
     capabilityTruth,
-    canOpenAndroid: canOpenAndroidView(capabilityTruth?.remoteControl),
-    featureLabels,
+    canOpenAndroid,
     hasPeerTruthError,
     isPeerTruthLoading,
     peerId,
@@ -223,13 +219,9 @@ export function useP2PPeerPageSession(peerId: string) {
     refreshPeerTruth: () => setRefreshKey((current) => current + 1),
     targetAddress,
     targetPeer,
-    visibleMultiaddrs,
   };
 }
 
 function useMemoTargetPeer(peerCandidates: ReturnType<typeof useP2PSession>["peerCandidates"], peerId: string) {
-  return useMemo(
-    () => peerCandidates.find((candidate) => candidate.peerId === peerId) ?? null,
-    [peerCandidates, peerId],
-  );
+  return peerCandidates.find((candidate) => candidate.peerId === peerId) ?? null;
 }

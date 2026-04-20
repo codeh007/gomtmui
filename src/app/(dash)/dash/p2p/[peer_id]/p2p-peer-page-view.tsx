@@ -178,12 +178,10 @@ export function P2PPeerPageView({ peerId }: { peerId: string }) {
                     <div className="space-y-2">
                       <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">协议</div>
                       <div className="flex flex-wrap gap-2">
-                        {session.featureLabels.length > 0 ? (
-                          session.featureLabels.map((label) => (
-                            <Badge key={label} variant="secondary" className="uppercase">
-                              {label === "android" ? "Android" : label}
-                            </Badge>
-                          ))
+                        {session.canOpenAndroid ? (
+                          <Badge variant="secondary" className="uppercase">
+                            Android
+                          </Badge>
                         ) : (
                           <Badge variant="outline">未声明高级协议</Badge>
                         )}
@@ -193,21 +191,11 @@ export function P2PPeerPageView({ peerId }: { peerId: string }) {
                     {remoteControl ? (
                       <div className="space-y-2">
                         <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Android</div>
-                        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                          <PeerStat label="platform" value={remoteControl.platform || "unknown"} />
-                          <PeerStat label="controller" value={remoteControl.session.controllerState || "unknown"} />
+                        <div className="grid gap-2 md:grid-cols-1">
                           <PeerStat
                             label="native_remote_v2_webrtc"
                             value={remoteControl.capabilities.nativeRemoteV2WebRTC?.state || "unknown"}
                           />
-                          {remoteControl.session.activeControllerPeerId ? (
-                            <div className="rounded-xl border px-4 py-3 text-xs md:col-span-2 xl:col-span-4">
-                              <div className="text-muted-foreground">active_controller_peer_id</div>
-                              <div className="mt-1 break-all font-mono text-xs font-medium">
-                                {remoteControl.session.activeControllerPeerId}
-                              </div>
-                            </div>
-                          ) : null}
                         </div>
                       </div>
                     ) : null}
@@ -222,13 +210,13 @@ export function P2PPeerPageView({ peerId }: { peerId: string }) {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="pt-0">
-                    {session.visibleMultiaddrs.length === 0 ? (
+                    {session.targetPeer.multiaddrs.length === 0 ? (
                       <div className="rounded-xl border border-dashed px-4 py-8 text-sm text-muted-foreground">
                         当前没有可用地址。
                       </div>
                     ) : (
                       <div className="space-y-3">
-                        {session.visibleMultiaddrs.map((value) => (
+                        {session.targetPeer.multiaddrs.map((value) => (
                           <div key={value} className="rounded-xl border px-4 py-3">
                             <div className="break-all font-mono text-xs text-muted-foreground">{value}</div>
                           </div>

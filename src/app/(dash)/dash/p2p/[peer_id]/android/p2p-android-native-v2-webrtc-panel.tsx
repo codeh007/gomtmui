@@ -15,7 +15,7 @@ import {
   buildNativeV2DirectExperiment,
   buildNativeV2RemoteStatus,
   buildNativeV2SessionInfoItems,
-  createNativeV2UnavailableHint,
+  buildNativeV2UnavailableHint,
 } from "./p2p-android-native-v2-view-model";
 import type { NativeViewportSessionLike, StreamStatus } from "./p2p-android-native-v2-webrtc-panel-shared";
 import { AndroidDeviceNavigationBar } from "./android-device-navigation-bar";
@@ -52,6 +52,8 @@ export function P2PAndroidNativeV2WebRtcPanel({ session }: { session: NativeView
     videoHeight: videoMeta.height,
     videoWidth: videoMeta.width,
   });
+
+  const unavailableHint = buildNativeV2UnavailableHint(capabilityMeta.detail);
 
   const remoteStatus = buildNativeV2RemoteStatus({
     capabilityDetail: capabilityMeta.detail,
@@ -277,8 +279,6 @@ export function P2PAndroidNativeV2WebRtcPanel({ session }: { session: NativeView
       remoteStatus={remoteStatus}
     />
   );
-
-  const unavailableHint = createNativeV2UnavailableHint("暂未开放");
 
   return (
     <div className="flex h-full min-h-0 items-center justify-center bg-black">

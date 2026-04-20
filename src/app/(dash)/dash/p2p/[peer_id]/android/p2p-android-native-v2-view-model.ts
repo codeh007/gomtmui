@@ -1,6 +1,6 @@
 import type { NativeViewportSessionLike, StreamStatus } from "./p2p-android-native-v2-webrtc-panel-shared";
 import { buildDirectExperimentViewModel, type P2PAndroidDirectExperimentView } from "./direct-experiment-view-model";
-import type { AndroidRemoteStatusView, AndroidSessionInfoItem } from "./p2p-android-viewport-support";
+import type { AndroidRemoteStatusView } from "./p2p-android-viewport-support";
 
 export function buildNativeV2DirectExperiment(
   session: NativeViewportSessionLike,
@@ -13,21 +13,6 @@ export function buildNativeV2DirectExperiment(
     runDirectExperiment: session.runDirectExperiment,
     state: session.state,
   });
-}
-
-export function buildNativeV2SessionInfoItems(params: {
-  peerId: string;
-  streamStatus: StreamStatus;
-  videoHeight: number;
-  videoWidth: number;
-}): AndroidSessionInfoItem[] {
-  const { peerId, streamStatus, videoHeight, videoWidth } = params;
-  return [
-    { label: "Peer ID", value: peerId },
-    { label: "模式", value: "原生" },
-    { label: "状态", value: streamStatus },
-    { label: "画面尺寸", value: `${videoWidth} x ${videoHeight}` },
-  ];
 }
 
 export function buildNativeV2RemoteStatus(params: {
@@ -57,11 +42,25 @@ export function buildNativeV2RemoteStatus(params: {
   return { detail: "准备中", label: "Connecting", showBusyIndicator: false };
 }
 
-export function createNativeV2UnavailableHint(title: string) {
+export function buildNativeV2SessionInfoItems(params: {
+  peerId: string;
+  streamStatus: StreamStatus;
+  videoHeight: number;
+  videoWidth: number;
+}) {
+  return [
+    { label: "Peer ID", value: params.peerId },
+    { label: "模式", value: "原生" },
+    { label: "状态", value: params.streamStatus },
+    { label: "画面尺寸", value: `${params.videoWidth} x ${params.videoHeight}` },
+  ];
+}
+
+export function buildNativeV2UnavailableHint(detail: string) {
   return {
-    detail: title,
+    detail,
     op: "rotate" as const,
-    title,
+    title: detail,
     tone: "muted" as const,
   };
 }

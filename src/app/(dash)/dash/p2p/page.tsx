@@ -24,9 +24,7 @@ import { useRouter } from "next/navigation";
 import { DashContent, DashHeaders } from "@/components/dash-layout";
 import {
   canOpenAndroidView,
-  listPeerFeatureLabels,
   type PeerCapabilityTruth,
-  supportsAndroidRemoteControl,
 } from "@/lib/p2p/discovery-contracts";
 import {
   getP2PStatusMeta,
@@ -83,7 +81,7 @@ function getNetworkStatusDisplay(status: P2PStatus) {
 }
 
 function getPeerKindIcon(truth: PeerCapabilityTruth | null | undefined) {
-  if (supportsAndroidRemoteControl(truth?.remoteControl)) {
+  if (canOpenAndroidView(truth?.remoteControl)) {
     return Smartphone;
   }
   return Cpu;
@@ -95,13 +93,6 @@ function getPeerShortId(peerId: string | null | undefined) {
     return "未知";
   }
   return normalizedPeerId.length <= 8 ? normalizedPeerId : normalizedPeerId.slice(-8);
-}
-
-function formatPeerFeatureLabel(label: string) {
-  if (label === "android") {
-    return "Android";
-  }
-  return label;
 }
 
 function getPreferredPeerAction(peerId: string, truth: PeerCapabilityTruth | null | undefined) {
@@ -240,11 +231,11 @@ export default function P2PPage() {
               <ItemGroup>
                 {session.peerCandidates.map((peer) => {
                   const truth = session.getResolvedPeerTruth(peer.peerId);
-                  const featureLabels = listPeerFeatureLabels(truth?.remoteControl);
                   const preferredAction = getPreferredPeerAction(peer.peerId, truth);
                   const secondaryActions = getPeerSecondaryActions(peer.peerId, truth);
                   const PeerKindIcon = getPeerKindIcon(truth);
                   const peerShortId = getPeerShortId(peer.peerId);
+                  const hasAndroid = canOpenAndroidView(truth?.remoteControl);
 
                   return (
                     <Item key={peer.peerId}>
@@ -272,17 +263,11 @@ export default function P2PPage() {
                                   truth?.connectionPath?.path,
                                 )}
                               </Badge>
-                              {featureLabels.length > 0 ? (
-                                featureLabels.map((label) => (
-                                  <Badge key={label} variant="secondary" className="text-[10px] uppercase">
-                                    {formatPeerFeatureLabel(label)}
-                                  </Badge>
-                                ))
-                              ) : (
-                                <Badge variant="outline" className="text-[10px] uppercase text-muted-foreground">
-                                  基础
+                              {hasAndroid ? (
+                                <Badge variant="secondary" className="text-[10px] uppercase">
+                                  Android
                                 </Badge>
-                              )}
+                              ) : null}
                             </div>
 
                             <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
@@ -330,16 +315,10 @@ export default function P2PPage() {
                                         truth?.connectionPath?.path,
                                       )}
                                     </Badge>
-                                    {featureLabels.length > 0 ? (
-                                      featureLabels.map((label) => (
-                                        <Badge
-                                          key={`detail-${label}`}
-                                          variant="secondary"
-                                          className="text-[10px] uppercase"
-                                        >
-                                          {formatPeerFeatureLabel(label)}
-                                        </Badge>
-                                      ))
+                                    {hasAndroid ? (
+                                      <Badge variant="secondary" className="text-[10px] uppercase">
+                                        Android
+                                      </Badge>
                                     ) : (
                                       <Badge variant="outline" className="text-[10px] uppercase text-muted-foreground">
                                         基础

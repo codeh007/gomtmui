@@ -41,6 +41,39 @@ export type AndroidDeviceNavigationBarProps = {
   onRecents: () => void;
 };
 
+type AndroidDeviceActionButtonProps = {
+  ariaLabel: string;
+  children: React.ReactNode;
+  dataTestId: string;
+  disabled: boolean;
+  onClick: () => void;
+  title: string;
+};
+
+function AndroidDeviceActionButton({
+  ariaLabel,
+  children,
+  dataTestId,
+  disabled,
+  onClick,
+  title,
+}: AndroidDeviceActionButtonProps) {
+  return (
+    <Button
+      data-testid={dataTestId}
+      aria-label={ariaLabel}
+      title={title}
+      size="icon"
+      variant="secondary"
+      className="rounded-md border-0 bg-zinc-900 text-white shadow-none hover:bg-zinc-800"
+      disabled={disabled}
+      onClick={onClick}
+    >
+      {children}
+    </Button>
+  );
+}
+
 export function AndroidControlRail({
   directExperiment,
   onReconnect,
@@ -81,32 +114,26 @@ export function AndroidControlRail({
           textInputHint={textInputHint}
         />
         <span data-testid="android-action-rotate">
-          <Button
-            data-testid="android-rotate-button"
-            aria-label="旋转设备"
+          <AndroidDeviceActionButton
+            dataTestId="android-rotate-button"
+            ariaLabel="旋转设备"
             title={rotateEnabled ? "旋转设备" : rotateHint.title}
-            size="icon"
-            variant="secondary"
-            className="rounded-md border-0 bg-zinc-900 text-white shadow-none hover:bg-zinc-800"
             disabled={!rotateEnabled}
             onClick={onRotate}
           >
             <RotateCcw className="size-4" />
-          </Button>
+          </AndroidDeviceActionButton>
         </span>
         <span data-testid="android-action-screenshot">
-          <Button
-            data-testid="android-screenshot-button"
-            aria-label="下载截图"
+          <AndroidDeviceActionButton
+            dataTestId="android-screenshot-button"
+            ariaLabel="下载截图"
             title={screenshotEnabled ? "下载截图" : screenshotHint.title}
-            size="icon"
-            variant="secondary"
-            className="rounded-md border-0 bg-zinc-900 text-white shadow-none hover:bg-zinc-800"
             disabled={!screenshotEnabled}
             onClick={onScreenshot}
           >
             <Camera className="size-4" />
-          </Button>
+          </AndroidDeviceActionButton>
         </span>
       </div>
     </aside>
