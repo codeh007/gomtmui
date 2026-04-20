@@ -3,14 +3,11 @@
 import { type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
 import { AndroidNativeV2StatusOverlay } from "./android-native-v2-status-overlay";
 import { getAndroidNativeRemoteV2AvailabilityMeta } from "./android-session-model";
+import { buildDirectExperimentViewModel } from "./direct-experiment-view-model";
 import { getBrowserNodeInstanceKey, type NativeCanvasPoint } from "./p2p-android-native-v2-webrtc-panel-utils";
 import { createNativeV2ActionController, createNativeV2PointerHandlers } from "./p2p-android-native-v2-panel-actions";
 import { createNativeV2LifecycleController } from "./p2p-android-native-v2-lifecycle";
-import {
-  buildNativeV2DirectExperiment,
-  buildNativeV2RemoteStatus,
-  createNativeV2UnavailableHint,
-} from "./p2p-android-native-v2-view-model";
+import { buildNativeV2RemoteStatus, createNativeV2UnavailableHint } from "./p2p-android-native-v2-view-model";
 import type { NativeViewportSessionLike, StreamStatus } from "./p2p-android-native-v2-webrtc-panel-shared";
 import { AndroidDeviceNavigationBar } from "./android-device-navigation-bar";
 import { AndroidControlRail } from "./p2p-android-viewport-control-rail";
@@ -38,7 +35,14 @@ export function P2PAndroidNativeV2WebRtcPanel({ session }: { session: NativeView
     effectiveCapability.reason,
   );
 
-  const directExperiment = buildNativeV2DirectExperiment(session);
+  const directExperiment = buildDirectExperimentViewModel({
+    candidatePairSummary: session.candidatePairSummary,
+    directEvidenceSummary: session.directEvidenceSummary,
+    lastError: session.lastError,
+    lastResult: session.lastResult,
+    runDirectExperiment: session.runDirectExperiment,
+    state: session.state,
+  });
 
   const sessionInfoItems = [
     { label: "Peer ID", value: session.peerId },

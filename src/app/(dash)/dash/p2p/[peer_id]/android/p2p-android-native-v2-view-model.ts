@@ -1,19 +1,5 @@
-import type { NativeViewportSessionLike, StreamStatus } from "./p2p-android-native-v2-webrtc-panel-shared";
-import { buildDirectExperimentViewModel, type P2PAndroidDirectExperimentView } from "./direct-experiment-view-model";
+import type { StreamStatus } from "./p2p-android-native-v2-webrtc-panel-shared";
 import type { AndroidRemoteStatusView } from "./p2p-android-viewport-support";
-
-export function buildNativeV2DirectExperiment(
-  session: NativeViewportSessionLike,
-): P2PAndroidDirectExperimentView | undefined {
-  return buildDirectExperimentViewModel({
-    candidatePairSummary: session.candidatePairSummary,
-    directEvidenceSummary: session.directEvidenceSummary,
-    lastError: session.lastError,
-    lastResult: session.lastResult,
-    runDirectExperiment: session.runDirectExperiment,
-    state: session.state,
-  });
-}
 
 export function buildNativeV2RemoteStatus(params: {
   capabilityDetail: string;
