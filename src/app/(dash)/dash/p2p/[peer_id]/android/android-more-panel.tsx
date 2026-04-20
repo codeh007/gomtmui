@@ -32,7 +32,6 @@ type AndroidMorePanelProps = {
     performanceMeta: string;
     performanceProfile: AndroidPerformanceProfile;
   };
-  sessionDebugItems: AndroidSessionInfoItem[];
   sessionInfoItems: AndroidSessionInfoItem[];
   showPerformanceControls?: boolean;
   textActionsEnabled: boolean;
@@ -46,7 +45,6 @@ export function AndroidMorePanel({
   reconnectEnabled,
   onSendText,
   performanceControls,
-  sessionDebugItems,
   sessionInfoItems,
   showPerformanceControls = true,
   textActionsEnabled,
@@ -221,7 +219,6 @@ export function AndroidMorePanel({
       <AndroidSessionInfoDialog
         open={sessionInfoOpen}
         onOpenChange={handleSessionInfoOpenChange}
-        sessionDebugItems={sessionDebugItems}
         sessionInfoItems={sessionInfoItems}
       />
       <AndroidTextComposerAction

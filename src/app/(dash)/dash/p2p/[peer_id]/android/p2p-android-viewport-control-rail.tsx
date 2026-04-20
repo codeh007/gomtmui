@@ -28,7 +28,6 @@ export type AndroidControlRailProps = {
   rotateHint: AndroidDeviceOpHint;
   screenshotEnabled: boolean;
   screenshotHint: AndroidDeviceOpHint;
-  sessionDebugItems: AndroidSessionInfoItem[];
   sessionInfoItems: AndroidSessionInfoItem[];
   showPerformanceControls?: boolean;
   textActionsEnabled: boolean;
@@ -55,7 +54,6 @@ export function AndroidControlRail({
   rotateHint,
   screenshotEnabled,
   screenshotHint,
-  sessionDebugItems,
   sessionInfoItems,
   showPerformanceControls = true,
   textActionsEnabled,
@@ -77,7 +75,6 @@ export function AndroidControlRail({
           reconnectEnabled={reconnectEnabled}
           onSendText={onSendText}
           performanceControls={performanceControls}
-          sessionDebugItems={sessionDebugItems}
           sessionInfoItems={sessionInfoItems}
           showPerformanceControls={showPerformanceControls}
           textActionsEnabled={textActionsEnabled}

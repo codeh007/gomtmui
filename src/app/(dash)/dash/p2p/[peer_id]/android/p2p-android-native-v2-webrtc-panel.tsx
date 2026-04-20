@@ -14,7 +14,6 @@ import { createNativeV2ActionController, createNativeV2PointerHandlers } from ".
 import {
   buildNativeV2DirectExperiment,
   buildNativeV2RemoteStatus,
-  buildNativeV2SessionDebugItems,
   buildNativeV2SessionInfoItems,
   createNativeV2UnavailableHint,
 } from "./p2p-android-native-v2-view-model";
@@ -26,7 +25,6 @@ type NativeViewportSession = NativeViewportSessionLike;
 
 export function P2PAndroidNativeV2WebRtcPanel({ session }: { session: NativeViewportSession }) {
   const [streamStatus, setStreamStatus] = useState<StreamStatus>("idle");
-  const [streamError, setStreamError] = useState<string | null>(null);
   const [videoMeta, setVideoMeta] = useState({ height: 1920, width: 1080 });
   const [capabilityOverride, setCapabilityOverride] = useState<null | { reason?: string; state?: string }>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -55,11 +53,6 @@ export function P2PAndroidNativeV2WebRtcPanel({ session }: { session: NativeView
     videoWidth: videoMeta.width,
   });
 
-  const sessionDebugItems = buildNativeV2SessionDebugItems({
-    lastError: streamError,
-    session,
-  });
-
   const remoteStatus = buildNativeV2RemoteStatus({
     capabilityDetail: capabilityMeta.detail,
     capabilityState,
@@ -69,10 +62,9 @@ export function P2PAndroidNativeV2WebRtcPanel({ session }: { session: NativeView
   const actionController = createNativeV2ActionController({
     getSession: () => session,
     getStreamStatus: () => streamStatus,
-    onActionError: (message, error) => {
+    onActionError: (_message, error) => {
       console.error("native v2 action error", error);
       setStreamStatus("error");
-      setStreamError(message);
     },
   });
 
@@ -81,10 +73,9 @@ export function P2PAndroidNativeV2WebRtcPanel({ session }: { session: NativeView
     getStreamStatus: () => streamStatus,
     getVideoMeta: () => videoMeta,
     gestureRef: pointerGestureRef,
-    onActionError: (message, error) => {
+    onActionError: (_message, error) => {
       console.error("native v2 pointer error", error);
       setStreamStatus("error");
-      setStreamError(message);
     },
     session,
   });
@@ -142,7 +133,6 @@ export function P2PAndroidNativeV2WebRtcPanel({ session }: { session: NativeView
 
     if (!options?.forceRetry && (capabilityState === "permission_required" || capabilityState === "unavailable")) {
       setStreamStatus("idle");
-      setStreamError(null);
       return;
     }
 
@@ -150,12 +140,10 @@ export function P2PAndroidNativeV2WebRtcPanel({ session }: { session: NativeView
     const address = session.targetAddress;
     if (node == null || address == null) {
       setStreamStatus("error");
-      setStreamError("当前不可用");
       return;
     }
 
     setStreamStatus("connecting");
-    setStreamError(null);
 
     try {
       const descriptor = await ensureDescriptorSingleFlight({
@@ -206,7 +194,6 @@ export function P2PAndroidNativeV2WebRtcPanel({ session }: { session: NativeView
           }
           console.error("native v2 render error", error);
           setStreamStatus("error");
-          setStreamError("画面异常");
         },
       });
 
@@ -226,7 +213,6 @@ export function P2PAndroidNativeV2WebRtcPanel({ session }: { session: NativeView
 
       if (generationRef.current === generation) {
         setStreamStatus("error");
-        setStreamError("画面已结束");
       }
     } catch (error) {
       if (generationRef.current !== generation) {
@@ -238,12 +224,10 @@ export function P2PAndroidNativeV2WebRtcPanel({ session }: { session: NativeView
           state: "permission_required",
         });
         setStreamStatus("idle");
-        setStreamError(null);
         return;
       }
       console.error("native v2 connect error", error);
       setStreamStatus("error");
-      setStreamError("连接失败");
     }
   }
 
@@ -350,7 +334,6 @@ export function P2PAndroidNativeV2WebRtcPanel({ session }: { session: NativeView
             rotateHint={{ ...unavailableHint, op: "rotate" }}
             screenshotEnabled={streamStatus === "connected"}
             screenshotHint={{ ...unavailableHint, op: "captureScreenshot" }}
-            sessionDebugItems={sessionDebugItems}
             sessionInfoItems={sessionInfoItems}
             showPerformanceControls={false}
             textActionsEnabled={streamStatus === "connected"}

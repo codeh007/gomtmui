@@ -30,23 +30,6 @@ export function buildNativeV2SessionInfoItems(params: {
   ];
 }
 
-export function buildNativeV2SessionDebugItems(params: {
-  lastError: string | null;
-  session: NativeViewportSessionLike;
-}): AndroidSessionInfoItem[] {
-  const { lastError, session } = params;
-  return [
-    { label: "targetAddress", value: session.targetAddress || "未就绪" },
-    { label: "sessionId", value: session.nativeRemoteV2.sessionId || "-" },
-    { label: "sessionState", value: session.nativeRemoteV2.sessionState || "-" },
-    {
-      label: "topology",
-      value: session.nativeRemoteV2.sessionTopology || session.nativeRemoteV2.webrtc?.topology || "-",
-    },
-    { label: "lastError", value: lastError || session.nativeRemoteV2.sessionLastError || "-" },
-  ];
-}
-
 export function buildNativeV2RemoteStatus(params: {
   capabilityDetail: string;
   capabilityState: string;
