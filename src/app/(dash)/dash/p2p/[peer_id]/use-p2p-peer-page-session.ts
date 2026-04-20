@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { canOpenAndroidView, listPeerFeatureLabels, supportsVncView } from "@/lib/p2p/discovery-contracts";
+import { canOpenAndroidView, listPeerFeatureLabels } from "@/lib/p2p/discovery-contracts";
 import { deriveBrowserRelayAddressFromConnectionEntry } from "@/lib/p2p/libp2p-stream";
 import { logP2PConsole } from "@/lib/p2p/p2p-console";
 import { requestPeerCapabilityTruth } from "@/lib/p2p/worker-control";
@@ -206,15 +206,14 @@ export function useP2PPeerPageSession(peerId: string) {
   ]);
 
   const featureLabels = useMemo(() => {
-    return listPeerFeatureLabels(capabilityTruth?.vnc, capabilityTruth?.remoteControl);
-  }, [capabilityTruth?.remoteControl, capabilityTruth?.vnc]);
+    return listPeerFeatureLabels(undefined, capabilityTruth?.remoteControl);
+  }, [capabilityTruth?.remoteControl]);
   const visibleMultiaddrs = useMemo(() => targetPeer?.multiaddrs ?? [], [targetPeer]);
 
   return {
     ...p2pSession,
     capabilityTruth,
     canOpenAndroid: canOpenAndroidView(capabilityTruth?.remoteControl),
-    canOpenVnc: supportsVncView(capabilityTruth?.vnc),
     featureLabels,
     hasPeerTruthError,
     isPeerTruthLoading,

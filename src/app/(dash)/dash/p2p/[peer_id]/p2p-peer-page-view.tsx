@@ -1,6 +1,6 @@
 "use client";
 
-import { Cpu, Monitor, RefreshCw, Router, Smartphone, Waypoints } from "lucide-react";
+import { Cpu, RefreshCw, Router, Smartphone, Waypoints } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "mtxuilib/ui/alert";
 import { Badge } from "mtxuilib/ui/badge";
 import {
@@ -49,11 +49,6 @@ export function P2PPeerPageView({ peerId }: { peerId: string }) {
   const session = useP2PPeerPageSession(peerId);
   const networkStatusMeta = getP2PStatusMeta(session.status);
   const remoteControl = session.capabilityTruth?.remoteControl;
-  const vncStatusLabel = session.canOpenVnc
-    ? "可用"
-    : session.canOpenAndroid || (session.capabilityTruth?.vnc?.state?.trim().toLowerCase() ?? "") === "unavailable"
-      ? "无"
-      : "待定";
   const peerTitle = session.targetPeer == null ? "P2P 节点详情" : getPeerDisplayTitle(session.targetPeer);
 
   return (
@@ -168,16 +163,7 @@ export function P2PPeerPageView({ peerId }: { peerId: string }) {
                           </Button>
                         ) : null}
 
-                        {session.canOpenVnc ? (
-                          <Button asChild size="sm">
-                            <Link href={`/dash/p2p/${encodeURIComponent(peerId)}/vnc`}>
-                              <Monitor className="mr-2 size-4" />
-                              VNC
-                            </Link>
-                          </Button>
-                        ) : null}
-
-                        {!session.canOpenAndroid && !session.canOpenVnc ? (
+                        {!session.canOpenAndroid ? (
                           <Badge variant="outline">无直达入口</Badge>
                         ) : null}
                       </div>
@@ -185,7 +171,6 @@ export function P2PPeerPageView({ peerId }: { peerId: string }) {
                   </CardHeader>
                   <CardContent className="space-y-4 pt-0">
                     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                      <PeerStat label="VNC" value={vncStatusLabel} />
                       <PeerStat label="Android" value={session.canOpenAndroid ? "可用" : "无"} />
                       <PeerStat label="最近发现" value={session.targetPeer.lastDiscoveredAt || "未知"} />
                     </div>
@@ -196,7 +181,7 @@ export function P2PPeerPageView({ peerId }: { peerId: string }) {
                         {session.featureLabels.length > 0 ? (
                           session.featureLabels.map((label) => (
                             <Badge key={label} variant="secondary" className="uppercase">
-                              {label}
+                              {label === "android" ? "Android" : label}
                             </Badge>
                           ))
                         ) : (

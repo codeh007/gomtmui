@@ -28,23 +28,6 @@ type InvokeErrorShape = {
   retryable: boolean;
 };
 
-type VncResourceRef = {
-  kind: string;
-  resourceId: string;
-  leaseId: string;
-  resourceGeneration: number;
-};
-
-type VncRawChannelContract = {
-  kind: string;
-  framing?: string;
-  codec?: string;
-  width?: number;
-  height?: number;
-  rotation?: number;
-  keyframeRequiredOnStart?: boolean;
-};
-
 type NativeRemoteV2ResolvedTarget = {
   kind?: string;
   host?: string;
@@ -150,50 +133,11 @@ function parseInvokeResponse(value: unknown) {
         ? null
         : {
             status: asString(resultRecord.status).trim() || undefined,
-            resource: parseVncResourceRef(resultRecord.resource),
             deviceStatus: parseDeviceStatus(resultRecord.device_status),
             remoteControlPayload: parseNativeRemoteV2StreamDescriptor(resultRecord.remote_control_payload),
             remoteControlScreenshotPayload: parseNativeRemoteV2ScreenshotPayload(resultRecord.remote_control_payload),
             remoteControlWebRtcPayload: parseNativeRemoteV2WebRtcStartPayload(resultRecord.remote_control_payload),
           },
-  };
-}
-
-function parseVncResourceRef(value: unknown): VncResourceRef | undefined {
-  const record = asRecord(value);
-  if (record == null) {
-    return undefined;
-  }
-  const resourceId = asString(record.resource_id).trim();
-  const leaseId = asString(record.lease_id).trim();
-  if (resourceId === "" || leaseId === "") {
-    return undefined;
-  }
-  return {
-    kind: asString(record.kind).trim() || "resource_ref",
-    resourceId,
-    leaseId,
-    resourceGeneration: asNumber(record.resource_generation),
-  };
-}
-
-function parseVncRawChannelContract(value: unknown): VncRawChannelContract | undefined {
-  const record = asRecord(value);
-  if (record == null) {
-    return undefined;
-  }
-  const kind = asString(record.kind).trim();
-  if (kind === "") {
-    return undefined;
-  }
-  return {
-    kind,
-    framing: asString(record.framing).trim() || undefined,
-    codec: asString(record.codec).trim() || undefined,
-    width: asNumber(record.width) || undefined,
-    height: asNumber(record.height) || undefined,
-    rotation: asNumber(record.rotation),
-    keyframeRequiredOnStart: record.keyframe_required_on_start === true,
   };
 }
 
@@ -328,7 +272,6 @@ function parseStreamOpenResponse(value: unknown) {
   const errorRecord = asRecord(payload.error);
   return {
     ok: payload.ok === true,
-    channel: parseVncRawChannelContract(payload.channel),
     error:
       errorRecord == null
         ? null
@@ -338,14 +281,6 @@ function parseStreamOpenResponse(value: unknown) {
             retryable: errorRecord.retryable === true,
           },
   };
-}
-
-function encodeLengthPrefixedFrame(payload: Uint8Array) {
-  const framed = new Uint8Array(payload.byteLength + 4);
-  const view = new DataView(framed.buffer);
-  view.setUint32(0, payload.byteLength);
-  framed.set(payload, 4);
-  return framed;
 }
 
 async function* decodeLengthPrefixedSource(source: AsyncIterable<Uint8Array>) {
@@ -393,13 +328,6 @@ async function* decodeNativeRemoteV2VideoPackets(source: AsyncIterable<Uint8Arra
   }
 }
 
-function normalizeStreamSource(params: { expectsMessageFrames: boolean; source: AsyncIterable<Uint8Array> }) {
-  if (params.expectsMessageFrames) {
-    return decodeLengthPrefixedSource(params.source);
-  }
-  return params.source;
-}
-
 type WorkerInvokeParams = {
   address: string;
   node: BrowserNodeLike;
@@ -437,44 +365,6 @@ async function invokeWorkerCommand(params: WorkerInvokeParams) {
   }
 }
 
-async function openWorkerStream(params: {
-  address: string;
-  node: BrowserNodeLike;
-  peerId: string;
-  resource: VncResourceRef;
-}) {
-  const stream = await openStreamForAddress({
-    node: params.node,
-    address: params.address,
-    protocol: DEFAULT_STREAM_PROTOCOL,
-  });
-  await writeJsonRequest(stream, {
-    v: 1,
-    op: "stream.open.req",
-    request_id: `stream-open-${params.peerId}-${Date.now()}`,
-    timeout_ms: 10000,
-    payload: {
-      target: {
-        kind: params.resource.kind,
-        resource_id: params.resource.resourceId,
-        lease_id: params.resource.leaseId,
-        resource_generation: params.resource.resourceGeneration,
-      },
-    },
-  });
-  const response = await readJsonFrame(stream);
-  const parsed = parseStreamOpenResponse(response.payload);
-  if (!parsed.ok) {
-    await stream.close();
-    throw toWorkerControlRequestError(parsed.error, "stream.open failed");
-  }
-  return {
-    parsed,
-    stream,
-    source: response.remainingSource,
-  };
-}
-
 async function invokeDeviceStatus(params: { address: string; node: BrowserNodeLike; peerId: string }) {
   return invokeWorkerCommand({
     ...params,
@@ -498,21 +388,6 @@ export async function requestPeerCapabilityTruth(params: {
     });
   }
   return truth;
-}
-
-export async function invokeVncEnsure(params: { address: string; node: BrowserNodeLike; peerId: string }) {
-  const result = await invokeWorkerCommand({
-    ...params,
-    command: "vnc.ensure",
-    requestIdPrefix: "vnc-ensure",
-    timeoutMs: 300000,
-  });
-
-  if (result.resource == null) {
-    throw new WorkerControlRequestError("vnc.ensure failed");
-  }
-
-  return result;
 }
 
 export async function ensureNativeRemoteV2Stream(params: { address: string; node: BrowserNodeLike; peerId: string }) {
@@ -689,31 +564,3 @@ export async function invokeNativeRemoteV2Key(params: {
   });
 }
 
-export async function openVncStream(params: {
-  address: string;
-  node: BrowserNodeLike;
-  peerId: string;
-  resource: VncResourceRef;
-}) {
-  const { parsed, stream, source: rawSource } = await openWorkerStream(params);
-
-  const explicitFraming = parsed.channel?.framing;
-  if (explicitFraming == null) {
-    await stream.close();
-    throw new WorkerControlRequestError("stream.open missing channel framing");
-  }
-  const useMessageFrames = explicitFraming === "length_prefixed_binary_messages";
-  const source = await normalizeStreamSource({
-    expectsMessageFrames: useMessageFrames,
-    source: rawSource,
-  });
-
-  return {
-    stream: {
-      close: stream.close.bind(stream),
-      onDrain: stream.onDrain.bind(stream),
-      send: (payload: Uint8Array) => stream.send(useMessageFrames ? encodeLengthPrefixedFrame(payload) : payload),
-    },
-    source,
-  };
-}

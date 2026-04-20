@@ -6,7 +6,6 @@ import {
   Cpu,
   Info,
   LoaderCircle,
-  Monitor,
   MoreHorizontal,
   Smartphone,
   Waypoints,
@@ -28,7 +27,6 @@ import {
   listPeerFeatureLabels,
   type PeerCapabilityTruth,
   supportsAndroidRemoteControl,
-  supportsVncView,
 } from "@/lib/p2p/discovery-contracts";
 import {
   getP2PStatusMeta,
@@ -88,9 +86,6 @@ function getPeerKindIcon(truth: PeerCapabilityTruth | null | undefined) {
   if (supportsAndroidRemoteControl(truth?.remoteControl)) {
     return Smartphone;
   }
-  if (supportsVncView(truth?.vnc)) {
-    return Monitor;
-  }
   return Cpu;
 }
 
@@ -106,9 +101,6 @@ function formatPeerFeatureLabel(label: string) {
   if (label === "android") {
     return "Android";
   }
-  if (label === "vnc") {
-    return "VNC";
-  }
   return label;
 }
 
@@ -119,14 +111,6 @@ function getPreferredPeerAction(peerId: string, truth: PeerCapabilityTruth | nul
       href: `/dash/p2p/${encodedPeerId}/android`,
       label: "Android",
       variant: "secondary" as const,
-    };
-  }
-
-  if (supportsVncView(truth?.vnc)) {
-    return {
-      href: `/dash/p2p/${encodedPeerId}/vnc`,
-      label: "VNC",
-      variant: "default" as const,
     };
   }
 
@@ -142,7 +126,6 @@ function getPeerSecondaryActions(peerId: string, truth: PeerCapabilityTruth | nu
   const preferredHref = getPreferredPeerAction(peerId, truth).href;
   const allActions = [
     { href: `/dash/p2p/${encodedPeerId}`, label: "详情" },
-    ...(supportsVncView(truth?.vnc) ? [{ href: `/dash/p2p/${encodedPeerId}/vnc`, label: "VNC" }] : []),
     ...(canOpenAndroidView(truth?.remoteControl)
       ? [{ href: `/dash/p2p/${encodedPeerId}/android`, label: "Android" }]
       : []),
@@ -257,7 +240,7 @@ export default function P2PPage() {
               <ItemGroup>
                 {session.peerCandidates.map((peer) => {
                   const truth = session.getResolvedPeerTruth(peer.peerId);
-                  const featureLabels = listPeerFeatureLabels(truth?.vnc, truth?.remoteControl);
+                  const featureLabels = listPeerFeatureLabels(undefined, truth?.remoteControl);
                   const preferredAction = getPreferredPeerAction(peer.peerId, truth);
                   const secondaryActions = getPeerSecondaryActions(peer.peerId, truth);
                   const PeerKindIcon = getPeerKindIcon(truth);
