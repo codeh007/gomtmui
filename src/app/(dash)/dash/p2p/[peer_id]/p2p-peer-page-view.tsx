@@ -212,10 +212,6 @@ export function P2PPeerPageView({ peerId }: { peerId: string }) {
                           <PeerStat label="platform" value={remoteControl.platform || "unknown"} />
                           <PeerStat label="controller" value={remoteControl.session.controllerState || "unknown"} />
                           <PeerStat
-                            label="native_remote_v2"
-                            value={remoteControl.capabilities.nativeRemoteV2?.state || "unknown"}
-                          />
-                          <PeerStat
                             label="native_remote_v2_webrtc"
                             value={remoteControl.capabilities.nativeRemoteV2WebRTC?.state || "unknown"}
                           />

@@ -18,13 +18,13 @@ describe("buildAndroidNativeRemoteV2SessionModel", () => {
     });
   });
 
-  test("在 nativeRemoteV2 需要录屏授权时返回 permission_required", () => {
+  test("在 nativeRemoteV2WebRTC 需要录屏授权时返回 permission_required", () => {
     expect(
       buildAndroidNativeRemoteV2SessionModel({
         capabilityTruth: {
           remoteControl: {
             capabilities: {
-              nativeRemoteV2: {
+              nativeRemoteV2WebRTC: {
                 reason: "screen_capture_not_granted",
                 state: "permission_required",
               },

@@ -54,11 +54,7 @@ function normalizeCapabilityState(value: string | null | undefined) {
 }
 
 function resolveNativeRemoteCapability(capabilityTruth: CapabilityTruthLike | null) {
-  return (
-    capabilityTruth?.remoteControl?.capabilities?.nativeRemoteV2WebRTC ??
-    capabilityTruth?.remoteControl?.capabilities?.nativeRemoteV2 ??
-    null
-  );
+  return capabilityTruth?.remoteControl?.capabilities?.nativeRemoteV2WebRTC ?? null;
 }
 
 export function buildAndroidNativeRemoteV2SessionModel(

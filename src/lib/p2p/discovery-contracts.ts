@@ -27,8 +27,6 @@ export type RemoteControlCapabilityState = {
 };
 
 export type RemoteControlCapabilities = {
-  adbTunnel?: RemoteControlCapabilityState;
-  nativeRemoteV2?: RemoteControlCapabilityState;
   nativeRemoteV2WebRTC?: RemoteControlCapabilityState;
 };
 
@@ -160,10 +158,8 @@ export function parseRemoteControlState(value: unknown): RemoteControlState | un
   const capabilitiesRecord = asRecord(record.capabilities) ?? {};
   const sessionRecord = asRecord(record.session) ?? {};
 
-  const adbTunnel = parseRemoteControlCapabilityState(capabilitiesRecord.adb_tunnel);
-  const nativeRemoteV2 = parseRemoteControlCapabilityState(capabilitiesRecord.native_remote_v2);
   const nativeRemoteV2WebRTC = parseRemoteControlCapabilityState(capabilitiesRecord.native_remote_v2_webrtc);
-  if (!hasCapabilityState(nativeRemoteV2) && !hasCapabilityState(nativeRemoteV2WebRTC)) {
+  if (!hasCapabilityState(nativeRemoteV2WebRTC)) {
     return undefined;
   }
 
@@ -184,8 +180,6 @@ export function parseRemoteControlState(value: unknown): RemoteControlState | un
   return {
     platform: "android",
     capabilities: {
-      adbTunnel,
-      nativeRemoteV2,
       nativeRemoteV2WebRTC,
     },
     nativeRemoteV2Session: (() => {
@@ -223,7 +217,7 @@ export function supportsVncView(vnc: CapabilityState | null | undefined) {
 }
 
 export function canOpenAndroidView(remoteControl: RemoteControlState | null | undefined) {
-  return (remoteControl?.capabilities.nativeRemoteV2?.state?.trim().toLowerCase() ?? "") === "available";
+  return (remoteControl?.capabilities.nativeRemoteV2WebRTC?.state?.trim().toLowerCase() ?? "") === "available";
 }
 
 export function supportsAndroidRemoteControl(remoteControl: RemoteControlState | null | undefined) {
