@@ -12,10 +12,6 @@ import { useAndroidDirectLane } from "./use-android-direct-lane";
 
 export type NativeRemoteV2ViewState = {
   capability: CapabilityState;
-  sessionId?: string;
-  sessionLastError?: string;
-  sessionState?: string;
-  sessionTopology?: string;
   webrtc?: NativeRemoteV2WebRtcStartPayload;
 };
 

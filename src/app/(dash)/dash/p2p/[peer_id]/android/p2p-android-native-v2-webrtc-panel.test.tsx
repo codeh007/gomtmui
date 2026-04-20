@@ -73,10 +73,6 @@ function createSession(capability: { reason?: string; state?: string }, node: Ha
     lastResult: undefined,
     nativeRemoteV2: {
       capability,
-      sessionId: undefined,
-      sessionLastError: undefined,
-      sessionState: undefined,
-      sessionTopology: undefined,
       webrtc: undefined,
     },
     peerId: "12D3KooWPermissionPeer",

@@ -206,7 +206,7 @@ export function useP2PPeerPageSession(peerId: string) {
   ]);
 
   const featureLabels = useMemo(() => {
-    return listPeerFeatureLabels(undefined, capabilityTruth?.remoteControl);
+    return listPeerFeatureLabels(capabilityTruth?.remoteControl);
   }, [capabilityTruth?.remoteControl]);
   const visibleMultiaddrs = useMemo(() => targetPeer?.multiaddrs ?? [], [targetPeer]);
 

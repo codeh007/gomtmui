@@ -240,7 +240,7 @@ export default function P2PPage() {
               <ItemGroup>
                 {session.peerCandidates.map((peer) => {
                   const truth = session.getResolvedPeerTruth(peer.peerId);
-                  const featureLabels = listPeerFeatureLabels(undefined, truth?.remoteControl);
+                  const featureLabels = listPeerFeatureLabels(truth?.remoteControl);
                   const preferredAction = getPreferredPeerAction(peer.peerId, truth);
                   const secondaryActions = getPeerSecondaryActions(peer.peerId, truth);
                   const PeerKindIcon = getPeerKindIcon(truth);

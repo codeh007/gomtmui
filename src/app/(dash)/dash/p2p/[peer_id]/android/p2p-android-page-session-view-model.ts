@@ -7,12 +7,6 @@ type CapabilityTruthLike = {
     capabilities?: {
       nativeRemoteV2WebRTC?: CapabilityState;
     };
-    nativeRemoteV2WebRTCSession?: {
-      lastError?: string;
-      sessionId?: string;
-      state?: string;
-      topology?: string;
-    };
   };
 };
 
@@ -182,18 +176,12 @@ export function buildNativeRemoteV2ViewState(input: {
   errorMessage: string | null;
   webrtc?: NativeRemoteV2WebRtcStartPayload;
 }): NativeRemoteV2ViewState {
-  const session = input.capabilityTruth?.remoteControl?.nativeRemoteV2WebRTCSession;
-
   return {
     capability: deriveNativeRemoteV2Capability({
       availability: input.availability,
       capabilityTruth: input.capabilityTruth,
       errorMessage: input.errorMessage,
     }),
-    sessionId: session?.sessionId,
-    sessionLastError: session?.lastError,
-    sessionState: session?.state,
-    sessionTopology: session?.topology,
     webrtc: input.webrtc,
   };
 }
