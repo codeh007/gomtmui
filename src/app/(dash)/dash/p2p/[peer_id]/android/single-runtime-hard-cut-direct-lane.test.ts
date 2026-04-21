@@ -14,15 +14,60 @@ describe("single runtime hard cut direct lane cleanup", () => {
     await expect(
       fileMissing(pathInRepo("src/app/(dash)/dash/p2p/[peer_id]/android", "p2p-android-native-v2-webrtc-panel.tsx")),
     ).resolves.toBe(true);
+    await expect(
+      fileMissing(pathInRepo("src/app/(dash)/dash/p2p/[peer_id]/android", "android-more-panel.tsx")),
+    ).resolves.toBe(true);
+    await expect(
+      fileMissing(pathInRepo("src/app/(dash)/dash/p2p/[peer_id]/android", "p2p-android-viewport-control-rail.tsx")),
+    ).resolves.toBe(true);
+    await expect(
+      fileMissing(pathInRepo("src/app/(dash)/dash/p2p/[peer_id]/android", "android-device-navigation-bar.tsx")),
+    ).resolves.toBe(true);
+    await expect(
+      fileMissing(pathInRepo("src/app/(dash)/dash/p2p/[peer_id]/android", "android-more-panel-actions.ts")),
+    ).resolves.toBe(true);
+    await expect(
+      fileMissing(pathInRepo("src/app/(dash)/dash/p2p/[peer_id]/android", "android-more-panel-state.ts")),
+    ).resolves.toBe(true);
+    await expect(
+      fileMissing(pathInRepo("src/app/(dash)/dash/p2p/[peer_id]/android", "android-session-info-dialog.tsx")),
+    ).resolves.toBe(true);
+    await expect(
+      fileMissing(pathInRepo("src/app/(dash)/dash/p2p/[peer_id]/android", "android-session-info-section.tsx")),
+    ).resolves.toBe(true);
+    await expect(
+      fileMissing(pathInRepo("src/app/(dash)/dash/p2p/[peer_id]/android", "android-text-composer-action.tsx")),
+    ).resolves.toBe(true);
+    await expect(
+      fileMissing(pathInRepo("src/app/(dash)/dash/p2p/[peer_id]/android", "android-keyboard-bridge.tsx")),
+    ).resolves.toBe(true);
+    await expect(
+      fileMissing(pathInRepo("src/app/(dash)/dash/p2p/[peer_id]/android", "android-native-v2-status-overlay.tsx")),
+    ).resolves.toBe(true);
+    await expect(
+      fileMissing(pathInRepo("src/app/(dash)/dash/p2p/[peer_id]/android", "android-session-model.ts")),
+    ).resolves.toBe(true);
+    await expect(
+      fileMissing(pathInRepo("src/app/(dash)/dash/p2p/[peer_id]/android", "p2p-android-viewport-support.ts")),
+    ).resolves.toBe(true);
+    await expect(
+      fileMissing(pathInRepo("src/app/(dash)/dash/p2p/[peer_id]/android", "p2p-android-native-v2-webrtc-panel-shared.ts")),
+    ).resolves.toBe(true);
+    await expect(
+      fileMissing(pathInRepo("src/app/(dash)/dash/p2p/[peer_id]/android", "p2p-android-native-v2-webrtc-panel-utils.ts")),
+    ).resolves.toBe(true);
+    await expect(
+      fileMissing(pathInRepo("src/app/(dash)/dash/p2p/[peer_id]/android", "native-android-video-renderer.ts")),
+    ).resolves.toBe(true);
+    await expect(
+      fileMissing(pathInRepo("src/app/(dash)/dash/p2p/[peer_id]/android", "use-is-narrow-screen.ts")),
+    ).resolves.toBe(true);
+    await expect(
+      fileMissing(pathInRepo("src/app/(dash)/dash/p2p/[peer_id]/android", "android-direct-experiment-panel-utils.ts")),
+    ).resolves.toBe(true);
 
     expect(readRepoFile("src/app/(dash)/dash/p2p/[peer_id]/android/use-p2p-android-page-session.ts")).not.toContain(
       "useAndroid" + "DirectLane",
-    );
-    expect(readRepoFile("src/app/(dash)/dash/p2p/[peer_id]/android/p2p-android-viewport-control-rail.tsx")).not.toContain(
-      "direct" + "Experiment",
-    );
-    expect(readRepoFile("src/app/(dash)/dash/p2p/[peer_id]/android/android-more-panel.tsx")).not.toContain(
-      "AndroidDirect" + "ExperimentPanel",
     );
   });
 });
