@@ -787,7 +787,6 @@ function useP2PSessionState() {
 
     return () => {
       cancelled = true;
-      void stopNode();
     };
   }, [
     activeConnectionAddr,
@@ -797,8 +796,13 @@ function useP2PSessionState() {
     liveConnectionStatus,
     liveConnection.truthQuery.error,
     status,
-    stopNode,
   ]);
+
+  useEffect(() => {
+    return () => {
+      void stopNode();
+    };
+  }, [stopNode]);
 
   const resolveDialableAddress = useCallback(async (multiaddrs: string[]) => {
     const node = sessionRef.current?.node;

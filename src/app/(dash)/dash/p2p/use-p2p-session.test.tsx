@@ -160,7 +160,7 @@
        });
      });
    
-     it("passes ws connection target to createBrowserNode", async () => {
+      it("passes ws connection target to createBrowserNode", async () => {
        const start = vi.fn(async () => {});
        const stop = vi.fn(async () => {});
        const awaitReady = vi.fn(async () => {});
@@ -232,13 +232,92 @@
        expect(screen.getByTestId("can-connect").textContent).toBe("true");
        expect(screen.getByTestId("server-url").textContent).toBe(serverUrl);
        expect(screen.getByTestId("server-url-input").textContent).toBe(serverUrl);
-       expect(createBrowserNode).toHaveBeenCalledWith({
-         connectionAddr,
-         transport: "ws",
-       });
-     });
-   
-     it("ignores legacy stored connection target and only resumes from stored serverUrl", async () => {
+        expect(createBrowserNode).toHaveBeenCalledWith({
+          connectionAddr,
+          transport: "ws",
+        });
+      });
+
+      it("keeps the same auto-connect attempt alive across joining rerenders", async () => {
+        const start = vi.fn(async () => {});
+        const stop = vi.fn(async () => {});
+        const awaitReady = vi.fn(async () => {});
+        const listPeerCandidates = vi.fn(async () => []);
+        const addEventListener = vi.fn();
+        const removeEventListener = vi.fn();
+        const createBrowserNode = vi.fn(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          return {
+            status: "started" as const,
+            start,
+            stop,
+            addEventListener,
+            removeEventListener,
+            services: {
+              rendezvousDiscovery: {
+                awaitReady,
+                listPeerCandidates,
+              },
+            },
+          };
+        });
+
+        const serverUrl = "https://gomtm2.yuepa8.com";
+        const connectionAddr = "/dns4/gomtm2.yuepa8.com/tcp/443/tls/ws/p2p/12D3KooWBootstrap";
+
+        vi.mocked(useLiveBrowserConnectionTruth).mockImplementation((inputServerUrl: string) => ({
+          accessUrl: inputServerUrl === serverUrl ? serverUrl : null,
+          readyServers: inputServerUrl === serverUrl ? [{ id: "server-1", accessUrl: serverUrl }] : [],
+          truthQuery:
+            inputServerUrl === serverUrl
+              ? {
+                  data: {
+                    generation: "gen-1",
+                    primaryTransport: "ws",
+                    candidates: [
+                      {
+                        transport: "ws",
+                        addr: connectionAddr,
+                        priority: 50,
+                      },
+                    ],
+                  },
+                  status: "success",
+                  error: null,
+                }
+              : {
+                  data: null,
+                  status: "pending",
+                  error: null,
+                },
+        }) as ReturnType<typeof useLiveBrowserConnectionTruth>);
+
+        __setP2PSessionDepsForTest({
+          createBrowserNode,
+          assertBrowserP2PSupport: () => {},
+        });
+
+        localStorage.setItem("gomtm:p2p:server-url", serverUrl);
+
+        render(
+          <P2PSessionProvider>
+            <SessionProbe />
+          </P2PSessionProvider>,
+        );
+
+        await waitFor(() => {
+          expect(screen.getByTestId("status").textContent).toBe("peer_candidates_ready");
+        });
+
+        expect(screen.getByTestId("active-connection").textContent).toBe(connectionAddr);
+        expect(screen.getByTestId("candidate-count").textContent).toBe("0");
+        expect(screen.getByTestId("is-connected").textContent).toBe("true");
+        expect(screen.getByTestId("can-connect").textContent).toBe("true");
+        expect(awaitReady).toHaveBeenCalledTimes(1);
+        expect(stop).not.toHaveBeenCalled();
+      });
+
+      it("ignores legacy stored connection target and only resumes from stored serverUrl", async () => {
        const start = vi.fn(async () => {});
        const stop = vi.fn(async () => {});
        const awaitReady = vi.fn(async () => {});
