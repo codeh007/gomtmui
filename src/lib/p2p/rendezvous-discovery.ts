@@ -17,7 +17,7 @@ import {
 } from "./rendezvous-pb";
 
 export const RENDEZVOUS_PROTOCOL = "/gomtm/rendezvous/1.0.0";
-export const GOMTM_RENDEZVOUS_NAMESPACE = "gomtm/v1/workers";
+export const GOMTM_RENDEZVOUS_NAMESPACE = "gomtm/v1/nodes";
 
 export type RendezvousPeerRegistration = {
   peerId: string;
