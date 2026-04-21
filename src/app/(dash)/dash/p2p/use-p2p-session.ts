@@ -733,6 +733,7 @@ function useP2PSessionState() {
     async function init() {
       const storedServerUrl = readStoredServerUrl().trim();
       const storedConnectionAddr = "";
+      const hasExistingSession = sessionRef.current?.node != null || activeConnectionAddr.trim() !== "";
       if (cancelled) {
         return;
       }
@@ -746,11 +747,20 @@ function useP2PSessionState() {
       }
 
       if (liveConnectionStatus === "pending") {
+        if (hasExistingSession) {
+          setErrorMessage(null);
+          return;
+        }
         setStatus("fetching-connection-truth");
         return;
       }
 
       if (liveConnectionStatus === "error") {
+        if (hasExistingSession) {
+          setStatus((currentStatus) => (currentStatus === "discovering" || currentStatus === "joining" ? currentStatus : "peer_candidates_ready"));
+          setErrorMessage(null);
+          return;
+        }
         setStatus("error");
         setErrorMessage(liveConnection.truthQuery.error instanceof Error ? liveConnection.truthQuery.error.message : "读取后端 连接信息失败");
         return;
@@ -759,6 +769,11 @@ function useP2PSessionState() {
       const initialInput = liveConnectionAddr.trim();
 
       if (initialInput === "") {
+        if (hasExistingSession) {
+          setStatus((currentStatus) => (currentStatus === "discovering" || currentStatus === "joining" ? currentStatus : "peer_candidates_ready"));
+          setErrorMessage(null);
+          return;
+        }
         setStatus("error");
         setErrorMessage("当前后端未返回可用于浏览器的连接信息，请检查 gomtm server 状态。");
         return;

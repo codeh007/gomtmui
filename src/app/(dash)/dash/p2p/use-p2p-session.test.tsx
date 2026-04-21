@@ -317,6 +317,96 @@
         expect(stop).not.toHaveBeenCalled();
       });
 
+      it("keeps the existing connected session when live connection truth errors", async () => {
+        const start = vi.fn(async () => {});
+        const stop = vi.fn(async () => {});
+        const awaitReady = vi.fn(async () => {});
+        const listPeerCandidates = vi.fn(async () => []);
+        const addEventListener = vi.fn();
+        const removeEventListener = vi.fn();
+        const createBrowserNode = vi.fn(async () => ({
+          status: "started",
+          start,
+          stop,
+          addEventListener,
+          removeEventListener,
+          services: {
+            rendezvousDiscovery: {
+              awaitReady,
+              listPeerCandidates,
+            },
+          },
+        }));
+
+        const serverUrl = "https://gomtm2.yuepa8.com";
+        const connectionAddr = "/dns4/gomtm2.yuepa8.com/tcp/443/tls/ws/p2p/12D3KooWBootstrap";
+        let currentTruth: ReturnType<typeof useLiveBrowserConnectionTruth> = {
+          accessUrl: serverUrl,
+          readyServers: [{ id: "server-1", accessUrl: serverUrl }],
+          truthQuery: {
+            data: {
+              generation: "gen-1",
+              primaryTransport: "ws",
+              candidates: [
+                {
+                  transport: "ws",
+                  addr: connectionAddr,
+                  priority: 50,
+                },
+              ],
+            },
+            status: "success",
+            error: null,
+          },
+        } as ReturnType<typeof useLiveBrowserConnectionTruth>;
+
+        vi.mocked(useLiveBrowserConnectionTruth).mockImplementation(() => currentTruth);
+
+        __setP2PSessionDepsForTest({
+          createBrowserNode,
+          assertBrowserP2PSupport: () => {},
+        });
+
+        localStorage.setItem("gomtm:p2p:server-url", serverUrl);
+
+        const view = render(
+          <P2PSessionProvider>
+            <SessionProbe />
+          </P2PSessionProvider>,
+        );
+
+        await waitFor(() => {
+          expect(screen.getByTestId("status").textContent).toBe("peer_candidates_ready");
+        });
+
+        currentTruth = {
+          accessUrl: serverUrl,
+          readyServers: [{ id: "server-1", accessUrl: serverUrl }],
+          truthQuery: {
+            data: null,
+            status: "error",
+            error: new Error("temporary truth failure"),
+          },
+        } as ReturnType<typeof useLiveBrowserConnectionTruth>;
+
+        view.rerender(
+          <P2PSessionProvider>
+            <SessionProbe />
+          </P2PSessionProvider>,
+        );
+
+        await waitFor(() => {
+          expect(screen.getByTestId("status").textContent).toBe("peer_candidates_ready");
+        });
+
+        expect(screen.getByTestId("active-connection").textContent).toBe(connectionAddr);
+        expect(screen.getByTestId("candidate-count").textContent).toBe("0");
+        expect(screen.getByTestId("is-connected").textContent).toBe("true");
+        expect(screen.getByTestId("can-connect").textContent).toBe("true");
+        expect(screen.getByTestId("error-message").textContent).toBe("");
+        expect(stop).not.toHaveBeenCalled();
+      });
+
       it("ignores legacy stored connection target and only resumes from stored serverUrl", async () => {
        const start = vi.fn(async () => {});
        const stop = vi.fn(async () => {});
