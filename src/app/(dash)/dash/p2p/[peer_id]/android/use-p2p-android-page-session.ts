@@ -2,7 +2,6 @@
 
 import { useMemo } from "react";
 import { deriveNativeRemoteV2Capability, resolveTargetSessionError } from "./p2p-android-page-session-view-model";
-import { useAndroidDirectLane } from "./use-android-direct-lane";
 import { useP2PPeerPageSession } from "../use-p2p-peer-page-session";
 
 export function useP2PAndroidPageSession(peerId: string) {
@@ -14,11 +13,6 @@ export function useP2PAndroidPageSession(peerId: string) {
     isConnected: peerSession.isConnected,
     peerTruthErrorMessage: peerSession.peerTruthErrorMessage,
     targetAddress,
-  });
-  const directLane = useAndroidDirectLane({
-    address: targetAddress,
-    node: peerSession.getCurrentNode,
-    peerId,
   });
   const nativeRemoteV2 = useMemo(
     () => ({
@@ -33,7 +27,6 @@ export function useP2PAndroidPageSession(peerId: string) {
 
   return {
     ...peerSession,
-    ...directLane,
     nativeRemoteV2,
     peerId,
     targetAddress,

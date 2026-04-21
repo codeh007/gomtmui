@@ -2,7 +2,6 @@
 
 import { Camera, RotateCcw } from "lucide-react";
 import { Button } from "mtxuilib/ui/button";
-import type { P2PAndroidDirectExperimentView } from "./direct-experiment-view-model";
 import { AndroidMorePanel } from "./android-more-panel";
 import type {
   AndroidDeviceOpHint,
@@ -12,7 +11,6 @@ import type {
 } from "./p2p-android-viewport-support";
 
 export type AndroidControlRailProps = {
-  directExperiment?: P2PAndroidDirectExperimentView;
   onReconnect: () => void;
   reconnectEnabled: boolean;
   onRotate: () => void;
@@ -75,7 +73,6 @@ function AndroidDeviceActionButton({
 }
 
 export function AndroidControlRail({
-  directExperiment,
   onReconnect,
   reconnectEnabled,
   onRotate,
@@ -102,7 +99,6 @@ export function AndroidControlRail({
     >
       <div className="flex flex-1 flex-wrap items-center justify-end gap-1 md:w-full md:flex-none md:flex-col md:items-center md:justify-start">
         <AndroidMorePanel
-          directExperiment={directExperiment}
           forceOpen={shouldForceOpenMorePanel}
           onReconnect={onReconnect}
           reconnectEnabled={reconnectEnabled}
@@ -139,4 +135,3 @@ export function AndroidControlRail({
     </aside>
   );
 }
-

@@ -1,15 +1,12 @@
 "use client";
 
 import { Ellipsis, Info, Keyboard, RefreshCw } from "lucide-react";
-import { OnlyDebug } from "mtxuilib/mt/DebugValue";
 import { Button } from "mtxuilib/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "mtxuilib/ui/popover";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "mtxuilib/ui/sheet";
 import { useState } from "react";
-import { AndroidDirectExperimentPanel } from "./android-direct-experiment-panel";
 import { AndroidSessionInfoDialog } from "./android-session-info-dialog";
 import { AndroidTextComposerAction } from "./android-text-composer-action";
-import type { P2PAndroidDirectExperimentView } from "./direct-experiment-view-model";
 import {
   ANDROID_PERFORMANCE_PROFILES,
   type AndroidDeviceOpHint,
@@ -22,7 +19,6 @@ import { resolveMorePanelSurfaceState } from "./android-more-panel-state";
 import { useIsNarrowScreen } from "./use-is-narrow-screen";
 
 type AndroidMorePanelProps = {
-  directExperiment?: P2PAndroidDirectExperimentView;
   forceOpen: boolean;
   onReconnect: () => void;
   reconnectEnabled: boolean;
@@ -39,7 +35,6 @@ type AndroidMorePanelProps = {
 };
 
 export function AndroidMorePanel({
-  directExperiment,
   forceOpen,
   onReconnect,
   reconnectEnabled,
@@ -124,11 +119,6 @@ export function AndroidMorePanel({
         >
           <Keyboard className="size-4" />
         </Button>
-        <OnlyDebug>
-          {directExperiment != null ? (
-            <AndroidDirectExperimentPanel {...directExperiment} isNarrowScreen={isNarrowScreen} />
-          ) : null}
-        </OnlyDebug>
       </div>
       {showPerformanceControls ? (
         <div className="rounded-2xl border border-white/10 bg-black/30 px-3 py-2 text-xs text-zinc-200">

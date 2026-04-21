@@ -3,7 +3,6 @@
 import { type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
 import { AndroidNativeV2StatusOverlay } from "./android-native-v2-status-overlay";
 import { getAndroidNativeRemoteV2AvailabilityMeta } from "./android-session-model";
-import { buildDirectExperimentViewModel } from "./direct-experiment-view-model";
 import { getBrowserNodeInstanceKey, type NativeCanvasPoint } from "./p2p-android-native-v2-webrtc-panel-utils";
 import { createNativeV2ActionController, createNativeV2PointerHandlers } from "./p2p-android-native-v2-panel-actions";
 import { createNativeV2LifecycleController } from "./p2p-android-native-v2-lifecycle";
@@ -34,15 +33,6 @@ export function P2PAndroidNativeV2WebRtcPanel({ session }: { session: NativeView
     effectiveCapability.state,
     effectiveCapability.reason,
   );
-
-  const directExperiment = buildDirectExperimentViewModel({
-    candidatePairSummary: session.candidatePairSummary,
-    directEvidenceSummary: session.directEvidenceSummary,
-    lastError: session.lastError,
-    lastResult: session.lastResult,
-    runDirectExperiment: session.runDirectExperiment,
-    state: session.state,
-  });
 
   const sessionInfoItems = [
     { label: "Peer ID", value: session.peerId },
@@ -180,7 +170,6 @@ export function P2PAndroidNativeV2WebRtcPanel({ session }: { session: NativeView
           </section>
 
           <AndroidControlRail
-            directExperiment={directExperiment}
             onReconnect={() => {
               void lifecycleController.startNativeStream({ forceRetry: true });
             }}
