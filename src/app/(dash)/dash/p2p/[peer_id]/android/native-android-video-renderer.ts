@@ -1,6 +1,11 @@
 "use client";
 
-import type { NativeRemoteV2VideoPacket } from "@/lib/p2p/worker-control";
+type NativeRemoteV2VideoPacket = {
+  data: Uint8Array;
+  keyframe: boolean;
+  ptsUs: bigint;
+  type: "data";
+};
 
 const FALLBACK_H264_CODEC = "avc1.42001E";
 

@@ -22,8 +22,9 @@ import {
   GOMTM_RENDEZVOUS_NAMESPACE,
   gomtmRendezvousDiscovery,
 } from "@/lib/p2p/rendezvous-discovery.ts";
+import { requestAndroidPeerCapabilityTruth } from "@/lib/p2p/android-peer-api";
+import { PeerHTTPRequestError } from "@/lib/p2p/peer-http-client";
 import { logP2PConsole, summarizePeerCandidates } from "@/lib/p2p/p2p-console.ts";
-import { requestPeerCapabilityTruth, WorkerControlRequestError } from "@/lib/p2p/worker-control.ts";
 import {
   clearStoredConnectionRuntime,
   loadOrCreateBrowserPrivateKey,
@@ -211,7 +212,7 @@ function isTransientPeerTruthError(error: unknown) {
     message.includes("stream has been reset") ||
     message.includes("unexpected end of stream while reading json frame");
 
-  if (error instanceof WorkerControlRequestError) {
+  if (error instanceof PeerHTTPRequestError) {
     if (error.retryable === true) {
       return true;
     }
@@ -228,7 +229,7 @@ async function requestPeerCapabilityTruthWithRetry(params: {
   address: string;
   node: BrowserNodeLike;
   peerId: string;
-  requestCapabilityTruth: typeof requestPeerCapabilityTruth;
+  requestCapabilityTruth: typeof requestAndroidPeerCapabilityTruth;
 }) {
   let lastError: unknown = null;
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -259,7 +260,7 @@ function buildPeerTruthRetryKey(peerId: string, address: string) {
 export async function resolveMissingPeerTruth(params: {
   candidates: PeerCandidate[];
   node: BrowserNodeLike | null;
-  requestCapabilityTruth?: typeof requestPeerCapabilityTruth;
+  requestCapabilityTruth?: typeof requestAndroidPeerCapabilityTruth;
   resolveDialableAddress: (multiaddrs: string[]) => Promise<string | null | undefined>;
   resolvedPeerTruth: ResolvedPeerTruthMap;
   shouldSkipRetryKey?: (retryKey: string) => boolean;
@@ -273,7 +274,7 @@ export async function resolveMissingPeerTruth(params: {
     };
   }
 
-  const requestCapabilityTruth = params.requestCapabilityTruth ?? requestPeerCapabilityTruth;
+  const requestCapabilityTruth = params.requestCapabilityTruth ?? requestAndroidPeerCapabilityTruth;
   let nextCache = params.resolvedPeerTruth;
   const resolvedPeerKeys = [] as string[];
   const retryablePeerKeys = [] as string[];
@@ -318,7 +319,8 @@ export async function resolveMissingPeerTruth(params: {
 export function describeConnectionEntryError(input: { connectionAddr: string; error: unknown }) {
   const message = input.error instanceof Error ? input.error.message.trim() : String(input.error).trim();
   if (
-    message.includes("unreachable bootstrap") ||
+    message.includes("unreachable seed") ||
+    message.includes("unreachable connection") ||
     message.includes("stream reset") ||
     message.includes("connection failed")
   ) {

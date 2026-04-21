@@ -24,9 +24,11 @@ export function useP2PAndroidPageSession(peerId: string) {
     }),
     [capabilityTruth, peerSession.isConnected, targetAddress, targetSessionError],
   );
+  const capability = nativeRemoteV2.capability;
 
   return {
     ...peerSession,
+    capability,
     nativeRemoteV2,
     peerId,
     targetAddress,

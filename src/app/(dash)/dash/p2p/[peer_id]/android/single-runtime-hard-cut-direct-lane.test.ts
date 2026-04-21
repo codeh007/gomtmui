@@ -11,12 +11,12 @@ describe("single runtime hard cut direct lane cleanup", () => {
   it("removes the deleted Android direct signal consumer path", async () => {
     await expect(fileMissing(pathInRepo("src/lib/p2p", directRequestClientFileName()))).resolves.toBe(true);
     await expect(fileMissing(pathInRepo("src/app/(dash)/dash/p2p/[peer_id]/android", androidDirectLaneHookFileName()))).resolves.toBe(true);
+    await expect(
+      fileMissing(pathInRepo("src/app/(dash)/dash/p2p/[peer_id]/android", "p2p-android-native-v2-webrtc-panel.tsx")),
+    ).resolves.toBe(true);
 
     expect(readRepoFile("src/app/(dash)/dash/p2p/[peer_id]/android/use-p2p-android-page-session.ts")).not.toContain(
       "useAndroid" + "DirectLane",
-    );
-    expect(readRepoFile("src/app/(dash)/dash/p2p/[peer_id]/android/p2p-android-native-v2-webrtc-panel.tsx")).not.toContain(
-      "direct" + "Experiment",
     );
     expect(readRepoFile("src/app/(dash)/dash/p2p/[peer_id]/android/p2p-android-viewport-control-rail.tsx")).not.toContain(
       "direct" + "Experiment",

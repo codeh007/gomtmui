@@ -725,15 +725,26 @@
        expect(awaitReady).toHaveBeenCalledTimes(1);
      });
    
-     it("returns a transport-neutral connection entry error message", () => {
-       expect(
-         describeConnectionEntryError({
-           connectionAddr: "/dns4/p2p.example.com/tcp/443/tls/ws/p2p/12D3KooWBootstrap",
-           error: new Error("connection failed"),
+      it("returns a transport-neutral connection entry error message", () => {
+        expect(
+          describeConnectionEntryError({
+            connectionAddr: "/dns4/p2p.example.com/tcp/443/tls/ws/p2p/12D3KooWBootstrap",
+            error: new Error("connection failed"),
          }),
-       ).toBe(
-         "无法连接到 连接入口 /dns4/p2p.example.com/tcp/443/tls/ws/p2p/12D3KooWBootstrap，请确认地址可用且当前网络支持该地址所需的传输。",
-       );
-     });
-   });
+        ).toBe(
+          "无法连接到 连接入口 /dns4/p2p.example.com/tcp/443/tls/ws/p2p/12D3KooWBootstrap，请确认地址可用且当前网络支持该地址所需的传输。",
+        );
+      });
+
+      it("treats unreachable seed failures as transport-neutral connection entry errors", () => {
+        expect(
+          describeConnectionEntryError({
+            connectionAddr: "/dns4/p2p.example.com/tcp/443/tls/ws/p2p/12D3KooWBootstrap",
+            error: new Error("unreachable seed"),
+          }),
+        ).toBe(
+          "无法连接到 连接入口 /dns4/p2p.example.com/tcp/443/tls/ws/p2p/12D3KooWBootstrap，请确认地址可用且当前网络支持该地址所需的传输。",
+        );
+      });
+    });
    

@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { requestAndroidPeerCapabilityTruth } from "@/lib/p2p/android-peer-api";
 import { canOpenAndroidView } from "@/lib/p2p/discovery-contracts";
 import { deriveBrowserRelayAddressFromConnectionEntry } from "@/lib/p2p/libp2p-stream";
 import { logP2PConsole } from "@/lib/p2p/p2p-console";
-import { requestPeerCapabilityTruth } from "@/lib/p2p/worker-control";
 import { normalizeBrowserConnectionAddr } from "../p2p-connection-runtime";
 import { useP2PSession } from "../use-p2p-session";
 
@@ -162,15 +162,14 @@ export function useP2PPeerPageSession(peerId: string) {
       setPeerTruthStatus("loading");
       setPeerTruthErrorMessage(null);
 
-      try {
-        rememberPeerTruth(
-          peerId,
-          await requestPeerCapabilityTruth({
-            node,
-            address,
+        try {
+          rememberPeerTruth(
             peerId,
-          }),
-        );
+            await requestAndroidPeerCapabilityTruth({
+              node,
+              address,
+            }),
+          );
         if (cancelled) {
           return;
         }
