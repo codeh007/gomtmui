@@ -3,19 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PeerCandidate } from "@/lib/p2p/discovery-contracts";
 import {
-  buildRuntimeCapabilitiesFromTruth,
-  getPeerCapabilityTruthFromRuntimeCapabilities,
-  normalizeRuntimeCapabilities,
-  type ReadPeerCapabilitiesOptions,
-  type RuntimeCapability,
   type P2PRuntimeState,
   type P2PStatus,
   getRuntimeNodeSummary,
-  type ResolvedPeerTruthMap,
 } from "./p2p-runtime-contract";
 import { getGomtmHostBridge, type GomtmHostBridge } from "./select-p2p-runtime";
-
-type ResolvedPeerCapabilitiesMap = Record<string, RuntimeCapability[]>;
 
 type AndroidHostBridgeMethod = (...args: string[]) => unknown;
 
@@ -27,14 +19,6 @@ function asRecord(value: unknown) {
 
 function asString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
-}
-
-function getResolvedPeerCapabilities(cache: ResolvedPeerCapabilitiesMap, peerId: string) {
-  const normalizedPeerId = peerId.trim();
-  if (normalizedPeerId === "") {
-    return null;
-  }
-  return Object.hasOwn(cache, normalizedPeerId) ? (cache[normalizedPeerId] ?? []) : null;
 }
 
 function getRuntimeIdentity(params: {
@@ -142,16 +126,9 @@ export function useAndroidHostRuntime(): P2PRuntimeState {
   const [peerCandidates, setPeerCandidates] = useState<PeerCandidate[]>([]);
   const [currentNode, setCurrentNode] = useState<ReturnType<typeof getRuntimeNodeSummary>>(null);
   const [diagnostics, setDiagnostics] = useState<Record<string, unknown>>({});
-  const resolvedPeerCapabilitiesRef = useRef<ResolvedPeerCapabilitiesMap>({});
-  const resolvedPeerTruthRef = useRef<ResolvedPeerTruthMap>({});
   const runtimeIdentityRef = useRef<string | null>(null);
   const didHydrateServerUrlInputRef = useRef(false);
   const serverUrlInputRef = useRef("");
-
-  const clearResolvedPeerState = useCallback(() => {
-    resolvedPeerCapabilitiesRef.current = {};
-    resolvedPeerTruthRef.current = {};
-  }, []);
 
   const syncCanonicalServerUrl = useCallback(
     (nextServerUrl: string, options?: { forceInputSync?: boolean }) => {
@@ -229,9 +206,6 @@ export function useAndroidHostRuntime(): P2PRuntimeState {
         serverUrl: nextServerUrl,
       });
 
-      if (runtimeIdentityRef.current != null && runtimeIdentityRef.current !== nextRuntimeIdentity) {
-        clearResolvedPeerState();
-      }
       runtimeIdentityRef.current = nextRuntimeIdentity;
 
       syncCanonicalServerUrl(nextServerUrl);
@@ -249,7 +223,7 @@ export function useAndroidHostRuntime(): P2PRuntimeState {
       setStatus("error");
       setErrorMessage(error instanceof Error ? error.message : String(error));
     }
-  }, [clearResolvedPeerState, syncCanonicalServerUrl]);
+  }, [syncCanonicalServerUrl]);
 
   useEffect(() => {
     let cancelled = false;
@@ -293,37 +267,8 @@ export function useAndroidHostRuntime(): P2PRuntimeState {
     };
   }, [hydrateHostSnapshot]);
 
-  const replaceResolvedPeerCapabilities = useCallback((peerId: string, capabilities: RuntimeCapability[]) => {
-    const normalizedPeerId = peerId.trim();
-    if (normalizedPeerId === "") {
-      return null;
-    }
-
-    resolvedPeerCapabilitiesRef.current = {
-      ...resolvedPeerCapabilitiesRef.current,
-      [normalizedPeerId]: capabilities,
-    };
-
-    const truth = getPeerCapabilityTruthFromRuntimeCapabilities(capabilities);
-    if (truth == null) {
-      if (Object.hasOwn(resolvedPeerTruthRef.current, normalizedPeerId)) {
-        const nextTruth = { ...resolvedPeerTruthRef.current };
-        delete nextTruth[normalizedPeerId];
-        resolvedPeerTruthRef.current = nextTruth;
-      }
-      return null;
-    }
-
-    resolvedPeerTruthRef.current = {
-      ...resolvedPeerTruthRef.current,
-      [normalizedPeerId]: truth,
-    };
-    return truth;
-  }, []);
-
   const saveConnection = useCallback(async (connection: string) => {
     const normalized = connection.trim();
-    clearResolvedPeerState();
     runtimeIdentityRef.current = null;
     syncCanonicalServerUrl(normalized, { forceInputSync: true });
     setStatus(normalized === "" ? "needs-server-url" : "discovering");
@@ -341,60 +286,7 @@ export function useAndroidHostRuntime(): P2PRuntimeState {
       );
     }
     await hydrateHostSnapshot();
-  }, [clearResolvedPeerState, hydrateHostSnapshot, syncCanonicalServerUrl]);
-
-  const readPeerCapabilities = useCallback(
-    async (peerId: string, options?: ReadPeerCapabilitiesOptions) => {
-      const shouldForceRefresh = options?.forceRefresh === true;
-      if (!shouldForceRefresh) {
-        const cachedCapabilities = getResolvedPeerCapabilities(resolvedPeerCapabilitiesRef.current, peerId);
-        if (cachedCapabilities != null) {
-          return cachedCapabilities;
-        }
-      }
-
-      let capabilities = [] as ReturnType<typeof normalizeRuntimeCapabilities>;
-
-      if (typeof window !== "undefined") {
-        const bridge = getGomtmHostBridge(window);
-        if (bridge?.getPeerCapabilities != null) {
-          capabilities = normalizeRuntimeCapabilities(await resolveBridgeMethod(bridge, "getPeerCapabilities", peerId));
-        }
-      }
-
-      if (capabilities.length > 0 || shouldForceRefresh) {
-        replaceResolvedPeerCapabilities(peerId, capabilities);
-        return capabilities;
-      }
-
-      const truth = resolvedPeerTruthRef.current[peerId.trim()];
-      if (truth == null) {
-        return capabilities;
-      }
-
-      return buildRuntimeCapabilitiesFromTruth(truth);
-    },
-    [replaceResolvedPeerCapabilities],
-  );
-
-  const resolvePeerCapabilityReadAddress = useCallback(
-    async (peerId: string) => {
-      const targetPeer = peerCandidates.find((candidate) => candidate.peerId === peerId) ?? null;
-      const targetAddress = targetPeer?.multiaddrs.find((value) => value.trim() !== "") ?? peerId.trim();
-      return targetAddress === "" ? null : targetAddress;
-    },
-    [peerCandidates],
-  );
-
-  const getResolvedPeerTruthForRuntime = useCallback(
-    (peerId: string) => resolvedPeerTruthRef.current[peerId.trim()] ?? null,
-    [],
-  );
-
-  const getResolvedPeerCapabilitiesForRuntime = useCallback(
-    (peerId: string) => getResolvedPeerCapabilities(resolvedPeerCapabilitiesRef.current, peerId),
-    [],
-  );
+  }, [hydrateHostSnapshot, syncCanonicalServerUrl]);
 
   const peers = useMemo(
     () => peerCandidates.map((peer) => getRuntimeNodeSummary(peer) ?? { peerId: peer.peerId, multiaddrs: peer.multiaddrs, discoveredAt: peer.lastDiscoveredAt }),
@@ -407,9 +299,6 @@ export function useAndroidHostRuntime(): P2PRuntimeState {
     peers,
     status,
     diagnostics,
-    getResolvedPeerCapabilities: getResolvedPeerCapabilitiesForRuntime,
-    readPeerCapabilities,
-    resolvePeerCapabilityReadAddress,
     saveConnection,
     activeConnectionAddr,
     canConnect: serverUrl.trim() !== "" && status !== "loading" && status !== "joining" && status !== "discovering",
@@ -417,12 +306,11 @@ export function useAndroidHostRuntime(): P2PRuntimeState {
     debugConnectPhase: "android-host",
     debugLastError: null,
     errorMessage,
-    getResolvedPeerTruth: getResolvedPeerTruthForRuntime,
     isConnected: status === "discovering" || status === "peer_candidates_ready",
     peerCandidates,
     saveServerUrl: async () => saveConnection(serverUrlInput),
     serverUrl,
     serverUrlInput,
     setServerUrlInput: setServerUrlInputValue,
-  };
+  } satisfies P2PRuntimeState;
 }

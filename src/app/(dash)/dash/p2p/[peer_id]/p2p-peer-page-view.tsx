@@ -36,6 +36,13 @@ function toneForPeerTruth(status: ReturnType<typeof useP2PPeerPageSession>["peer
   return "secondary" as const;
 }
 
+function canOpenMinimalRemote(capability: { name: string; state?: string }) {
+  return (
+    capability.name.trim().toLowerCase() === "android.native_remote_v2" &&
+    capability.state?.trim().toLowerCase() === "available"
+  );
+}
+
 export function P2PPeerPageView({ peerId }: { peerId: string }) {
   const session = useP2PPeerPageSession(peerId);
   const networkStatusMeta = getP2PStatusMeta(session.status);
@@ -82,12 +89,6 @@ export function P2PPeerPageView({ peerId }: { peerId: string }) {
                 </Badge>
                 <span>{session.peer?.lastDiscoveredAt?.trim() ? `最近发现 ${session.peer.lastDiscoveredAt}` : "等待发现时间"}</span>
               </div>
-              {session.targetAddress ? (
-                <div>
-                  <div className="text-[11px] uppercase tracking-wide">能力读取入口</div>
-                  <div className="mt-1 break-all font-mono text-foreground">{session.targetAddress}</div>
-                </div>
-              ) : null}
             </div>
           </CardHeader>
 
@@ -102,7 +103,7 @@ export function P2PPeerPageView({ peerId }: { peerId: string }) {
               variant="outline"
               size="sm"
               onClick={() => session.refreshPeerTruth()}
-              disabled={!session.isConnected || session.peer == null || session.peerTruthStatus === "loading"}
+              disabled={!session.isConnected || session.peerTruthStatus === "loading"}
             >
               <RefreshCw className="mr-2 size-4" />
               刷新能力
@@ -129,9 +130,9 @@ export function P2PPeerPageView({ peerId }: { peerId: string }) {
             <CardTitle className="text-base">节点能力</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 pt-0">
-            {session.peer == null ? (
+            {!session.isConnected ? (
               <div className="rounded-xl border border-dashed px-4 py-8 text-sm text-muted-foreground">
-                {session.isConnected ? `尚未发现 ${peerId}` : "请先回到 P2P 主页面连接服务器。"}
+                请先回到 P2P 主页面连接服务器。
               </div>
             ) : session.capabilities.length === 0 ? (
               <div className="rounded-xl border border-dashed px-4 py-8 text-sm text-muted-foreground">
@@ -145,6 +146,14 @@ export function P2PPeerPageView({ peerId }: { peerId: string }) {
                     <Badge variant={capability.state?.trim().toLowerCase() === "available" ? "default" : "secondary"}>
                       {capability.state || "unknown"}
                     </Badge>
+                    {canOpenMinimalRemote(capability) ? (
+                      <Link
+                        href={`/dash/p2p/${peerId}/remote`}
+                        className="inline-flex h-8 items-center justify-center rounded-md border px-3 text-sm font-medium transition-colors hover:bg-muted"
+                      >
+                        打开远控
+                      </Link>
+                    ) : null}
                   </div>
                   {capability.reason ? <p className="mt-2 text-sm text-muted-foreground">原因：{capability.reason}</p> : null}
                 </article>

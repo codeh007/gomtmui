@@ -5,7 +5,6 @@ type MaybePromise<T> = T | Promise<T>;
 export type GomtmHostBridge = {
   getConnectionConfig?: () => MaybePromise<unknown>;
   getHostInfo?: () => MaybePromise<unknown>;
-  getPeerCapabilities?: (peerId: string) => MaybePromise<unknown>;
   getRuntimeSnapshot?: () => MaybePromise<unknown>;
   listDiscoveredPeers?: () => MaybePromise<unknown>;
   saveConnectionConfig?: (payloadJson: string) => MaybePromise<unknown>;

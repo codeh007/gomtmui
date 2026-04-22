@@ -4,10 +4,19 @@ import type { ButtonHTMLAttributes, HTMLAttributes, ReactNode } from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const readPeerCapabilities = vi.fn();
-const getResolvedPeerCapabilities = vi.fn(() => null);
-const getResolvedPeerTruth = vi.fn(() => null);
-let cachedCapabilities: Array<{ name: string; reason?: string; state?: string }> | null = null;
+const fetchMock = vi.fn();
+const originalFetch = globalThis.fetch;
+
+function mockCapabilityResponse(capabilities: Array<{ name: string; reason?: string; state?: string }>) {
+  fetchMock.mockResolvedValue(
+    new Response(JSON.stringify(capabilities), {
+      headers: {
+        "content-type": "application/json",
+      },
+      status: 200,
+    }),
+  );
+}
 
 const runtimeState = {
   activeConnectionAddr: "/dns4/bootstrap.example.com/tcp/443/tls/ws/p2p/12D3KooWBootstrap",
@@ -18,11 +27,6 @@ const runtimeState = {
   debugLastError: null,
   diagnostics: { runtime_status: "ready" },
   errorMessage: null,
-  getResolvedPeerCapabilities: (peerId: string) => {
-    void peerId;
-    return getResolvedPeerCapabilities(peerId) ?? cachedCapabilities;
-  },
-  getResolvedPeerTruth,
   hostKind: "android-host" as const,
   isConnected: true,
   peerCandidates: [
@@ -33,7 +37,6 @@ const runtimeState = {
     },
   ],
   peers: [],
-  readPeerCapabilities,
   saveConnection: vi.fn(async () => {}),
   saveServerUrl: vi.fn(async () => {}),
   serverUrl: "https://gomtm.example.com",
@@ -98,19 +101,25 @@ import { P2PPeerPageView } from "./p2p-peer-page-view";
 describe("P2PPeerPageView hard cut", () => {
   afterEach(() => {
     cleanup();
-    readPeerCapabilities.mockReset();
-    cachedCapabilities = null;
-    getResolvedPeerCapabilities.mockReset();
-    getResolvedPeerCapabilities.mockReturnValue(null);
-    getResolvedPeerTruth.mockReset();
-    getResolvedPeerTruth.mockReturnValue(null);
+    fetchMock.mockReset();
+    Object.defineProperty(globalThis, "fetch", {
+      configurable: true,
+      value: originalFetch,
+      writable: true,
+    });
   });
 
-  it("renders generic capability descriptors before diagnostics and removes the Android subpage entry", async () => {
-    readPeerCapabilities.mockResolvedValue([
+  it("renders generic capability descriptors before diagnostics and no longer shows the old capability entrypoint text", async () => {
+    mockCapabilityResponse([
       { name: "android.native_remote_v2_webrtc", reason: "", state: "available" },
       { name: "linux.web_ssh", reason: "not_supported", state: "unavailable" },
     ]);
+
+    Object.defineProperty(globalThis, "fetch", {
+      configurable: true,
+      value: fetchMock,
+      writable: true,
+    });
 
     render(<P2PPeerPageView peerId="12D3KooWPeer" />);
 
@@ -124,23 +133,52 @@ describe("P2PPeerPageView hard cut", () => {
 
     expect(screen.getByText("android.native_remote_v2_webrtc")).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Android" })).toBeNull();
-    expect(readPeerCapabilities).toHaveBeenCalledWith("12D3KooWPeer", undefined);
+    expect(screen.queryByText("能力读取入口")).toBeNull();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://gomtm.example.com/api/p2p/peers/12D3KooWPeer/capabilities",
+      {
+        cache: "no-store",
+        credentials: "omit",
+        method: "GET",
+      },
+    );
   });
 
-  it("renders cached generic capability descriptors without refetch collapsing them to Android truth", async () => {
-    cachedCapabilities = [
-      { name: "android.native_remote_v2_webrtc", reason: "", state: "available" },
-      { name: "linux.web_ssh", reason: "not_supported", state: "unavailable" },
-    ];
-    getResolvedPeerTruth.mockReturnValue({
-      remoteControl: {
-        capabilities: {
-          nativeRemoteV2WebRTC: {
-            reason: "",
-            state: "available",
+  it("re-reads capabilities from the gomtm server operator api on manual refresh", async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            { name: "android.native_remote_v2_webrtc", reason: "", state: "available" },
+            { name: "linux.web_ssh", reason: "cached", state: "unavailable" },
+          ]),
+          {
+            headers: {
+              "content-type": "application/json",
+            },
+            status: 200,
           },
-        },
-      },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            { name: "android.native_remote_v2_webrtc", reason: "", state: "available" },
+            { name: "linux.web_ssh", reason: "fresh", state: "available" },
+          ]),
+          {
+            headers: {
+              "content-type": "application/json",
+            },
+            status: 200,
+          },
+        ),
+      );
+
+    Object.defineProperty(globalThis, "fetch", {
+      configurable: true,
+      value: fetchMock,
+      writable: true,
     });
 
     render(<P2PPeerPageView peerId="12D3KooWPeer" />);
@@ -148,67 +186,27 @@ describe("P2PPeerPageView hard cut", () => {
     await waitFor(() => {
       expect(screen.getByText("linux.web_ssh")).toBeTruthy();
     });
-
-    expect(readPeerCapabilities).not.toHaveBeenCalled();
-  });
-
-  it("re-reads capabilities on manual refresh even when cached capability data already exists", async () => {
-    cachedCapabilities = [
-      { name: "android.native_remote_v2_webrtc", reason: "", state: "available" },
-      { name: "linux.web_ssh", reason: "cached", state: "unavailable" },
-    ];
-    getResolvedPeerTruth.mockReturnValue({
-      remoteControl: {
-        capabilities: {
-          nativeRemoteV2WebRTC: {
-            reason: "",
-            state: "available",
-          },
-        },
-      },
-    });
-    readPeerCapabilities.mockResolvedValue([
-      { name: "android.native_remote_v2_webrtc", reason: "", state: "available" },
-      { name: "linux.web_ssh", reason: "fresh", state: "available" },
-    ]);
-
-    render(<P2PPeerPageView peerId="12D3KooWPeer" />);
-
-    await waitFor(() => {
-      expect(screen.getByText("linux.web_ssh")).toBeTruthy();
-    });
-
-    expect(readPeerCapabilities).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "刷新能力" }));
 
     await waitFor(() => {
-      expect(readPeerCapabilities).toHaveBeenCalledWith("12D3KooWPeer", { forceRefresh: true });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
     });
   });
 
-  it("shows later background-hydrated capabilities after an empty probe without reconnect", async () => {
-    readPeerCapabilities.mockResolvedValue([]);
+  it("renders an open remote link when android.native_remote_v2 is available", async () => {
+    mockCapabilityResponse([{ name: "android.native_remote_v2", reason: "ready", state: "available" }]);
 
-    const rendered = render(<P2PPeerPageView peerId="12D3KooWPeer" />);
-
-    await waitFor(() => {
-      expect(screen.getByText("当前没有可展示的节点能力。")).toBeTruthy();
+    Object.defineProperty(globalThis, "fetch", {
+      configurable: true,
+      value: fetchMock,
+      writable: true,
     });
 
-    expect(screen.queryByText("目标节点未返回能力真相。")).toBeNull();
+    render(<P2PPeerPageView peerId="12D3KooWPeer" />);
 
-    cachedCapabilities = [
-      { name: "android.native_remote_v2_webrtc", reason: "", state: "available" },
-      { name: "linux.web_ssh", reason: "not_supported", state: "unavailable" },
-    ];
+    const remoteLink = await screen.findByRole("link", { name: "打开远控" });
 
-    rendered.rerender(<P2PPeerPageView peerId="12D3KooWPeer" />);
-
-    await waitFor(() => {
-      expect(screen.getByText("linux.web_ssh")).toBeTruthy();
-    });
-
-    expect(runtimeState.connect).not.toHaveBeenCalled();
+    expect(remoteLink.getAttribute("href")).toBe("/dash/p2p/12D3KooWPeer/remote");
   });
 });

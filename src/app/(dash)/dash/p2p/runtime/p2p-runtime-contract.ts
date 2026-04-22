@@ -5,8 +5,7 @@ import {
   type PeerCapabilityDescriptor,
   type PeerCapabilityTruth,
 } from "@/lib/p2p/discovery-contracts";
-import { deriveBrowserRelayAddressFromConnectionEntry, getPreferredBrowserConnectionPath } from "@/lib/p2p/libp2p-stream";
-import { normalizeBrowserConnectionAddr } from "../p2p-connection-runtime";
+import { getPreferredBrowserConnectionPath } from "@/lib/p2p/libp2p-stream";
 
 export type P2PHostKind = "browser" | "android-host";
 
@@ -29,19 +28,12 @@ export type P2PStatus =
 
 export type ResolvedPeerTruthMap = Record<string, PeerCapabilityTruth>;
 
-export type ReadPeerCapabilitiesOptions = {
-  forceRefresh?: boolean;
-};
-
 export type P2PRuntimeState = {
   hostKind: P2PHostKind;
   currentNode: RuntimeNodeSummary | null;
   peers: RuntimeNodeSummary[];
   status: P2PStatus;
   diagnostics: Record<string, unknown>;
-  getResolvedPeerCapabilities?: (peerId: string) => RuntimeCapability[] | null;
-  readPeerCapabilities: (peerId: string, options?: ReadPeerCapabilitiesOptions) => Promise<RuntimeCapability[]>;
-  resolvePeerCapabilityReadAddress?: (peerId: string) => Promise<string | null>;
   saveConnection: (connection: string) => Promise<void>;
   activeConnectionAddr: string;
   canConnect: boolean;
@@ -49,7 +41,6 @@ export type P2PRuntimeState = {
   debugConnectPhase: string;
   debugLastError: string | null;
   errorMessage: string | null;
-  getResolvedPeerTruth: (peerId: string) => PeerCapabilityTruth | null;
   isConnected: boolean;
   peerCandidates: PeerCandidate[];
   saveServerUrl: () => Promise<void>;
@@ -124,38 +115,6 @@ export function formatConnectionPathLabel(path: "direct" | "relay" | null | unde
 
 export function getConnectionPathLabel(address: string | null | undefined) {
   return formatConnectionPathLabel((address?.trim() ?? "") === "" ? null : "relay");
-}
-
-export function pickObservedRelayBrowserAddress(multiaddrs: string[]) {
-  const normalized = multiaddrs
-    .map((value) => normalizeBrowserConnectionAddr(value.trim()))
-    .filter((value) => value.startsWith("/"));
-  return (
-    normalized.find((value) => value.includes("/p2p-circuit/") && value.includes("/webtransport/")) ??
-    normalized.find((value) => value.includes("/p2p-circuit/")) ??
-    null
-  );
-}
-
-export function resolveBrowserCapabilityProbeAddress(params: {
-  activeConnectionAddr: string | null | undefined;
-  dialableAddress: string | null | undefined;
-  multiaddrs: string[];
-  peerId: string;
-}) {
-  const dialableAddress = normalizeBrowserConnectionAddr(params.dialableAddress?.trim() ?? "");
-  if (dialableAddress !== "") {
-    return dialableAddress;
-  }
-
-  return (
-    pickObservedRelayBrowserAddress(params.multiaddrs) ??
-    deriveBrowserRelayAddressFromConnectionEntry({
-      activeConnectionAddr: params.activeConnectionAddr,
-      multiaddrs: params.multiaddrs,
-      peerId: params.peerId,
-    })
-  );
 }
 
 export function getPreferredPeerConnectionPathLabel(multiaddrs: string[], connectionPath?: "direct" | "relay" | null) {
