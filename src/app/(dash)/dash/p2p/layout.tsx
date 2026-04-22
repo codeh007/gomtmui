@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import { P2PSessionProvider } from "./use-p2p-session";
+import { P2PRuntimeProvider } from "./runtime/p2p-runtime-provider";
 
 export default function P2PLayout({ children }: { children: ReactNode }) {
-  return <P2PSessionProvider>{children}</P2PSessionProvider>;
+  return <P2PRuntimeProvider>{children}</P2PRuntimeProvider>;
 }

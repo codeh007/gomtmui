@@ -2,12 +2,7 @@
 
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  __resetP2PSessionDepsForTest,
-  __setP2PSessionDepsForTest,
-  P2PSessionProvider,
-  useP2PSession,
-} from "./use-p2p-session";
+import { P2PRuntimeProvider, useP2PRuntime } from "./runtime/p2p-runtime-provider";
 
 vi.mock("./use-live-browser-connection-truth", () => ({
   useLiveBrowserConnectionTruth: vi.fn(() => ({
@@ -24,7 +19,7 @@ vi.mock("./use-live-browser-connection-truth", () => ({
 import { useLiveBrowserConnectionTruth } from "./use-live-browser-connection-truth";
 
 function SessionProbe() {
-  const session = useP2PSession();
+  const session = useP2PRuntime();
 
   return (
     <>
@@ -43,11 +38,10 @@ function SessionProbe() {
 afterEach(() => {
   cleanup();
   localStorage.clear();
-  __resetP2PSessionDepsForTest();
   vi.restoreAllMocks();
 });
 
-describe("P2PSessionProvider", () => {
+describe("P2PRuntimeProvider", () => {
   it("当后端未返回浏览器可用 connection truth 时停在 error 而不是 needs-server-url", async () => {
     const serverUrl = "https://gomtm2.yuepa8.com";
 
@@ -75,9 +69,9 @@ describe("P2PSessionProvider", () => {
     localStorage.setItem("gomtm:p2p:server-url", serverUrl);
 
     render(
-      <P2PSessionProvider>
+      <P2PRuntimeProvider>
         <SessionProbe />
-      </P2PSessionProvider>,
+      </P2PRuntimeProvider>,
     );
 
     await waitFor(() => {

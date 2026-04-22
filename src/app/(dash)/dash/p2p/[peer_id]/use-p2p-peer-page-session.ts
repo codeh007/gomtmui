@@ -1,74 +1,67 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { requestAndroidPeerCapabilityTruth } from "@/lib/p2p/android-peer-api";
-import { canOpenAndroidView } from "@/lib/p2p/discovery-contracts";
-import { deriveBrowserRelayAddressFromConnectionEntry } from "@/lib/p2p/libp2p-stream";
+import { canOpenAndroidView, type PeerCapabilityTruth } from "@/lib/p2p/discovery-contracts";
 import { logP2PConsole } from "@/lib/p2p/p2p-console";
-import { normalizeBrowserConnectionAddr } from "../p2p-connection-runtime";
-import { useP2PSession } from "../use-p2p-session";
+import {
+  buildRuntimeCapabilitiesFromTruth,
+  getPeerCapabilityTruthFromRuntimeCapabilities,
+  type RuntimeCapability,
+} from "../runtime/p2p-runtime-contract";
+import { useP2PRuntime } from "../runtime/p2p-runtime-provider";
 
 export type PeerTruthStatus = "idle" | "loading" | "ready" | "error";
 
-function resolveCurrentNodePeerId(node: unknown) {
-  if (node == null || typeof node !== "object") {
-    return "";
-  }
-
-  const peerIdCandidate = (node as { id?: unknown; peerId?: unknown }).peerId ?? (node as { id?: unknown }).id;
-  if (typeof peerIdCandidate === "string") {
-    return peerIdCandidate.trim();
-  }
-  if (peerIdCandidate != null && typeof (peerIdCandidate as { toString: () => string }).toString === "function") {
-    return (peerIdCandidate as { toString: () => string }).toString().trim();
-  }
-
-  return "";
-}
-
-function pickObservedRelayBrowserAddress(multiaddrs: string[]) {
-  const normalized = multiaddrs
-    .map((value) => normalizeBrowserConnectionAddr(value.trim()))
-    .filter((value) => value.startsWith("/"));
-  return (
-    normalized.find((value) => value.includes("/p2p-circuit/") && value.includes("/webtransport/")) ??
-    normalized.find((value) => value.includes("/p2p-circuit/")) ??
-    null
-  );
-}
-
 export function useP2PPeerPageSession(peerId: string) {
-  const p2pSession = useP2PSession();
+  const p2pSession = useP2PRuntime();
+  const hostKind = p2pSession.hostKind;
+  const getResolvedPeerCapabilities = p2pSession.getResolvedPeerCapabilities;
   const isConnected = p2pSession.isConnected;
   const getResolvedPeerTruth = p2pSession.getResolvedPeerTruth;
-  const rememberPeerTruth = p2pSession.rememberPeerTruth;
-  const resolveDialableAddress = p2pSession.resolveDialableAddress;
-  const currentNode = p2pSession.getCurrentNode();
-  const currentNodePeerId = resolveCurrentNodePeerId(currentNode);
+  const readPeerCapabilities = p2pSession.readPeerCapabilities;
+  const resolvePeerCapabilityReadAddress = p2pSession.resolvePeerCapabilityReadAddress;
   const [peerTruthStatus, setPeerTruthStatus] = useState<PeerTruthStatus>("idle");
   const [peerTruthErrorMessage, setPeerTruthErrorMessage] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [targetAddress, setTargetAddress] = useState<string | null>(null);
   const [stableTargetPeer, setStableTargetPeer] = useState<ReturnType<typeof useMemoTargetPeer> | null>(null);
-  const lastResolvedTruthContextRef = useRef<{ controllerPeerId: string; targetAddress: string } | null>(null);
+  const [capabilityDescriptorsOverride, setCapabilityDescriptorsOverride] = useState<RuntimeCapability[] | null>(null);
+  const [capabilityTruthOverride, setCapabilityTruthOverride] = useState<PeerCapabilityTruth | null>(null);
   const targetAddressResolveSeqRef = useRef(0);
+  const runtimeSessionIdentity = [
+    hostKind,
+    p2pSession.serverUrl.trim(),
+    p2pSession.activeConnectionAddr.trim(),
+    p2pSession.currentNode?.peerId ?? "",
+  ].join("|");
 
   const liveTargetPeer = useMemoTargetPeer(p2pSession.peerCandidates, peerId);
   const targetPeer = liveTargetPeer ?? stableTargetPeer;
 
   useEffect(() => {
-    if (!isConnected || currentNode == null) {
+    targetAddressResolveSeqRef.current += 1;
+    setStableTargetPeer(null);
+    setTargetAddress(null);
+    setCapabilityDescriptorsOverride(null);
+    setCapabilityTruthOverride(null);
+    setPeerTruthStatus("idle");
+    setPeerTruthErrorMessage(null);
+    setRefreshKey(0);
+  }, [peerId, runtimeSessionIdentity]);
+
+  useEffect(() => {
+    if (!isConnected) {
+      setCapabilityDescriptorsOverride(null);
       setStableTargetPeer(null);
       return;
     }
     if (liveTargetPeer != null) {
       setStableTargetPeer(liveTargetPeer);
     }
-  }, [currentNode, isConnected, liveTargetPeer]);
+  }, [isConnected, liveTargetPeer]);
 
-  const capabilityTruth = getResolvedPeerTruth(peerId);
-  const isPeerTruthLoading =
-    targetPeer != null && ["idle", "loading"].includes(peerTruthStatus) && capabilityTruth == null;
+  const capabilityTruth = capabilityTruthOverride ?? getResolvedPeerTruth(peerId);
+  const cachedCapabilities = getResolvedPeerCapabilities?.(peerId) ?? null;
   const hasPeerTruthError = peerTruthStatus === "error";
 
   useEffect(() => {
@@ -76,38 +69,50 @@ export function useP2PPeerPageSession(peerId: string) {
     targetAddressResolveSeqRef.current = requestSeq;
 
     async function resolveTargetAddress() {
-      if (!isConnected || currentNode == null) {
+      if (!isConnected || targetPeer == null) {
         setTargetAddress(null);
         return;
       }
-      if (targetPeer == null) {
-        setTargetAddress(null);
+
+      const fallbackTargetAddress = targetPeer.multiaddrs.find((value) => value.trim() !== "") ?? peerId;
+
+      if (resolvePeerCapabilityReadAddress != null) {
+        const resolvedAddress = await resolvePeerCapabilityReadAddress(peerId);
+        if (requestSeq === targetAddressResolveSeqRef.current) {
+          const normalizedResolvedAddress = resolvedAddress?.trim() ?? "";
+          setTargetAddress(
+            normalizedResolvedAddress === ""
+              ? hostKind === "android-host"
+                ? fallbackTargetAddress
+                : null
+              : resolvedAddress,
+          );
+        }
         return;
       }
-      const dialableAddress = normalizeBrowserConnectionAddr((await resolveDialableAddress(targetPeer.multiaddrs)) ?? "");
-      const observedRelayAddress = pickObservedRelayBrowserAddress(targetPeer.multiaddrs);
-      const address =
-        dialableAddress !== ""
-          ? dialableAddress
-          : (observedRelayAddress ??
-            deriveBrowserRelayAddressFromConnectionEntry({
-              activeConnectionAddr: p2pSession.activeConnectionAddr,
-              multiaddrs: targetPeer.multiaddrs,
-              peerId,
-            }));
+
+      if (hostKind === "browser") {
+        if (requestSeq === targetAddressResolveSeqRef.current) {
+          setTargetAddress(null);
+        }
+        return;
+      }
+
       logP2PConsole(
         "debug",
         "[peer-page] resolveTargetAddress",
         {
           activeConnectionAddr: p2pSession.activeConnectionAddr,
+          hostKind,
           multiaddrs: targetPeer.multiaddrs,
           peerId,
-          resolvedAddress: address,
+          resolvedAddress: fallbackTargetAddress,
         },
         { verboseOnly: true },
       );
+
       if (requestSeq === targetAddressResolveSeqRef.current) {
-        setTargetAddress((current) => address ?? current);
+        setTargetAddress(fallbackTargetAddress);
       }
     }
 
@@ -118,63 +123,47 @@ export function useP2PPeerPageSession(peerId: string) {
         targetAddressResolveSeqRef.current += 1;
       }
     };
-  }, [currentNode, isConnected, p2pSession.activeConnectionAddr, peerId, resolveDialableAddress, targetPeer]);
+  }, [hostKind, isConnected, p2pSession.activeConnectionAddr, peerId, resolvePeerCapabilityReadAddress, targetPeer]);
 
   useEffect(() => {
-    if (!isConnected || currentNode == null || targetPeer == null) {
-      lastResolvedTruthContextRef.current = null;
+    if (!isConnected || targetPeer == null) {
+      setCapabilityDescriptorsOverride(null);
+      setCapabilityTruthOverride(null);
       setPeerTruthStatus("idle");
       setPeerTruthErrorMessage(null);
       return;
     }
 
-    if (targetAddress == null) {
-      lastResolvedTruthContextRef.current = null;
+    if (hostKind === "browser" && targetAddress == null) {
       setPeerTruthStatus("error");
       setPeerTruthErrorMessage("目标节点当前没有 browser-dialable multiaddr，无法读取节点能力。");
       return;
     }
 
-    const node = currentNode;
-    const address = targetAddress;
-    const nextTruthContext = {
-      controllerPeerId: currentNodePeerId,
-      targetAddress: address,
-    };
-
     let cancelled = false;
 
     async function loadPeerTruth() {
-      if (refreshKey === 0 && capabilityTruth != null) {
-        const lastResolvedTruthContext = lastResolvedTruthContextRef.current;
-        if (
-          lastResolvedTruthContext == null ||
-          (lastResolvedTruthContext.controllerPeerId === nextTruthContext.controllerPeerId &&
-            lastResolvedTruthContext.targetAddress === nextTruthContext.targetAddress)
-        ) {
-          lastResolvedTruthContextRef.current = nextTruthContext;
-          setPeerTruthStatus("ready");
-          setPeerTruthErrorMessage(null);
-          return;
-        }
+      if (refreshKey === 0 && (capabilityDescriptorsOverride != null || cachedCapabilities != null)) {
+        setPeerTruthStatus("ready");
+        setPeerTruthErrorMessage(null);
+        return;
       }
 
       setPeerTruthStatus("loading");
       setPeerTruthErrorMessage(null);
 
-        try {
-          rememberPeerTruth(
-            peerId,
-            await requestAndroidPeerCapabilityTruth({
-              node,
-              address,
-            }),
-          );
+      try {
+        const capabilities = await readPeerCapabilities(peerId, refreshKey === 0 ? undefined : { forceRefresh: true });
         if (cancelled) {
           return;
         }
-        lastResolvedTruthContextRef.current = nextTruthContext;
+
+        setCapabilityDescriptorsOverride(capabilities);
+        const nextTruth = getPeerCapabilityTruthFromRuntimeCapabilities(capabilities) ?? getResolvedPeerTruth(peerId);
+
+        setCapabilityTruthOverride(nextTruth ?? null);
         setPeerTruthStatus("ready");
+        setPeerTruthErrorMessage(null);
         if (refreshKey !== 0) {
           setRefreshKey(0);
         }
@@ -182,6 +171,7 @@ export function useP2PPeerPageSession(peerId: string) {
         if (cancelled) {
           return;
         }
+        setCapabilityDescriptorsOverride(null);
         setPeerTruthStatus("error");
         setPeerTruthErrorMessage(error instanceof Error ? error.message : String(error));
       }
@@ -193,25 +183,43 @@ export function useP2PPeerPageSession(peerId: string) {
       cancelled = true;
     };
   }, [
+    cachedCapabilities,
+    capabilityDescriptorsOverride,
     capabilityTruth,
-    currentNode,
-    currentNodePeerId,
+    hostKind,
     isConnected,
     peerId,
+    readPeerCapabilities,
     refreshKey,
-    rememberPeerTruth,
     targetAddress,
     targetPeer?.peerId,
   ]);
 
+  const capabilities = cachedCapabilities ?? capabilityDescriptorsOverride ?? buildRuntimeCapabilitiesFromTruth(capabilityTruth);
   const canOpenAndroid = canOpenAndroidView(capabilityTruth?.remoteControl);
+  const peer = targetPeer;
+  const hasCapabilityPayload = capabilityTruth != null || capabilities.length > 0;
+  const diagnostics = {
+    ...p2pSession.diagnostics,
+    activeConnectionAddr: p2pSession.activeConnectionAddr || undefined,
+    errorMessage: p2pSession.errorMessage || undefined,
+    hostKind,
+    peerTruthErrorMessage: peerTruthErrorMessage || undefined,
+    peerTruthStatus,
+    status: p2pSession.status,
+    targetAddress: targetAddress || undefined,
+  } satisfies Record<string, unknown>;
+  const isPeerTruthLoading = targetPeer != null && ["idle", "loading"].includes(peerTruthStatus) && !hasCapabilityPayload;
 
   return {
     ...p2pSession,
     capabilityTruth,
     canOpenAndroid,
+    capabilities,
+    diagnostics,
     hasPeerTruthError,
     isPeerTruthLoading,
+    peer,
     peerId,
     peerTruthErrorMessage,
     peerTruthStatus,
@@ -221,6 +229,6 @@ export function useP2PPeerPageSession(peerId: string) {
   };
 }
 
-function useMemoTargetPeer(peerCandidates: ReturnType<typeof useP2PSession>["peerCandidates"], peerId: string) {
+function useMemoTargetPeer(peerCandidates: ReturnType<typeof useP2PRuntime>["peerCandidates"], peerId: string) {
   return peerCandidates.find((candidate) => candidate.peerId === peerId) ?? null;
 }

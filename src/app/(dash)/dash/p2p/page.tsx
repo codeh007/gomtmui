@@ -1,135 +1,18 @@
 "use client";
 
-import {
-  AlertTriangle,
-  ChevronDown,
-  Cpu,
-  Info,
-  LoaderCircle,
-  MoreHorizontal,
-  Smartphone,
-  Waypoints,
-  Wifi,
-} from "lucide-react";
 import { Badge } from "mtxuilib/ui/badge";
 import { Button } from "mtxuilib/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "mtxuilib/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "mtxuilib/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "mtxuilib/ui/dropdown-menu";
+import { Card, CardContent, CardHeader } from "mtxuilib/ui/card";
 import { Input } from "mtxuilib/ui/input";
-import { Item, ItemActions, ItemContent, ItemGroup, ItemMedia, ItemTitle } from "mtxuilib/ui/item";
-import { Popover, PopoverContent, PopoverTrigger } from "mtxuilib/ui/popover";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { DashContent, DashHeaders } from "@/components/dash-layout";
-import {
-  canOpenAndroidView,
-  type PeerCapabilityTruth,
-} from "@/lib/p2p/discovery-contracts";
-import {
-  getP2PStatusMeta,
-  getPreferredPeerConnectionPathLabel,
-  type P2PStatus,
-  useP2PSession,
-} from "./use-p2p-session";
-
-function extractConnectionPeerId(address: string) {
-  const trimmed = address.trim();
-  if (trimmed === "") {
-    return "";
-  }
-  const marker = "/p2p/";
-  const index = trimmed.lastIndexOf(marker);
-  if (index === -1) {
-    return "";
-  }
-  return trimmed.slice(index + marker.length).trim();
-}
-
-const P2P_DEBUG_STORAGE_KEY = "gomtm:p2p:debug-panel";
-
-function isP2PDebugPanelEnabled() {
-  if (typeof window === "undefined") {
-    return false;
-  }
-  try {
-    return window.localStorage.getItem(P2P_DEBUG_STORAGE_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function getNetworkStatusDisplay(status: P2PStatus) {
-  if (status === "peer_candidates_ready" || status === "discovering") {
-    return {
-      icon: Wifi,
-      iconClassName: "text-emerald-600 dark:text-emerald-400",
-    };
-  }
-
-  if (status === "joining" || status === "loading" || status === "fetching-connection-truth") {
-    return {
-      icon: LoaderCircle,
-      iconClassName: "animate-spin text-amber-500",
-    };
-  }
-
-  return {
-    icon: AlertTriangle,
-    iconClassName: status === "error" ? "text-rose-500" : "text-amber-500",
-  };
-}
-
-function getPeerKindIcon(truth: PeerCapabilityTruth | null | undefined) {
-  return canOpenAndroidView(truth?.remoteControl) ? Smartphone : Cpu;
-}
-
-function getPeerShortId(peerId: string | null | undefined) {
-  const normalizedPeerId = peerId?.trim() ?? "";
-  if (normalizedPeerId === "") {
-    return "未知";
-  }
-  return normalizedPeerId.length <= 8 ? normalizedPeerId : normalizedPeerId.slice(-8);
-}
-
-function getPreferredPeerAction(peerId: string, truth: PeerCapabilityTruth | null | undefined) {
-  const encodedPeerId = encodeURIComponent(peerId);
-  if (canOpenAndroidView(truth?.remoteControl)) {
-    return {
-      href: `/dash/p2p/${encodedPeerId}/android`,
-      label: "Android",
-      variant: "secondary" as const,
-    };
-  }
-
-  return {
-    href: `/dash/p2p/${encodedPeerId}`,
-    label: "详情",
-    variant: "outline" as const,
-  };
-}
-
-function getPeerSecondaryActions(peerId: string, truth: PeerCapabilityTruth | null | undefined) {
-  const encodedPeerId = encodeURIComponent(peerId);
-  const preferredHref = getPreferredPeerAction(peerId, truth).href;
-  const allActions = [
-    { href: `/dash/p2p/${encodedPeerId}`, label: "详情" },
-    ...(canOpenAndroidView(truth?.remoteControl)
-      ? [{ href: `/dash/p2p/${encodedPeerId}/android`, label: "Android" }]
-      : []),
-  ];
-
-  return allActions.filter((action) => action.href !== preferredHref);
-}
+import { useP2PRuntime } from "./runtime/p2p-runtime-provider";
 
 export default function P2PPage() {
-  const session = useP2PSession();
-  const router = useRouter();
-  const statusMeta = getP2PStatusMeta(session.status);
-  const networkStatusDisplay = getNetworkStatusDisplay(session.status);
-  const NetworkStatusIcon = networkStatusDisplay.icon;
-  const activeConnectionPeerId = extractConnectionPeerId(session.activeConnectionAddr);
-  const showDebugPanel = isP2PDebugPanelEnabled();
+  const runtime = useP2PRuntime();
+  const currentPeerId = runtime.currentNode?.peerId?.trim() ?? "";
+  const discoveredPeers = runtime.peers.filter((peer) => peer.peerId.trim() !== "" && peer.peerId !== currentPeerId);
+  const currentMultiaddrs = runtime.currentNode?.multiaddrs ?? [];
 
   return (
     <>
@@ -137,266 +20,102 @@ export default function P2PPage() {
         <h1 className="text-lg font-semibold">P2P</h1>
       </DashHeaders>
 
-      <DashContent className="flex-1 overflow-auto" innerClassName="space-y-3 p-3 sm:space-y-4 sm:p-4">
+      <DashContent className="flex-1 overflow-auto" innerClassName="space-y-4 p-4">
         <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <Waypoints className="size-4 text-muted-foreground" />
-                <CardTitle className="text-base">节点</CardTitle>
-              </div>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-9 gap-2 rounded-full px-3"
-                    aria-label={`网络状态：${statusMeta.label}`}
-                  >
-                    <NetworkStatusIcon className={`size-4 ${networkStatusDisplay.iconClassName}`} />
-                    <ChevronDown className="size-4 text-muted-foreground" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent align="end" className="w-[min(24rem,calc(100vw-2rem))] space-y-3 p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="space-y-1">
-                      <div className="text-sm font-medium">网络</div>
-                      <div className="text-xs text-muted-foreground">{statusMeta.label}</div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
-                      后端地址
-                    </div>
-                    <div className="break-all rounded-md border bg-muted/20 px-3 py-2 font-mono text-[11px] text-muted-foreground">
-                      {session.serverUrl.trim() === "" ? "未配置" : session.serverUrl}
-                    </div>
-                  </div>
-
-                  <form
-                    className="space-y-2"
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      void session.saveServerUrl();
-                    }}
-                  >
-                    <Input
-                      value={session.serverUrlInput}
-                      onChange={(event) => session.setServerUrlInput(event.target.value)}
-                      placeholder="gomtm server 公网地址，例如 https://gomtm2.yuepa8.com"
-                      spellCheck={false}
-                    />
-                    <div className="flex justify-end">
-                      <Button type="submit" size="sm" className="min-w-24">
-                        保存并连接
-                      </Button>
-                    </div>
-                  </form>
-
-                  {session.errorMessage ? <div className="text-xs text-rose-500">{session.errorMessage}</div> : null}
-
-                  {showDebugPanel ? (
-                    <div className="space-y-1 rounded-md border bg-muted/20 px-3 py-2 text-[11px] text-muted-foreground">
-                      <div>debug.status = {session.status}</div>
-                      <div>debug.serverUrl = {session.serverUrl || "<empty>"}</div>
-                      <div>debug.serverUrlInput = {session.serverUrlInput || "<empty>"}</div>
-                      <div>debug.activeConnectionAddr = {session.activeConnectionAddr || "<empty>"}</div>
-                      <div>debug.peerCandidates = {String(session.peerCandidates.length)}</div>
-                      <div>debug.isConnected = {String(session.isConnected)}</div>
-                      <div>debug.canConnect = {String(session.canConnect)}</div>
-                      <div>debug.connectPhase = {session.debugConnectPhase || "<empty>"}</div>
-                      <div>debug.lastError = {session.debugLastError || "<empty>"}</div>
-                    </div>
-                  ) : null}
-                </PopoverContent>
-              </Popover>
-            </div>
+          <CardHeader className="space-y-2">
+            <h2 className="text-base font-semibold">当前节点</h2>
+            <div className="text-sm text-muted-foreground">当前运行时状态、地址和连接配置。</div>
           </CardHeader>
-          <CardContent className="pt-0">
-            {session.peerCandidates.length === 0 ? (
-              <div className="rounded-xl border border-dashed bg-muted/10 px-4 py-8 text-sm text-muted-foreground">
-                {session.status === "needs-server-url"
-                  ? "请先输入服务器地址。"
-                  : session.status === "fetching-connection-truth" || session.status === "joining"
-                    ? "正在连接服务器并加入网络。"
-                    : session.isConnected
-                      ? "已连接服务器，等待节点。"
-                      : "请先连接服务器。"}
+          <CardContent className="space-y-4">
+            <div className="space-y-1">
+              <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">Peer ID</div>
+              <div className="break-all rounded-md border bg-muted/20 px-3 py-2 font-mono text-sm">
+                {currentPeerId === "" ? "未就绪" : currentPeerId}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+              <Badge variant="outline">{runtime.status}</Badge>
+              <span>{currentMultiaddrs.length === 0 ? "暂无地址" : `${currentMultiaddrs.length} 个地址`}</span>
+            </div>
+
+            {currentMultiaddrs.length > 0 ? (
+              <div className="space-y-2">
+                <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">当前地址</div>
+                <div className="space-y-2 rounded-md border bg-muted/20 p-2">
+                  {currentMultiaddrs.map((address) => (
+                    <div key={address} className="break-all rounded bg-background px-2 py-1 font-mono text-[11px]">
+                      {address}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="space-y-2">
+              <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">后端地址</div>
+              <form
+                className="flex flex-col gap-2 sm:flex-row"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void runtime.saveServerUrl();
+                }}
+              >
+                <Input
+                  value={runtime.serverUrlInput}
+                  onChange={(event) => runtime.setServerUrlInput(event.target.value)}
+                  placeholder="gomtm server 公网地址，例如 https://gomtm2.yuepa8.com"
+                  spellCheck={false}
+                />
+                <Button type="submit" className="sm:min-w-28">
+                  保存并连接
+                </Button>
+              </form>
+              <div className="text-xs text-muted-foreground">
+                {runtime.serverUrl.trim() === "" ? "当前未配置后端地址" : `当前后端地址：${runtime.serverUrl}`}
+              </div>
+            </div>
+
+            {runtime.errorMessage ? <div className="text-sm text-rose-500">{runtime.errorMessage}</div> : null}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <h2 className="text-base font-semibold">发现节点</h2>
+          </CardHeader>
+          <CardContent>
+            {discoveredPeers.length === 0 ? (
+              <div className="rounded-md border border-dashed bg-muted/10 px-4 py-6 text-sm text-muted-foreground">
+                暂无发现节点。
               </div>
             ) : (
-              <ItemGroup>
-                {session.peerCandidates.map((peer) => {
-                  const truth = session.getResolvedPeerTruth(peer.peerId);
-                  const preferredAction = getPreferredPeerAction(peer.peerId, truth);
-                  const secondaryActions = getPeerSecondaryActions(peer.peerId, truth);
-                  const PeerKindIcon = getPeerKindIcon(truth);
-                  const peerShortId = getPeerShortId(peer.peerId);
-                  const hasAndroid = canOpenAndroidView(truth?.remoteControl);
-
+              <div className="space-y-3">
+                {discoveredPeers.map((peer) => {
+                  const href = `/dash/p2p/${encodeURIComponent(peer.peerId)}`;
                   return (
-                    <Item key={peer.peerId}>
-                      <ItemMedia className="pt-1">
-                        <div
-                          className={`rounded-full border p-2 ${peer.peerId === activeConnectionPeerId ? "border-emerald-200 bg-emerald-50 text-emerald-600 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300" : "bg-muted/20 text-muted-foreground"}`}
-                        >
-                          <PeerKindIcon className="size-4" />
-                        </div>
-                      </ItemMedia>
-
-                      <ItemContent>
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                          <div className="min-w-0 flex-1 space-y-2">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <ItemTitle className="text-base font-semibold tracking-tight">…{peerShortId}</ItemTitle>
-                              {peer.peerId === activeConnectionPeerId ? (
-                                <Badge variant="outline" className="text-[10px] uppercase text-muted-foreground">
-                                  Relay
-                                </Badge>
-                              ) : null}
-                              <Badge variant="outline" className="text-[10px] uppercase text-muted-foreground">
-                                {getPreferredPeerConnectionPathLabel(
-                                  peer.multiaddrs,
-                                  truth?.connectionPath?.path,
-                                )}
-                              </Badge>
-                              {hasAndroid ? (
-                                <Badge variant="secondary" className="text-[10px] uppercase">
-                                  Android
-                                </Badge>
-                              ) : null}
-                            </div>
-
-                            <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
-                              <div className="inline-flex items-center gap-1">
-                                <Waypoints className="size-3" />
-                                <span>{`${peer.multiaddrs.length} 地址`}</span>
-                              </div>
-                            </div>
+                    <div key={peer.peerId} className="rounded-md border bg-muted/10 p-3">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0 space-y-2">
+                          <div className="break-all font-mono text-sm">{peer.peerId}</div>
+                          <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                            <span>{peer.multiaddrs?.length ?? 0} 个地址</span>
+                            <span>{peer.discoveredAt?.trim() ? `发现于 ${peer.discoveredAt}` : "等待发现时间"}</span>
                           </div>
-
-                          <ItemActions className="flex w-full items-center justify-end gap-1 sm:w-auto">
-                            <Button asChild size="sm" variant={preferredAction.variant} className="h-8 min-w-20">
-                              <Link href={preferredAction.href}>{preferredAction.label}</Link>
-                            </Button>
-
-                            <Dialog>
-                              <DialogTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8"
-                                  aria-label={`查看节点 ${peerShortId} 详情`}
-                                >
-                                  <Info className="size-4" />
-                                </Button>
-                              </DialogTrigger>
-                              <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-[560px]">
-                                <DialogHeader>
-                                  <DialogTitle>节点 …{peerShortId}</DialogTitle>
-                                  <DialogDescription className="sr-only">
-                                    查看节点详细信息与可用入口。
-                                  </DialogDescription>
-                                </DialogHeader>
-
-                                <div className="space-y-4 text-sm">
-                                  <div className="flex flex-wrap gap-1">
-                                    {peer.peerId === activeConnectionPeerId ? (
-                                      <Badge variant="outline" className="text-[10px] uppercase text-muted-foreground">
-                                        Relay
-                                      </Badge>
-                                    ) : null}
-                                    <Badge variant="outline" className="text-[10px] uppercase text-muted-foreground">
-                                      {getPreferredPeerConnectionPathLabel(
-                                        peer.multiaddrs,
-                                        truth?.connectionPath?.path,
-                                      )}
-                                    </Badge>
-                                    {hasAndroid ? (
-                                      <Badge variant="secondary" className="text-[10px] uppercase">
-                                        Android
-                                      </Badge>
-                                    ) : null}
-                                  </div>
-
-                                  <div className="grid gap-3 sm:grid-cols-2">
-                                    <div className="space-y-1">
-                                      <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
-                                        Peer ID
-                                      </div>
-                                      <div className="break-all rounded-md border bg-muted/20 px-3 py-2 font-mono text-xs">
-                                        {peer.peerId}
-                                      </div>
-                                    </div>
-
-                                    <div className="space-y-1">
-                                      <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
-                                        地址数
-                                      </div>
-                                      <div className="rounded-md border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-                                        {peer.multiaddrs.length}
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  <div className="space-y-2">
-                                    <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
-                                      Multiaddr
-                                    </div>
-                                    <div className="max-h-48 space-y-2 overflow-auto rounded-md border bg-muted/20 p-2">
-                                      {peer.multiaddrs.map((address) => (
-                                        <div
-                                          key={address}
-                                          className="break-all rounded bg-background px-2 py-1 font-mono text-[11px]"
-                                        >
-                                          {address}
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-
-                                  <div className="flex flex-wrap gap-2">
-                                    <Button asChild size="sm" variant={preferredAction.variant}>
-                                      <Link href={preferredAction.href}>{preferredAction.label}</Link>
-                                    </Button>
-                                    {secondaryActions.map((action) => (
-                                      <Button key={action.href} asChild size="sm" variant="outline">
-                                        <Link href={action.href}>{action.label}</Link>
-                                      </Button>
-                                    ))}
-                                  </div>
-                                </div>
-                              </DialogContent>
-                            </Dialog>
-
-                            {secondaryActions.length > 0 ? (
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="更多操作">
-                                    <MoreHorizontal className="size-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  {secondaryActions.map((action) => (
-                                    <DropdownMenuItem
-                                      key={action.href}
-                                      onSelect={() => {
-                                        router.push(action.href);
-                                      }}
-                                    >
-                                      {action.label}
-                                    </DropdownMenuItem>
-                                  ))}
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            ) : null}
-                          </ItemActions>
                         </div>
-                      </ItemContent>
-                    </Item>
+
+                        <Link
+                          href={href}
+                          aria-label={`查看节点 ${peer.peerId}`}
+                          className="inline-flex h-9 items-center justify-center rounded-md border px-3 text-sm font-medium transition-colors hover:bg-muted"
+                        >
+                          查看节点
+                        </Link>
+                      </div>
+                    </div>
                   );
                 })}
-              </ItemGroup>
+              </div>
             )}
           </CardContent>
         </Card>

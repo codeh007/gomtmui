@@ -8,7 +8,7 @@ import { Button } from "mtxuilib/ui/button";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { DashContent } from "@/components/dash-layout";
-import type { P2PStatus } from "../use-p2p-session";
+import type { P2PStatus } from "../runtime/p2p-runtime-contract";
 
 type StatusTone = "default" | "secondary" | "destructive";
 

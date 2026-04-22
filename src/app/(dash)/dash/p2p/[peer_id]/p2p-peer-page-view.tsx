@@ -1,6 +1,6 @@
 "use client";
 
-import { Cpu, RefreshCw, Router, Smartphone, Waypoints } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "mtxuilib/ui/alert";
 import { Badge } from "mtxuilib/ui/badge";
 import {
@@ -16,7 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "mtxuilib/ui/card";
 import Link from "next/link";
 import { DashContent, DashHeaders } from "@/components/dash-layout";
 import { getPeerDisplayTitle } from "@/lib/p2p/discovery-contracts";
-import { getP2PStatusMeta } from "../use-p2p-session";
+import { getP2PStatusMeta } from "../runtime/p2p-runtime-contract";
 import { useP2PPeerPageSession } from "./use-p2p-peer-page-session";
 
 const PEER_TRUTH_STATUS_LABELS = {
@@ -25,15 +25,6 @@ const PEER_TRUTH_STATUS_LABELS = {
   ready: "已就绪",
   error: "失败",
 } as const;
-
-function PeerStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border px-4 py-3">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="mt-1 break-all font-medium text-sm">{value}</div>
-    </div>
-  );
-}
 
 function toneForPeerTruth(status: ReturnType<typeof useP2PPeerPageSession>["peerTruthStatus"]) {
   if (status === "ready") {
@@ -48,8 +39,7 @@ function toneForPeerTruth(status: ReturnType<typeof useP2PPeerPageSession>["peer
 export function P2PPeerPageView({ peerId }: { peerId: string }) {
   const session = useP2PPeerPageSession(peerId);
   const networkStatusMeta = getP2PStatusMeta(session.status);
-  const remoteControl = session.capabilityTruth?.remoteControl;
-  const peerTitle = session.targetPeer == null ? "P2P 节点详情" : getPeerDisplayTitle(session.targetPeer);
+  const peerTitle = session.peer == null ? peerId : getPeerDisplayTitle(session.peer);
 
   return (
     <>
@@ -62,7 +52,7 @@ export function P2PPeerPageView({ peerId }: { peerId: string }) {
               </BreadcrumbItem>
               <BreadcrumbSeparator />
               <BreadcrumbItem>
-                <BreadcrumbPage>节点详情</BreadcrumbPage>
+                <BreadcrumbPage>节点能力</BreadcrumbPage>
               </BreadcrumbItem>
             </BreadcrumbList>
           </Breadcrumb>
@@ -77,145 +67,98 @@ export function P2PPeerPageView({ peerId }: { peerId: string }) {
       </DashHeaders>
 
       <DashContent className="flex-1 overflow-auto" innerClassName="space-y-4 p-3 sm:p-4">
-        <div className="grid min-h-full gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Router className="size-4" />
-                网络
-              </CardTitle>
-              <div className="rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground">
-                <div className="font-medium text-foreground">Peer</div>
-                <div className="mt-1 break-all font-mono">{peerId}</div>
+        <Card>
+          <CardHeader className="space-y-3 pb-3">
+            <CardTitle className="text-base">目标节点</CardTitle>
+            <div className="space-y-2 rounded-lg bg-muted/40 p-3 text-sm text-muted-foreground">
+              <div>
+                <div className="text-[11px] uppercase tracking-wide">Peer</div>
+                <div className="mt-1 break-all font-mono text-foreground">{peerId}</div>
               </div>
-            </CardHeader>
-
-            <CardContent className="space-y-4 pt-0">
-              <div className="rounded-lg border bg-muted/20 px-3 py-3 text-xs text-muted-foreground">
-                节点详情页不再支持手工输入连接地址；请回到 P2P 主页面连接服务器，会话建立后这里会自动复用当前连接。
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={networkStatusMeta.tone}>{networkStatusMeta.label}</Badge>
+                <Badge variant={toneForPeerTruth(session.peerTruthStatus)}>
+                  {PEER_TRUTH_STATUS_LABELS[session.peerTruthStatus]}
+                </Badge>
+                <span>{session.peer?.lastDiscoveredAt?.trim() ? `最近发现 ${session.peer.lastDiscoveredAt}` : "等待发现时间"}</span>
               </div>
-
-              {session.activeConnectionAddr ? (
-                <div className="rounded-lg border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-                  <div className="text-[11px] uppercase tracking-wide">当前连接入口</div>
-                  <div className="mt-1 break-all font-mono">{session.activeConnectionAddr}</div>
+              {session.targetAddress ? (
+                <div>
+                  <div className="text-[11px] uppercase tracking-wide">能力读取入口</div>
+                  <div className="mt-1 break-all font-mono text-foreground">{session.targetAddress}</div>
                 </div>
               ) : null}
-              {session.errorMessage ? (
-                <Alert variant="destructive">
-                  <AlertTitle>网络连接错误</AlertTitle>
-                  <AlertDescription>{session.errorMessage}</AlertDescription>
-                </Alert>
-              ) : null}
+            </div>
+          </CardHeader>
 
-              {session.peerTruthErrorMessage ? (
-                <Alert variant="destructive">
-                  <AlertTitle>节点能力失败</AlertTitle>
-                  <AlertDescription>{session.peerTruthErrorMessage}</AlertDescription>
-                </Alert>
-              ) : null}
+          <CardContent className="flex flex-wrap gap-2 pt-0">
+            <Link
+              href="/dash/p2p"
+              className="inline-flex h-9 items-center justify-center rounded-md border px-3 text-sm font-medium transition-colors hover:bg-muted"
+            >
+              返回 P2P
+            </Link>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => session.refreshPeerTruth()}
+              disabled={!session.isConnected || session.peer == null || session.peerTruthStatus === "loading"}
+            >
+              <RefreshCw className="mr-2 size-4" />
+              刷新能力
+            </Button>
+          </CardContent>
+        </Card>
 
-              <div className="flex flex-wrap gap-2 pt-1">
-                <Button asChild variant="outline" size="sm">
-                  <Link href="/dash/p2p">返回</Link>
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => session.refreshPeerTruth()}
-                  disabled={!session.isConnected || session.targetPeer == null || session.peerTruthStatus === "loading"}
-                >
-                  <RefreshCw className="mr-2 size-4" />
-                  刷新
-                </Button>
+        {session.errorMessage ? (
+          <Alert variant="destructive">
+            <AlertTitle>网络连接错误</AlertTitle>
+            <AlertDescription>{session.errorMessage}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        {session.peerTruthErrorMessage ? (
+          <Alert variant="destructive">
+            <AlertTitle>节点能力失败</AlertTitle>
+            <AlertDescription>{session.peerTruthErrorMessage}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">节点能力</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 pt-0">
+            {session.peer == null ? (
+              <div className="rounded-xl border border-dashed px-4 py-8 text-sm text-muted-foreground">
+                {session.isConnected ? `尚未发现 ${peerId}` : "请先回到 P2P 主页面连接服务器。"}
               </div>
-            </CardContent>
-          </Card>
-
-          <div className="space-y-4">
-            {session.targetPeer == null ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">等待节点</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="rounded-xl border border-dashed px-4 py-10 text-sm text-muted-foreground">
-                    {session.isConnected ? `尚未发现 ${peerId}` : "请先回到 P2P 主页面连接服务器。"}
-                  </div>
-                </CardContent>
-              </Card>
+            ) : session.capabilities.length === 0 ? (
+              <div className="rounded-xl border border-dashed px-4 py-8 text-sm text-muted-foreground">
+                当前没有可展示的节点能力。
+              </div>
             ) : (
-              <>
-                <Card>
-                  <CardHeader className="pb-3">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <CardTitle className="flex items-center gap-2 text-base">
-                        <Cpu className="size-4" />
-                        概览
-                      </CardTitle>
-                      <div className="flex flex-wrap gap-2">
-                        {session.canOpenAndroid ? (
-                          <Button asChild size="sm" variant="secondary">
-                            <Link href={`/dash/p2p/${encodeURIComponent(peerId)}/android`}>
-                              <Smartphone className="mr-2 size-4" />
-                              Android
-                            </Link>
-                          </Button>
-                        ) : null}
-
-                        {!session.canOpenAndroid ? (
-                          <Badge variant="outline">无直达入口</Badge>
-                        ) : null}
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-4 pt-0">
-                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                      <PeerStat label="Android" value={session.canOpenAndroid ? "可用" : "无"} />
-                      <PeerStat label="最近发现" value={session.targetPeer.lastDiscoveredAt || "未知"} />
-                    </div>
-
-                    {remoteControl ? (
-                      <div className="space-y-2">
-                        <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Android</div>
-                        <div className="grid gap-2 md:grid-cols-1">
-                          <PeerStat
-                            label="native_remote_v2_webrtc"
-                            value={remoteControl.capabilities.nativeRemoteV2WebRTC?.state || "unknown"}
-                          />
-                        </div>
-                      </div>
-                    ) : null}
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="flex items-center gap-2 text-base">
-                      <Waypoints className="size-4" />
-                      地址
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="pt-0">
-                    {session.targetPeer.multiaddrs.length === 0 ? (
-                      <div className="rounded-xl border border-dashed px-4 py-8 text-sm text-muted-foreground">
-                        当前没有可用地址。
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {session.targetPeer.multiaddrs.map((value) => (
-                          <div key={value} className="rounded-xl border px-4 py-3">
-                            <div className="break-all font-mono text-xs text-muted-foreground">{value}</div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </>
+              session.capabilities.map((capability) => (
+                <article key={capability.name} className="rounded-xl border px-4 py-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="font-mono text-sm font-medium">{capability.name}</h2>
+                    <Badge variant={capability.state?.trim().toLowerCase() === "available" ? "default" : "secondary"}>
+                      {capability.state || "unknown"}
+                    </Badge>
+                  </div>
+                  {capability.reason ? <p className="mt-2 text-sm text-muted-foreground">原因：{capability.reason}</p> : null}
+                </article>
+              ))
             )}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
+
+        <details className="rounded-xl border bg-muted/10 px-4 py-3 text-sm">
+          <summary className="cursor-pointer font-medium">诊断信息</summary>
+          <pre className="mt-3 overflow-x-auto rounded-lg bg-background p-3 text-xs text-muted-foreground">
+            {JSON.stringify(session.diagnostics, null, 2)}
+          </pre>
+        </details>
       </DashContent>
     </>
   );
