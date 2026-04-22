@@ -1,5 +1,6 @@
 # 自定义
 .superpowers
+.worktrees/
 .vol*
 .vol_test
 .gomtm.vol
