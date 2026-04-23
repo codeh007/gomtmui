@@ -8,11 +8,7 @@ import {
   useState,
 } from "react";
 import type { PeerCandidate } from "@/lib/p2p/discovery-contracts.ts";
-import {
-  type BrowserRendezvousDiscoveryService,
-  GOMTM_RENDEZVOUS_NAMESPACE,
-  gomtmRendezvousDiscovery,
-} from "@/lib/p2p/rendezvous-discovery.ts";
+import { fetchServerPeerDirectory } from "@/lib/p2p/server-peer-directory-api";
 import { logP2PConsole, summarizePeerCandidates } from "@/lib/p2p/p2p-console.ts";
 import {
   clearStoredConnectionRuntime,
@@ -31,7 +27,6 @@ import {
 
 type BrowserNodeSession = {
   node: Awaited<ReturnType<typeof createBrowserNode>>;
-  disposeDiscoveryListener?: () => void;
 };
 
 type P2PSessionDeps = {
@@ -176,7 +171,6 @@ async function commitConnectionFailure(params: {
 
 async function commitConnectionSuccess(params: {
   connectionAddr: string;
-  discovery: BrowserRendezvousDiscoveryService;
   handlers: ConnectionSuccessStateHandlers;
   syncPeerCandidates: (node: BrowserNodeSession["node"]) => Promise<void>;
   node: BrowserNodeSession["node"];
@@ -192,7 +186,7 @@ async function commitConnectionSuccess(params: {
     "已接入 P2P 网络",
     {
       connectionAddr: params.connectionAddr,
-      peerCandidates: (await params.discovery.listPeerCandidates()).length,
+      peerCandidates: 0,
     },
     { verboseOnly: true },
   );
@@ -246,16 +240,8 @@ async function createBrowserNode(target: { connectionAddr: string; transport: "w
     streamMuxers: [yamux()],
     services: {
       identify: identify(),
-      rendezvousDiscovery: gomtmRendezvousDiscovery({
-        namespace: GOMTM_RENDEZVOUS_NAMESPACE,
-        points: [rendezvousPoint],
-      }),
     },
   });
-}
-
-function getRendezvousDiscoveryService(node: BrowserNodeSession["node"]) {
-  return (node.services as { rendezvousDiscovery?: BrowserRendezvousDiscoveryService }).rendezvousDiscovery ?? null;
 }
 
 function useBrowserP2PRuntimeState(): P2PRuntimeState {
@@ -281,23 +267,27 @@ function useBrowserP2PRuntimeState(): P2PRuntimeState {
     const current = sessionRef.current;
     sessionRef.current = null;
     if (current != null) {
-      current.disposeDiscoveryListener?.();
       await current.node.stop();
     }
   }, []);
 
   const syncPeerCandidates = useCallback(async (node: BrowserNodeSession["node"]) => {
-    const discovery = getRendezvousDiscoveryService(node);
-    if (discovery == null) {
+    const normalizedServerUrl = serverUrl.trim();
+    if (normalizedServerUrl === "") {
       return;
     }
-    const candidates = await discovery.listPeerCandidates();
+    const records = await fetchServerPeerDirectory(normalizedServerUrl);
+    const candidates = records.map((record) => ({
+      lastDiscoveredAt: record.lastSeenAt ?? "",
+      multiaddrs: record.multiaddrs,
+      peerId: record.peerId,
+    } satisfies PeerCandidate));
     if (sessionRef.current?.node !== node) {
       return;
     }
     logP2PConsole("debug", "节点候选已更新", summarizePeerCandidates(candidates), { verboseOnly: true });
     setPeerCandidates(candidates);
-  }, []);
+  }, [serverUrl]);
 
   const connectToBootstrap = useCallback(
     async (options: { input: string }) => {
@@ -376,45 +366,8 @@ function useBrowserP2PRuntimeState(): P2PRuntimeState {
             return;
           }
         }
-        const discovery = getRendezvousDiscoveryService(node);
-        setDebugConnectPhase("discovery-service-ready");
-        if (discovery == null) {
-          throw new Error("browser rendezvous discovery service is missing");
-        }
-        p2pSessionDeps.logP2PConsole("info", "awaiting rendezvous ready", {
-          connectionAddr: target.connectionAddr,
-        });
-        setDebugConnectPhase("awaiting-rendezvous-ready");
-        await discovery.awaitReady();
-        setDebugConnectPhase("rendezvous-ready");
-        p2pSessionDeps.logP2PConsole("info", "rendezvous ready", {
-          connectionAddr: target.connectionAddr,
-        });
-        if (!isCurrentAttempt()) {
-          await stopCreatedNode();
-          return;
-        }
-
-        const handlePeerEvent = () => {
-          if (sessionRef.current?.node !== node) {
-            return;
-          }
-          void syncPeerCandidates(node);
-        };
-        node.addEventListener("peer:discovery", handlePeerEvent as EventListener);
-        node.addEventListener("peer:update", handlePeerEvent as EventListener);
-        node.addEventListener("peer:identify", handlePeerEvent as EventListener);
-        node.addEventListener("peer:connect", handlePeerEvent as EventListener);
-        node.addEventListener("peer:disconnect", handlePeerEvent as EventListener);
         sessionRef.current = {
           node,
-          disposeDiscoveryListener: () => {
-            node.removeEventListener("peer:discovery", handlePeerEvent as EventListener);
-            node.removeEventListener("peer:update", handlePeerEvent as EventListener);
-            node.removeEventListener("peer:identify", handlePeerEvent as EventListener);
-            node.removeEventListener("peer:connect", handlePeerEvent as EventListener);
-            node.removeEventListener("peer:disconnect", handlePeerEvent as EventListener);
-          },
         };
         setDebugConnectPhase("session-bound");
         if (!isCurrentAttempt()) {
@@ -423,7 +376,6 @@ function useBrowserP2PRuntimeState(): P2PRuntimeState {
         }
         await commitConnectionSuccess({
           connectionAddr: target.connectionAddr,
-          discovery,
           handlers: {
             setActiveConnectionAddr,
             setStatus,

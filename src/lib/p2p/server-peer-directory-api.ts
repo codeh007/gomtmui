@@ -1,0 +1,78 @@
+export type ServerPeerDirectoryRecord = {
+  expiresAt?: string;
+  lastSeenAt?: string;
+  multiaddrs: string[];
+  peerId: string;
+  source?: string;
+};
+
+function normalizeServerUrl(serverUrl: string) {
+  const normalized = serverUrl.trim().replace(/\/+$/, "");
+  if (normalized === "") {
+    throw new Error("请先在 P2P 主页面配置后端地址。");
+  }
+  return normalized;
+}
+
+function asRecord(value: unknown) {
+  return value !== null && typeof value === "object" ? (value as Record<string, unknown>) : null;
+}
+
+function asString(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeRecord(value: unknown): ServerPeerDirectoryRecord | null {
+  const record = asRecord(value);
+  if (record == null) {
+    return null;
+  }
+
+  const peerId = asString(record.peer_id ?? record.peerId);
+  if (peerId === "") {
+    return null;
+  }
+
+  const multiaddrs = Array.isArray(record.multiaddrs)
+    ? record.multiaddrs.filter((candidate): candidate is string => typeof candidate === "string" && candidate.trim() !== "")
+    : [];
+
+  return {
+    expiresAt: asString(record.expires_at ?? record.expiresAt) || undefined,
+    lastSeenAt: asString(record.last_seen_at ?? record.lastSeenAt) || undefined,
+    multiaddrs,
+    peerId,
+    source: asString(record.source) || undefined,
+  };
+}
+
+async function parseErrorMessage(response: Response) {
+  try {
+    const payload = (await response.json()) as Record<string, unknown>;
+    const message = typeof payload.message === "string" ? payload.message.trim() : "";
+    const error = typeof payload.error === "string" ? payload.error.trim() : "";
+    return message || error || `请求失败: ${response.status}`;
+  } catch {
+    return `请求失败: ${response.status}`;
+  }
+}
+
+export async function fetchServerPeerDirectory(serverUrl: string): Promise<ServerPeerDirectoryRecord[]> {
+  const normalizedServerUrl = normalizeServerUrl(serverUrl);
+  const response = await fetch(`${normalizedServerUrl}/api/p2p/directory/peers`, {
+    cache: "no-store",
+    credentials: "omit",
+    method: "GET",
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response));
+  }
+
+  const payload = (await response.json()) as { peers?: unknown[] };
+  if (!Array.isArray(payload.peers)) {
+    return [];
+  }
+
+  return payload.peers.map((entry) => normalizeRecord(entry)).filter((entry): entry is ServerPeerDirectoryRecord => entry != null);
+}

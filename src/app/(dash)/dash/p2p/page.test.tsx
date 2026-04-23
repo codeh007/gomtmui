@@ -19,7 +19,6 @@ const runtimeState = {
   ],
   status: "peer_candidates_ready",
   diagnostics: {},
-  readPeerCapabilities: vi.fn(),
   saveConnection: vi.fn(),
   activeConnectionAddr: "",
   canConnect: true,
@@ -27,15 +26,6 @@ const runtimeState = {
   debugConnectPhase: "discovering",
   debugLastError: null,
   errorMessage: null,
-  getResolvedPeerTruth: () => ({
-    remoteControl: {
-      capabilities: {
-        nativeRemoteV2WebRTC: {
-          state: "available",
-        },
-      },
-    },
-  }),
   isConnected: true,
   peerCandidates: [
     {
@@ -142,6 +132,8 @@ describe("P2PPage hard cut", () => {
 
     const detailLink = screen.getByRole("link", { name: "查看节点 12D3KooWPeer" });
     expect(detailLink.getAttribute("href")).toBe("/dash/p2p/12D3KooWPeer");
+
+    expect(screen.getByText("发现于 2026-04-21T00:00:00Z")).toBeTruthy();
 
     expect(screen.queryByRole("link", { name: "Android" })).toBeNull();
   });
