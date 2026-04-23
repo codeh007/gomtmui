@@ -12,12 +12,6 @@ import type {
   ToolsetInfo,
 } from "./types";
 
-declare global {
-  interface Window {
-    __HERMES_SESSION_TOKEN__?: string;
-  }
-}
-
 function getGomtmServerUrl() {
   const configuredUrl = process.env.NEXT_PUBLIC_GOMTM_SERVER_URL?.trim();
   if (!configuredUrl) {
@@ -27,16 +21,9 @@ function getGomtmServerUrl() {
 }
 
 async function fetchJSON<T>(path: string, init?: RequestInit): Promise<T> {
-  const headers = new Headers(init?.headers);
-  const token = typeof window !== "undefined" ? window.__HERMES_SESSION_TOKEN__ : undefined;
-  if (token && !headers.has("Authorization")) {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
-
   const response = await fetch(`${getGomtmServerUrl()}/api/hermes${path}`, {
     cache: "no-store",
     ...init,
-    headers,
   });
 
   if (!response.ok) {
