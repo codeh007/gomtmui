@@ -62,4 +62,10 @@ export const DASH_NAV_ITEMS: NavItem[] = [
     tooltip: "异步任务队列监控",
     requiredRole: "admin",
   },
+  {
+    label: "Hermes",
+    url: "/dash/hermes",
+    icon: "cpu",
+    tooltip: "Hermes Agent 工作台",
+  },
 ];

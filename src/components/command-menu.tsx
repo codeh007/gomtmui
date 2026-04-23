@@ -97,6 +97,10 @@ export function CommandMenu() {
             <Home className="mr-2 h-4 w-4" />
             <span>控制台首页</span>
           </CommandItem>
+          <CommandItem onSelect={() => runCommand(() => router.push("/dash/hermes"))}>
+            <Home className="mr-2 h-4 w-4" />
+            <span>Hermes 工作台</span>
+          </CommandItem>
           {isAdmin && (
             <CommandItem onSelect={() => runCommand(() => router.push("/dash/instances"))}>
               <Monitor className="mr-2 h-4 w-4" />
