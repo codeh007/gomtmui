@@ -4,7 +4,6 @@ import { Badge } from "mtxuilib/ui/badge";
 import { Button } from "mtxuilib/ui/button";
 import { Card, CardContent, CardHeader } from "mtxuilib/ui/card";
 import { Input } from "mtxuilib/ui/input";
-import Link from "next/link";
 import { DashContent, DashHeaders } from "@/components/dash-layout";
 import { useP2PShellState } from "./runtime/p2p-runtime-provider";
 
@@ -92,10 +91,9 @@ export default function P2PPage() {
             ) : (
               <div className="space-y-3">
                 {discoveredPeers.map((peer) => {
-                  const href = `/dash/p2p/${encodeURIComponent(peer.peerId)}`;
                   return (
                     <div key={peer.peerId} className="rounded-md border bg-muted/10 p-3">
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="flex flex-col gap-3">
                         <div className="min-w-0 space-y-2">
                           <div className="break-all font-mono text-sm">{peer.peerId}</div>
                           <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
@@ -103,14 +101,6 @@ export default function P2PPage() {
                             <span>{peer.discoveredAt?.trim() ? `发现于 ${peer.discoveredAt}` : "等待发现时间"}</span>
                           </div>
                         </div>
-
-                        <Link
-                          href={href}
-                          aria-label={`查看节点 ${peer.peerId}`}
-                          className="inline-flex h-9 items-center justify-center rounded-md border px-3 text-sm font-medium transition-colors hover:bg-muted"
-                        >
-                          查看节点
-                        </Link>
                       </div>
                     </div>
                   );

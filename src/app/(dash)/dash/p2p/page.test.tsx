@@ -27,14 +27,6 @@ const runtimeState = {
   setServerUrlInput: vi.fn(),
 };
 
-vi.mock("next/link", () => ({
-  default: ({ children, href, ...props }: { children: ReactNode; href: string } & Record<string, unknown>) => (
-    <a href={href} {...props}>
-      {children}
-    </a>
-  ),
-}));
-
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
 }));
@@ -119,10 +111,8 @@ describe("P2PPage hard cut", () => {
     expect(screen.getByText("当前 shell 节点 peer ID 与可访问地址。")).toBeTruthy();
     expect(screen.queryByText(/连接配置/)).toBeNull();
 
-    const detailLink = screen.getByRole("link", { name: "查看节点 12D3KooWPeer" });
-    expect(detailLink.getAttribute("href")).toBe("/dash/p2p/12D3KooWPeer");
-
     expect(screen.getByText("发现于 2026-04-21T00:00:00Z")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /查看节点/ })).toBeNull();
 
     fireEvent.change(screen.getByPlaceholderText("gomtm server 公网地址，例如 https://gomtm2.yuepa8.com"), {
       target: { value: "https://gomtm2.next.example.com" },
