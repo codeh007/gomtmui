@@ -7,12 +7,12 @@ import {
   getPeerCapabilityTruthFromRuntimeCapabilities,
   type RuntimeCapability,
 } from "../runtime/p2p-runtime-contract";
-import { useP2PRuntime } from "../runtime/p2p-runtime-provider";
+import { useP2PShellState } from "../runtime/p2p-runtime-provider";
 
 export type PeerTruthStatus = "idle" | "loading" | "ready" | "error";
 
 export function useP2PPeerPageSession(peerId: string) {
-  const p2pSession = useP2PRuntime();
+  const p2pSession = useP2PShellState();
   const isConnected = p2pSession.isConnected;
   const [peerTruthStatus, setPeerTruthStatus] = useState<PeerTruthStatus>("idle");
   const [peerTruthErrorMessage, setPeerTruthErrorMessage] = useState<string | null>(null);
@@ -21,13 +21,12 @@ export function useP2PPeerPageSession(peerId: string) {
   const [capabilities, setCapabilities] = useState<RuntimeCapability[]>([]);
   const [capabilityTruth, setCapabilityTruth] = useState<PeerCapabilityTruth | null>(null);
   const runtimeSessionIdentity = [
-    p2pSession.hostKind,
+    p2pSession.shellKind,
     p2pSession.serverUrl.trim(),
-    p2pSession.activeConnectionAddr.trim(),
     p2pSession.currentNode?.peerId ?? "",
   ].join("|");
 
-  const liveTargetPeer = useMemoTargetPeer(p2pSession.peerCandidates, peerId);
+  const liveTargetPeer = useMemoTargetPeer(p2pSession.peers, peerId);
   const targetPeer = liveTargetPeer ?? stableTargetPeer;
 
   useEffect(() => {
@@ -107,9 +106,8 @@ export function useP2PPeerPageSession(peerId: string) {
   const hasCapabilityPayload = capabilityTruth != null || capabilities.length > 0;
   const diagnostics = {
     ...p2pSession.diagnostics,
-    activeConnectionAddr: p2pSession.activeConnectionAddr || undefined,
     errorMessage: p2pSession.errorMessage || undefined,
-    hostKind: p2pSession.hostKind,
+    shellKind: p2pSession.shellKind,
     peerTruthErrorMessage: peerTruthErrorMessage || undefined,
     peerTruthStatus,
     serverUrl: p2pSession.serverUrl || undefined,
@@ -134,6 +132,6 @@ export function useP2PPeerPageSession(peerId: string) {
   };
 }
 
-function useMemoTargetPeer(peerCandidates: ReturnType<typeof useP2PRuntime>["peerCandidates"], peerId: string) {
-  return peerCandidates.find((candidate) => candidate.peerId === peerId) ?? null;
+function useMemoTargetPeer(peers: ReturnType<typeof useP2PShellState>["peers"], peerId: string) {
+  return peers.find((candidate) => candidate.peerId === peerId) ?? null;
 }

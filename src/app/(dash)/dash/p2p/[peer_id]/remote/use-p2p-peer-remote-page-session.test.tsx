@@ -6,19 +6,12 @@ import { useP2PPeerRemotePageSession } from "./use-p2p-peer-remote-page-session"
 
 const { mockRuntime, postServerPeerRemoteCommand } = vi.hoisted(() => ({
   mockRuntime: {
-    activeConnectionAddr: "/dns4/bootstrap.example.com/tcp/443/tls/ws/p2p/12D3KooWBootstrap",
-    canConnect: true,
-    connect: vi.fn(async () => true),
     currentNode: null,
-    debugConnectPhase: "android-host",
-    debugLastError: null,
     diagnostics: { runtime_status: "ready" },
     errorMessage: null,
-    hostKind: "android-host" as const,
+    shellKind: "device-shell" as const,
     isConnected: true,
-    peerCandidates: [],
     peers: [],
-    saveConnection: vi.fn(async () => {}),
     saveServerUrl: vi.fn(async () => {}),
     serverUrl: "https://gomtm.example.com",
     serverUrlInput: "https://gomtm.example.com",
@@ -29,7 +22,7 @@ const { mockRuntime, postServerPeerRemoteCommand } = vi.hoisted(() => ({
 }));
 
 vi.mock("../../runtime/p2p-runtime-provider", () => ({
-  useP2PRuntime: () => mockRuntime,
+  useP2PShellState: () => mockRuntime,
 }));
 
 vi.mock("@/lib/p2p/server-peer-operator-api", () => ({

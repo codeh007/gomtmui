@@ -19,25 +19,18 @@ function mockCapabilityResponse(capabilities: Array<{ name: string; reason?: str
 }
 
 const runtimeState = {
-  activeConnectionAddr: "/dns4/bootstrap.example.com/tcp/443/tls/ws/p2p/12D3KooWBootstrap",
-  canConnect: true,
-  connect: vi.fn(async () => true),
   currentNode: null,
-  debugConnectPhase: "android-host",
-  debugLastError: null,
   diagnostics: { runtime_status: "ready" },
   errorMessage: null,
-  hostKind: "android-host" as const,
+  shellKind: "device-shell" as const,
   isConnected: true,
-  peerCandidates: [
+  peers: [
     {
-      lastDiscoveredAt: "2026-04-21T16:00:00.000Z",
+      discoveredAt: "2026-04-21T16:00:00.000Z",
       multiaddrs: ["/dns4/peer.example.com/tcp/443/tls/ws/p2p/12D3KooWPeer"],
       peerId: "12D3KooWPeer",
     },
   ],
-  peers: [],
-  saveConnection: vi.fn(async () => {}),
   saveServerUrl: vi.fn(async () => {}),
   serverUrl: "https://gomtm.example.com",
   serverUrlInput: "https://gomtm.example.com",
@@ -93,7 +86,7 @@ vi.mock("mtxuilib/ui/card", () => ({
 }));
 
 vi.mock("../runtime/p2p-runtime-provider", () => ({
-  useP2PRuntime: () => runtimeState,
+  useP2PShellState: () => runtimeState,
 }));
 
 import { P2PPeerPageView } from "./p2p-peer-page-view";
@@ -194,8 +187,11 @@ describe("P2PPeerPageView hard cut", () => {
     });
   });
 
-  it("renders an open remote link when android.native_remote_v2 is available", async () => {
-    mockCapabilityResponse([{ name: "android.native_remote_v2", reason: "ready", state: "available" }]);
+  it("renders an open remote link when android.native_remote_v2_webrtc is available", async () => {
+    mockCapabilityResponse([
+      { name: "android.native_remote_v2_webrtc", reason: "ready", state: "available" },
+      { name: "linux.web_ssh", reason: "not_supported", state: "unavailable" },
+    ]);
 
     Object.defineProperty(globalThis, "fetch", {
       configurable: true,
@@ -208,5 +204,26 @@ describe("P2PPeerPageView hard cut", () => {
     const remoteLink = await screen.findByRole("link", { name: "打开远控" });
 
     expect(remoteLink.getAttribute("href")).toBe("/dash/p2p/12D3KooWPeer/remote");
+    expect(screen.getAllByRole("link", { name: "打开远控" })).toHaveLength(1);
+    expect(screen.getByText("android.native_remote_v2_webrtc").closest("article")?.textContent).toContain("打开远控");
+    expect(screen.getByText("linux.web_ssh").closest("article")?.textContent).not.toContain("打开远控");
+  });
+
+  it("does not treat legacy android.native_remote_v2 as the success path", async () => {
+    mockCapabilityResponse([{ name: "android.native_remote_v2", reason: "ready", state: "available" }]);
+
+    Object.defineProperty(globalThis, "fetch", {
+      configurable: true,
+      value: fetchMock,
+      writable: true,
+    });
+
+    render(<P2PPeerPageView peerId="12D3KooWPeer" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("android.native_remote_v2")).toBeTruthy();
+    });
+
+    expect(screen.queryByRole("link", { name: "打开远控" })).toBeNull();
   });
 });

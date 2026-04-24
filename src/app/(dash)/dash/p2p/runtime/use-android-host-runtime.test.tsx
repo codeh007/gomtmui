@@ -2,7 +2,8 @@
 
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { useAndroidHostRuntime } from "./use-android-host-runtime";
+import * as deviceShellModule from "./use-android-host-runtime";
+import { useDeviceShellRuntime } from "./use-android-host-runtime";
 
 function installBridge(state: {
   connectionConfig: unknown;
@@ -41,10 +42,11 @@ function installBridge(state: {
 }
 
 function Probe() {
-  const runtime = useAndroidHostRuntime();
+  const runtime = useDeviceShellRuntime();
 
   return (
     <>
+      <div data-testid="shell-kind">{runtime.shellKind}</div>
       <div data-testid="server-url">{runtime.serverUrl}</div>
       <div data-testid="server-url-input">{runtime.serverUrlInput}</div>
       <div data-testid="status">{runtime.status}</div>
@@ -59,7 +61,8 @@ function Probe() {
       </button>
       <button
         onClick={() => {
-          void runtime.saveConnection("https://next.example.com");
+          runtime.setServerUrlInput("https://next.example.com");
+          void runtime.saveServerUrl();
         }}
         type="button"
       >
@@ -69,7 +72,11 @@ function Probe() {
   );
 }
 
-describe("useAndroidHostRuntime", () => {
+describe("useDeviceShellRuntime", () => {
+  it("does not export the removed useAndroidHostRuntime compatibility alias", () => {
+    expect("useAndroidHostRuntime" in deviceShellModule).toBe(false);
+  });
+
   afterEach(() => {
     cleanup();
     vi.useRealTimers();
@@ -93,6 +100,7 @@ describe("useAndroidHostRuntime", () => {
     render(<Probe />);
 
     await waitFor(() => {
+      expect(screen.getByTestId("shell-kind").textContent).toBe("device-shell");
       expect(screen.getByTestId("server-url").textContent).toBe("https://initial.example.com");
     });
 

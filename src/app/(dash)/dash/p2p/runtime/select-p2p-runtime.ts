@@ -1,4 +1,4 @@
-import type { P2PHostKind } from "./p2p-runtime-contract";
+import type { P2PShellKind } from "./p2p-runtime-contract";
 
 type MaybePromise<T> = T | Promise<T>;
 
@@ -18,6 +18,6 @@ export function getGomtmHostBridge(win: Window): GomtmHostBridge | null {
   return (win as WindowWithGomtmHostBridge).GomtmHostBridge ?? null;
 }
 
-export function selectP2PRuntimeHost(win: Window): P2PHostKind {
-  return getGomtmHostBridge(win) == null ? "browser" : "android-host";
+export function selectP2PShellKind(win: Window): P2PShellKind {
+  return getGomtmHostBridge(win) == null ? "server-shell" : "device-shell";
 }
