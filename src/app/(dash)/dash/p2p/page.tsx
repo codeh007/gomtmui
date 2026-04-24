@@ -6,10 +6,10 @@ import { Card, CardContent, CardHeader } from "mtxuilib/ui/card";
 import { Input } from "mtxuilib/ui/input";
 import Link from "next/link";
 import { DashContent, DashHeaders } from "@/components/dash-layout";
-import { useP2PRuntime } from "./runtime/p2p-runtime-provider";
+import { useP2PShellState } from "./runtime/p2p-runtime-provider";
 
 export default function P2PPage() {
-  const runtime = useP2PRuntime();
+  const runtime = useP2PShellState();
   const currentPeerId = runtime.currentNode?.peerId?.trim() ?? "";
   const discoveredPeers = runtime.peers.filter((peer) => peer.peerId.trim() !== "" && peer.peerId !== currentPeerId);
   const currentMultiaddrs = runtime.currentNode?.multiaddrs ?? [];
@@ -24,7 +24,7 @@ export default function P2PPage() {
         <Card>
           <CardHeader className="space-y-2">
             <h2 className="text-base font-semibold">当前节点</h2>
-            <div className="text-sm text-muted-foreground">当前运行时状态、地址和连接配置。</div>
+            <div className="text-sm text-muted-foreground">当前 shell 节点 peer ID 与可访问地址。</div>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-1">

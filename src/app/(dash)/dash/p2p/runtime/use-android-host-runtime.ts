@@ -1,9 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { PeerCandidate } from "@/lib/p2p/discovery-contracts";
 import {
-  type P2PRuntimeState,
+  type P2PShellState,
   type P2PStatus,
   getRuntimeNodeSummary,
 } from "./p2p-runtime-contract";
@@ -22,11 +21,10 @@ function asString(value: unknown) {
 }
 
 function getRuntimeIdentity(params: {
-  activeConnectionAddr: string;
   currentNode: ReturnType<typeof getRuntimeNodeSummary>;
   serverUrl: string;
 }) {
-  return [params.serverUrl.trim(), params.activeConnectionAddr.trim(), params.currentNode?.peerId ?? ""].join("|");
+  return [params.serverUrl.trim(), params.currentNode?.peerId ?? ""].join("|");
 }
 
 async function resolveBridgeMethod(
@@ -44,15 +42,7 @@ async function resolveBridgeMethod(
 
 function normalizeRuntimeStatus(value: unknown, serverUrl: string, peerCount: number): P2PStatus {
   const status = asString(value).toLowerCase();
-  if (
-    status === "loading" ||
-    status === "needs-server-url" ||
-    status === "fetching-connection-truth" ||
-    status === "joining" ||
-    status === "discovering" ||
-    status === "peer_candidates_ready" ||
-    status === "error"
-  ) {
+  if (status === "loading" || status === "needs-server-url" || status === "discovering" || status === "peer_candidates_ready" || status === "error") {
     return status;
   }
 
@@ -85,7 +75,7 @@ async function resolveBridgeValue(value: unknown) {
   }
 }
 
-function normalizePeerCandidates(value: unknown): PeerCandidate[] {
+function normalizePeers(value: unknown) {
   if (!Array.isArray(value)) {
     return [];
   }
@@ -107,23 +97,22 @@ function normalizePeerCandidates(value: unknown): PeerCandidate[] {
         : [];
 
       return {
-        peerId,
-        multiaddrs,
-        lastDiscoveredAt: asString(
+        discoveredAt: asString(
           record.lastDiscoveredAt ?? record.last_discovered_at ?? record.lastSeenAt ?? record.last_seen_at,
         ),
-      } satisfies PeerCandidate;
+        peerId,
+        multiaddrs,
+      };
     })
-    .filter((candidate): candidate is PeerCandidate => candidate != null);
+    .filter((candidate): candidate is NonNullable<typeof candidate> => candidate != null);
 }
 
-export function useAndroidHostRuntime(): P2PRuntimeState {
+export function useDeviceShellRuntime(): P2PShellState {
   const [serverUrl, setServerUrl] = useState("");
   const [serverUrlInput, setServerUrlInput] = useState("");
   const [status, setStatus] = useState<P2PStatus>("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [activeConnectionAddr, setActiveConnectionAddr] = useState("");
-  const [peerCandidates, setPeerCandidates] = useState<PeerCandidate[]>([]);
+  const [peers, setPeers] = useState<P2PShellState["peers"]>([]);
   const [currentNode, setCurrentNode] = useState<ReturnType<typeof getRuntimeNodeSummary>>(null);
   const [diagnostics, setDiagnostics] = useState<Record<string, unknown>>({});
   const runtimeIdentityRef = useRef<string | null>(null);
@@ -183,25 +172,18 @@ export function useAndroidHostRuntime(): P2PRuntimeState {
           runtimeRecord?.server_url ??
           hostRecord?.serverUrl ??
           hostRecord?.server_url,
-      );
-      const nextConnectionAddr = asString(
-        runtimeRecord?.activeConnectionAddr ??
-          runtimeRecord?.active_connection_addr ??
-          runtimeRecord?.connectionAddr ??
-          runtimeRecord?.connectionAddress ??
-          runtimeRecord?.connection_address,
-      );
-      const nextPeers = normalizePeerCandidates(
+        );
+      const nextPeers = normalizePeers(
         peerList ?? runtimeRecord?.discoveredPeers ?? runtimeRecord?.peers ?? runtimeRecord?.peerCandidates ?? [],
       );
+      const nextCurrentNodeMultiaddrs = nextServerUrl === "" ? undefined : [nextServerUrl];
       const nextCurrentNode =
-        getRuntimeNodeSummary(runtimeRecord?.currentNode) ??
-        getRuntimeNodeSummary(runtimeRecord?.node) ??
-        getRuntimeNodeSummary({ peerId: runtimeRecord?.peerId ?? runtimeRecord?.peer_id }) ??
-        getRuntimeNodeSummary(hostRecord?.currentNode) ??
-        getRuntimeNodeSummary(hostRecord);
+        getRuntimeNodeSummary(runtimeRecord?.currentNode, nextCurrentNodeMultiaddrs) ??
+        getRuntimeNodeSummary(runtimeRecord?.node, nextCurrentNodeMultiaddrs) ??
+        getRuntimeNodeSummary({ peerId: runtimeRecord?.peerId ?? runtimeRecord?.peer_id }, nextCurrentNodeMultiaddrs) ??
+        getRuntimeNodeSummary(hostRecord?.currentNode, nextCurrentNodeMultiaddrs) ??
+        getRuntimeNodeSummary(hostRecord, nextCurrentNodeMultiaddrs);
       const nextRuntimeIdentity = getRuntimeIdentity({
-        activeConnectionAddr: nextConnectionAddr,
         currentNode: nextCurrentNode,
         serverUrl: nextServerUrl,
       });
@@ -209,8 +191,7 @@ export function useAndroidHostRuntime(): P2PRuntimeState {
       runtimeIdentityRef.current = nextRuntimeIdentity;
 
       syncCanonicalServerUrl(nextServerUrl);
-      setActiveConnectionAddr(nextConnectionAddr);
-      setPeerCandidates(nextPeers);
+      setPeers(nextPeers);
       setCurrentNode(nextCurrentNode);
       setDiagnostics({
         connectionConfig,
@@ -220,6 +201,7 @@ export function useAndroidHostRuntime(): P2PRuntimeState {
       setErrorMessage(null);
       setStatus(normalizeRuntimeStatus(runtimeRecord?.status, nextServerUrl, nextPeers.length));
     } catch (error) {
+      setPeers([]);
       setStatus("error");
       setErrorMessage(error instanceof Error ? error.message : String(error));
     }
@@ -267,8 +249,8 @@ export function useAndroidHostRuntime(): P2PRuntimeState {
     };
   }, [hydrateHostSnapshot]);
 
-  const saveConnection = useCallback(async (connection: string) => {
-    const normalized = connection.trim();
+  const saveServerUrl = useCallback(async () => {
+    const normalized = serverUrlInputRef.current.trim();
     runtimeIdentityRef.current = null;
     syncCanonicalServerUrl(normalized, { forceInputSync: true });
     setStatus(normalized === "" ? "needs-server-url" : "discovering");
@@ -288,29 +270,30 @@ export function useAndroidHostRuntime(): P2PRuntimeState {
     await hydrateHostSnapshot();
   }, [hydrateHostSnapshot, syncCanonicalServerUrl]);
 
-  const peers = useMemo(
-    () => peerCandidates.map((peer) => getRuntimeNodeSummary(peer) ?? { peerId: peer.peerId, multiaddrs: peer.multiaddrs, discoveredAt: peer.lastDiscoveredAt }),
-    [peerCandidates],
-  );
+  const currentNodeWithServerUrl = useMemo(() => {
+    if (currentNode == null) {
+      return currentNode;
+    }
+    if ((currentNode.multiaddrs?.length ?? 0) > 0 || serverUrl.trim() === "") {
+      return currentNode;
+    }
+    return {
+      ...currentNode,
+      multiaddrs: [serverUrl.trim()],
+    } satisfies NonNullable<P2PShellState["currentNode"]>;
+  }, [currentNode, serverUrl]);
 
   return {
-    hostKind: "android-host",
-    currentNode,
+    shellKind: "device-shell",
+    currentNode: currentNodeWithServerUrl,
     peers,
     status,
     diagnostics,
-    saveConnection,
-    activeConnectionAddr,
-    canConnect: serverUrl.trim() !== "" && status !== "loading" && status !== "joining" && status !== "discovering",
-    connect: async () => serverUrl.trim() !== "",
-    debugConnectPhase: "android-host",
-    debugLastError: null,
     errorMessage,
     isConnected: status === "discovering" || status === "peer_candidates_ready",
-    peerCandidates,
-    saveServerUrl: async () => saveConnection(serverUrlInput),
+    saveServerUrl,
     serverUrl,
     serverUrlInput,
     setServerUrlInput: setServerUrlInputValue,
-  } satisfies P2PRuntimeState;
+  } satisfies P2PShellState;
 }

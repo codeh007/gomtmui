@@ -6,8 +6,6 @@ import { useP2PPeerPageSession } from "./use-p2p-peer-page-session";
 
 const fetchMock = vi.fn();
 const originalFetch = globalThis.fetch;
-const connect = vi.fn(async () => false);
-const saveConnection = vi.fn(async () => {});
 const saveServerUrl = vi.fn(async () => {});
 const setServerUrlInput = vi.fn();
 
@@ -22,28 +20,21 @@ function mockCapabilityResponse(capabilities: Array<{ name: string; reason?: str
   );
 }
 
-function createPeerCandidate(peerId: string, multiaddrs: string[]) {
+function createPeer(peerId: string, multiaddrs: string[]) {
   return {
-    lastDiscoveredAt: "2026-04-21T16:00:00.000Z",
+    discoveredAt: "2026-04-21T16:00:00.000Z",
     multiaddrs,
     peerId,
   };
 }
 
 const mockRuntime = {
-  activeConnectionAddr: "",
-  canConnect: false,
-  connect,
   currentNode: null,
-  debugConnectPhase: "android-host",
-  debugLastError: null,
   diagnostics: {},
   errorMessage: null,
-  hostKind: "android-host" as "android-host" | "browser",
+  shellKind: "device-shell" as "device-shell" | "server-shell",
   isConnected: true,
-  peerCandidates: [createPeerCandidate("12D3KooWPeer", ["/dns4/android.example.com/tcp/443/tls/ws/p2p/12D3KooWPeer"])],
-  peers: [],
-  saveConnection,
+  peers: [createPeer("12D3KooWPeer", ["/dns4/android.example.com/tcp/443/tls/ws/p2p/12D3KooWPeer"])],
   saveServerUrl,
   serverUrl: "https://gomtm.example.com",
   serverUrlInput: "https://gomtm.example.com",
@@ -52,7 +43,7 @@ const mockRuntime = {
 };
 
 vi.mock("../runtime/p2p-runtime-provider", () => ({
-  useP2PRuntime: () => mockRuntime,
+  useP2PShellState: () => mockRuntime,
 }));
 
 function Probe({ peerId = "12D3KooWPeer" }: { peerId?: string }) {
@@ -79,22 +70,19 @@ describe("useP2PPeerPageSession", () => {
       value: originalFetch,
       writable: true,
     });
-    connect.mockClear();
-    saveConnection.mockClear();
     saveServerUrl.mockClear();
     setServerUrlInput.mockClear();
-    mockRuntime.activeConnectionAddr = "";
     mockRuntime.currentNode = null;
     mockRuntime.errorMessage = null;
-    mockRuntime.hostKind = "android-host";
+    mockRuntime.shellKind = "device-shell";
     mockRuntime.isConnected = true;
-    mockRuntime.peerCandidates = [createPeerCandidate("12D3KooWPeer", ["/dns4/android.example.com/tcp/443/tls/ws/p2p/12D3KooWPeer"])];
+    mockRuntime.peers = [createPeer("12D3KooWPeer", ["/dns4/android.example.com/tcp/443/tls/ws/p2p/12D3KooWPeer"])];
     mockRuntime.serverUrl = "https://gomtm.example.com";
     mockRuntime.serverUrlInput = "https://gomtm.example.com";
   });
 
-  it("reads peer capabilities through the gomtm server operator api on android-host without requiring a browser node", async () => {
-    mockRuntime.peerCandidates = [createPeerCandidate("12D3KooWPeer", [])];
+  it("reads peer capabilities through the gomtm server operator api on device-shell without requiring a local libp2p node", async () => {
+    mockRuntime.peers = [createPeer("12D3KooWPeer", [])];
     mockCapabilityResponse([
       {
         name: "android.native_remote_v2_webrtc",
@@ -127,10 +115,9 @@ describe("useP2PPeerPageSession", () => {
     );
   });
 
-  it("browser host still reads capabilities through the gomtm server operator api when the peer is not browser-dialable", async () => {
-    mockRuntime.hostKind = "browser";
-    mockRuntime.activeConnectionAddr = "/dns4/bootstrap.example.com/tcp/443/wss/p2p/12D3KooWBootstrap";
-    mockRuntime.peerCandidates = [createPeerCandidate("12D3KooWPeer", ["/ip4/10.0.0.1/tcp/4001/p2p/12D3KooWPeer"] )];
+  it("server-shell still reads capabilities through the gomtm server operator api", async () => {
+    mockRuntime.shellKind = "server-shell";
+    mockRuntime.peers = [createPeer("12D3KooWPeer", ["/ip4/10.0.0.1/tcp/4001/p2p/12D3KooWPeer"])];
     mockCapabilityResponse([
       {
         name: "android.native_remote_v2_webrtc",
@@ -164,7 +151,7 @@ describe("useP2PPeerPageSession", () => {
   });
 
   it("loads capabilities from the gomtm server even when the peer is not locally discovered", async () => {
-    mockRuntime.peerCandidates = [];
+    mockRuntime.peers = [];
     mockCapabilityResponse([
       {
         name: "android.native_remote_v2_webrtc",
@@ -232,7 +219,6 @@ describe("useP2PPeerPageSession", () => {
 
   it("clears local capability overrides when the runtime session identity changes without auto-refetching from the server", async () => {
     mockRuntime.currentNode = { peerId: "android-host-a" };
-    mockRuntime.activeConnectionAddr = "/dns4/bootstrap-a.example.com/tcp/443/tls/ws/p2p/12D3KooWA";
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify([
@@ -265,7 +251,6 @@ describe("useP2PPeerPageSession", () => {
     expect(screen.getByTestId("can-open-android").textContent).toBe("true");
 
     mockRuntime.currentNode = { peerId: "android-host-b" };
-    mockRuntime.activeConnectionAddr = "/dns4/bootstrap-b.example.com/tcp/443/tls/ws/p2p/12D3KooWB";
     rendered.rerender(<Probe />);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);

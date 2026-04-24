@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { postServerPeerRemoteCommand } from "@/lib/p2p/server-peer-operator-api";
-import { useP2PRuntime } from "../../runtime/p2p-runtime-provider";
+import { useP2PShellState } from "../../runtime/p2p-runtime-provider";
 
 function asRecord(value: unknown) {
   return value !== null && typeof value === "object" ? (value as Record<string, unknown>) : null;
@@ -57,7 +57,7 @@ function getErrorMessage(error: unknown) {
 }
 
 export function useP2PPeerRemotePageSession(peerId: string) {
-  const p2pSession = useP2PRuntime();
+  const p2pSession = useP2PShellState();
   const [snapshotDataUrl, setSnapshotDataUrl] = useState<string | null>(null);
   const [remoteErrorMessage, setRemoteErrorMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

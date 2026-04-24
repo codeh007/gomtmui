@@ -1,37 +1,37 @@
 "use client";
 
 import { createContext, type ReactNode, useContext } from "react";
-import type { P2PRuntimeState } from "./p2p-runtime-contract";
-import { selectP2PRuntimeHost } from "./select-p2p-runtime";
-import { useAndroidHostRuntime } from "./use-android-host-runtime";
-import { useBrowserP2PRuntime } from "./use-browser-p2p-runtime";
+import type { P2PShellState } from "./p2p-runtime-contract";
+import { selectP2PShellKind } from "./select-p2p-runtime";
+import { useDeviceShellRuntime } from "./use-android-host-runtime";
+import { useServerShellRuntime } from "./use-server-shell-runtime";
 
-const P2PRuntimeContext = createContext<P2PRuntimeState | null>(null);
+const P2PShellContext = createContext<P2PShellState | null>(null);
 
-function BrowserRuntimeProviderValue({ children }: { children: ReactNode }) {
-  const runtime = useBrowserP2PRuntime();
-  return <P2PRuntimeContext.Provider value={runtime}>{children}</P2PRuntimeContext.Provider>;
+function ServerShellRuntimeProviderValue({ children }: { children: ReactNode }) {
+  const runtime = useServerShellRuntime();
+  return <P2PShellContext.Provider value={runtime}>{children}</P2PShellContext.Provider>;
 }
 
-function AndroidHostRuntimeProviderValue({ children }: { children: ReactNode }) {
-  const runtime = useAndroidHostRuntime();
-  return <P2PRuntimeContext.Provider value={runtime}>{children}</P2PRuntimeContext.Provider>;
+function DeviceShellRuntimeProviderValue({ children }: { children: ReactNode }) {
+  const runtime = useDeviceShellRuntime();
+  return <P2PShellContext.Provider value={runtime}>{children}</P2PShellContext.Provider>;
 }
 
-export function P2PRuntimeProvider({ children }: { children: ReactNode }) {
-  const hostKind = typeof window === "undefined" ? "browser" : selectP2PRuntimeHost(window);
+export function P2PShellProvider({ children }: { children: ReactNode }) {
+  const shellKind = typeof window === "undefined" ? "server-shell" : selectP2PShellKind(window);
 
-  if (hostKind === "android-host") {
-    return <AndroidHostRuntimeProviderValue>{children}</AndroidHostRuntimeProviderValue>;
+  if (shellKind === "device-shell") {
+    return <DeviceShellRuntimeProviderValue>{children}</DeviceShellRuntimeProviderValue>;
   }
 
-  return <BrowserRuntimeProviderValue>{children}</BrowserRuntimeProviderValue>;
+  return <ServerShellRuntimeProviderValue>{children}</ServerShellRuntimeProviderValue>;
 }
 
-export function useP2PRuntime() {
-  const value = useContext(P2PRuntimeContext);
+export function useP2PShellState() {
+  const value = useContext(P2PShellContext);
   if (value == null) {
-    throw new Error("useP2PRuntime must be used within P2PRuntimeProvider");
+    throw new Error("useP2PShellState must be used within P2PShellProvider");
   }
   return value;
 }

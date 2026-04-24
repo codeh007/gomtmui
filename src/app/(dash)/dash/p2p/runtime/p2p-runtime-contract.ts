@@ -1,13 +1,11 @@
 import {
   listPeerCapabilities,
   parsePeerCapabilityDescriptors,
-  type PeerCandidate,
   type PeerCapabilityDescriptor,
   type PeerCapabilityTruth,
 } from "@/lib/p2p/discovery-contracts";
-import { getPreferredBrowserConnectionPath } from "@/lib/p2p/libp2p-stream";
 
-export type P2PHostKind = "browser" | "android-host";
+export type P2PShellKind = "server-shell" | "device-shell";
 
 export type RuntimeNodeSummary = {
   peerId: string;
@@ -20,29 +18,20 @@ export type RuntimeCapability = PeerCapabilityDescriptor;
 export type P2PStatus =
   | "loading"
   | "needs-server-url"
-  | "fetching-connection-truth"
-  | "joining"
   | "discovering"
   | "peer_candidates_ready"
   | "error";
 
 export type ResolvedPeerTruthMap = Record<string, PeerCapabilityTruth>;
 
-export type P2PRuntimeState = {
-  hostKind: P2PHostKind;
+export type P2PShellState = {
+  shellKind: P2PShellKind;
   currentNode: RuntimeNodeSummary | null;
   peers: RuntimeNodeSummary[];
   status: P2PStatus;
   diagnostics: Record<string, unknown>;
-  saveConnection: (connection: string) => Promise<void>;
-  activeConnectionAddr: string;
-  canConnect: boolean;
-  connect: () => Promise<boolean>;
-  debugConnectPhase: string;
-  debugLastError: string | null;
   errorMessage: string | null;
   isConnected: boolean;
-  peerCandidates: PeerCandidate[];
   saveServerUrl: () => Promise<void>;
   serverUrl: string;
   serverUrlInput: string;
@@ -68,20 +57,6 @@ export function getP2PStatusMeta(status: P2PStatus) {
       tone: "default" as const,
     };
   }
-  if (status === "fetching-connection-truth") {
-    return {
-      dotClass: "bg-amber-500",
-      label: "正在读取后端 连接信息",
-      tone: "secondary" as const,
-    };
-  }
-  if (status === "joining") {
-    return {
-      dotClass: "bg-amber-500",
-      label: "正在入网",
-      tone: "secondary" as const,
-    };
-  }
   if (status === "needs-server-url") {
     return {
       dotClass: "bg-amber-500",
@@ -101,31 +76,6 @@ export function getP2PStatusMeta(status: P2PStatus) {
     label: "正在准备",
     tone: "secondary" as const,
   };
-}
-
-export function formatConnectionPathLabel(path: "direct" | "relay" | null | undefined) {
-  if (path === "direct") {
-    return "入网路径=直连";
-  }
-  if (path === "relay") {
-    return "入网路径=中继";
-  }
-  return "入网路径=未知";
-}
-
-export function getConnectionPathLabel(address: string | null | undefined) {
-  return formatConnectionPathLabel((address?.trim() ?? "") === "" ? null : "relay");
-}
-
-export function getPreferredPeerConnectionPathLabel(multiaddrs: string[], connectionPath?: "direct" | "relay" | null) {
-  const path = connectionPath ?? getPreferredBrowserConnectionPath(multiaddrs);
-  if (path === "direct") {
-    return "入网=直连";
-  }
-  if (path === "relay") {
-    return "入网=中继";
-  }
-  return "入网=未知";
 }
 
 export function getRuntimeNodeSummary(input: unknown, fallbackMultiaddrs?: string[]): RuntimeNodeSummary | null {

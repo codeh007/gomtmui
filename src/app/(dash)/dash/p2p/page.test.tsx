@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const runtimeState = {
-  hostKind: "browser",
+  shellKind: "server-shell",
   currentNode: {
     peerId: "12D3KooWSelf",
     multiaddrs: ["/dns4/self.example.com/tcp/443/tls/ws/p2p/12D3KooWSelf"],
@@ -19,21 +19,8 @@ const runtimeState = {
   ],
   status: "peer_candidates_ready",
   diagnostics: {},
-  saveConnection: vi.fn(),
-  activeConnectionAddr: "",
-  canConnect: true,
-  connect: vi.fn(),
-  debugConnectPhase: "discovering",
-  debugLastError: null,
   errorMessage: null,
   isConnected: true,
-  peerCandidates: [
-    {
-      peerId: "12D3KooWPeer",
-      multiaddrs: ["/dns4/peer.example.com/tcp/443/tls/ws/p2p/12D3KooWPeer"],
-      lastDiscoveredAt: "2026-04-21T00:00:00Z",
-    },
-  ],
   saveServerUrl: vi.fn(),
   serverUrl: "https://gomtm.example.com",
   serverUrlInput: "https://gomtm.example.com",
@@ -108,7 +95,7 @@ vi.mock("mtxuilib/ui/popover", () => ({
 }));
 
 vi.mock("./runtime/p2p-runtime-provider", () => ({
-  useP2PRuntime: () => runtimeState,
+  useP2PShellState: () => runtimeState,
 }));
 
 import P2PPage from "./page";
@@ -119,7 +106,7 @@ describe("P2PPage hard cut", () => {
     vi.clearAllMocks();
   });
 
-  it("shows current node first and routes discovered peers to the unified detail page", () => {
+  it("shows current node from shell truth and submits server url via save-only semantics", () => {
     render(<P2PPage />);
 
     const currentNodeHeading = screen.getByRole("heading", { name: "当前节点" });
@@ -129,11 +116,21 @@ describe("P2PPage hard cut", () => {
     );
 
     expect(screen.getByText("12D3KooWSelf")).toBeTruthy();
+    expect(screen.getByText("当前 shell 节点 peer ID 与可访问地址。")).toBeTruthy();
+    expect(screen.queryByText(/连接配置/)).toBeNull();
 
     const detailLink = screen.getByRole("link", { name: "查看节点 12D3KooWPeer" });
     expect(detailLink.getAttribute("href")).toBe("/dash/p2p/12D3KooWPeer");
 
     expect(screen.getByText("发现于 2026-04-21T00:00:00Z")).toBeTruthy();
+
+    fireEvent.change(screen.getByPlaceholderText("gomtm server 公网地址，例如 https://gomtm2.yuepa8.com"), {
+      target: { value: "https://gomtm2.next.example.com" },
+    });
+    expect(runtimeState.setServerUrlInput).toHaveBeenCalledWith("https://gomtm2.next.example.com");
+
+    fireEvent.click(screen.getByRole("button", { name: "保存并连接" }));
+    expect(runtimeState.saveServerUrl).toHaveBeenCalledTimes(1);
 
     expect(screen.queryByRole("link", { name: "Android" })).toBeNull();
   });

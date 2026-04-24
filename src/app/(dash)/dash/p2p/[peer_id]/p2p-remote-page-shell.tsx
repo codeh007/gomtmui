@@ -17,25 +17,18 @@ type P2PConnectionEntryMeta = {
   detail: string;
 };
 
-export function getP2PConnectionEntryMeta(status: P2PStatus, joiningDetail: string): P2PConnectionEntryMeta {
+export function getP2PConnectionEntryMeta(status: P2PStatus): P2PConnectionEntryMeta {
   if (status === "loading") {
     return {
-      title: "准备浏览器节点",
-      detail: "正在初始化 P2P 能力。",
-    };
-  }
-
-  if (status === "joining") {
-    return {
-      title: "接入中",
-      detail: joiningDetail,
+      title: "准备节点状态",
+      detail: "正在读取节点状态。",
     };
   }
 
   if (status === "error") {
     return {
       title: "等待服务器恢复",
-      detail: "当前节点连接依赖主页面已建立的服务器会话，请先返回 P2P 页面检查后端地址与连接状态。",
+      detail: "当前节点页面依赖 P2P 页面中的服务器地址配置，请先返回 P2P 页面检查后端地址。",
     };
   }
 
@@ -47,23 +40,21 @@ export function getP2PConnectionEntryMeta(status: P2PStatus, joiningDetail: stri
 
 
 type P2PConnectionEntryCardProps = {
-  activeConnectionAddr: string;
+  currentNodeAddrs: string[];
   entryLabel: string;
-  joiningDetail: string;
   onBackToP2P: string;
   status: P2PStatus;
   surfaceError: string | null;
 };
 
 export function P2PConnectionEntryCard({
-  activeConnectionAddr,
+  currentNodeAddrs,
   entryLabel,
-  joiningDetail,
   onBackToP2P,
   status,
   surfaceError,
 }: P2PConnectionEntryCardProps) {
-  const entryMeta = getP2PConnectionEntryMeta(status, joiningDetail);
+  const entryMeta = getP2PConnectionEntryMeta(status);
 
   return (
     <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col justify-center gap-4 px-3 py-4 sm:px-0 sm:py-0">
@@ -84,10 +75,16 @@ export function P2PConnectionEntryCard({
           </Button>
         </div>
 
-        {activeConnectionAddr ? (
+        {currentNodeAddrs.length > 0 ? (
           <div className="mt-3 rounded-lg border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-            <div className="text-[11px] uppercase tracking-wide">当前连接入口</div>
-            <div className="mt-1 break-all font-mono">{activeConnectionAddr}</div>
+            <div className="text-[11px] uppercase tracking-wide">当前节点地址</div>
+            <div className="mt-1 space-y-1 font-mono">
+              {currentNodeAddrs.map((address) => (
+                <div key={address} className="break-all">
+                  {address}
+                </div>
+              ))}
+            </div>
           </div>
         ) : null}
         {surfaceError ? (

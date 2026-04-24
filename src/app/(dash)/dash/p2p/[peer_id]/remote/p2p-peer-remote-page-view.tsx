@@ -14,9 +14,8 @@ export function P2PPeerRemotePageView({ peerId }: { peerId: string }) {
   return (
     <P2PRemotePageScaffold
       connectionEntry={{
-        activeConnectionAddr: session.activeConnectionAddr,
+        currentNodeAddrs: session.currentNode?.multiaddrs ?? [],
         entryLabel: "远程控制",
-        joiningDetail: "当前远控页面依赖主页面已建立的服务器会话。",
         onBackToP2P: "/dash/p2p",
         status: session.status,
         surfaceError: session.errorMessage,

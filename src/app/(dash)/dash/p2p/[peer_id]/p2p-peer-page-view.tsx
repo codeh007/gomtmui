@@ -36,11 +36,8 @@ function toneForPeerTruth(status: ReturnType<typeof useP2PPeerPageSession>["peer
   return "secondary" as const;
 }
 
-function canOpenMinimalRemote(capability: { name: string; state?: string }) {
-  return (
-    capability.name.trim().toLowerCase() === "android.native_remote_v2" &&
-    capability.state?.trim().toLowerCase() === "available"
-  );
+function isCanonicalRemoteControlCapability(capability: { name: string }) {
+  return capability.name.trim().toLowerCase() === "android.native_remote_v2_webrtc";
 }
 
 export function P2PPeerPageView({ peerId }: { peerId: string }) {
@@ -87,7 +84,7 @@ export function P2PPeerPageView({ peerId }: { peerId: string }) {
                 <Badge variant={toneForPeerTruth(session.peerTruthStatus)}>
                   {PEER_TRUTH_STATUS_LABELS[session.peerTruthStatus]}
                 </Badge>
-                <span>{session.peer?.lastDiscoveredAt?.trim() ? `最近发现 ${session.peer.lastDiscoveredAt}` : "等待发现时间"}</span>
+                <span>{session.peer?.discoveredAt?.trim() ? `最近发现 ${session.peer.discoveredAt}` : "等待发现时间"}</span>
               </div>
             </div>
           </CardHeader>
@@ -146,7 +143,7 @@ export function P2PPeerPageView({ peerId }: { peerId: string }) {
                     <Badge variant={capability.state?.trim().toLowerCase() === "available" ? "default" : "secondary"}>
                       {capability.state || "unknown"}
                     </Badge>
-                    {canOpenMinimalRemote(capability) ? (
+                    {session.canOpenAndroid && isCanonicalRemoteControlCapability(capability) ? (
                       <Link
                         href={`/dash/p2p/${peerId}/remote`}
                         className="inline-flex h-8 items-center justify-center rounded-md border px-3 text-sm font-medium transition-colors hover:bg-muted"
