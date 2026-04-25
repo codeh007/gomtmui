@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import type { AppContext } from "../../../types";
+import type { AppContext } from "../../types";
 import { oauthCallbackRoute } from "./oauth-callback";
 import { tokenRefreshRoute } from "./token-refresh";
 

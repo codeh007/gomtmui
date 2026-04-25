@@ -1,9 +1,9 @@
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import { z } from "zod";
-import type { AppContext } from "../../../types";
 import { getCfClient } from "../../lib/cloudflare/cloudflare";
 import { cleanupDnsRecords, getTunnelName } from "../../lib/cloudflare/tunnel-utils";
+import type { AppContext } from "../../types";
 
 export const tunnelCleanupRoute = new Hono<AppContext>();
 

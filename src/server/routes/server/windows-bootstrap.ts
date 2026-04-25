@@ -2,19 +2,19 @@ import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import { getSupabase, getSupabaseAdmin } from "mtmsdk/supabase/supabase";
 import { z } from "zod";
-import type { AppContext } from "../../../types";
 import { getCfClient } from "../../lib/cloudflare/cloudflare";
 import { ensureDnsRecord } from "../../lib/cloudflare/tunnel-utils";
 import { getServerBaseUrl } from "../../lib/sslib";
+import type { AppContext } from "../../types";
 import {
-  buildWindowsP2PWsHostname,
-  buildWindowsBootstrapScript,
-  buildWindowsTunnelIngress,
-  buildWindowsManualBootstrapCommand,
-  createWindowsBootstrapToken,
-  resolveInstallBaseUrl,
-  resolveWindowsP2PWsHostname,
-  verifyWindowsBootstrapToken,
+    buildWindowsBootstrapScript,
+    buildWindowsManualBootstrapCommand,
+    buildWindowsP2PWsHostname,
+    buildWindowsTunnelIngress,
+    createWindowsBootstrapToken,
+    resolveInstallBaseUrl,
+    resolveWindowsP2PWsHostname,
+    verifyWindowsBootstrapToken,
 } from "./windows-bootstrap-utils";
 
 const cloudflareConfigSchema = z.object({

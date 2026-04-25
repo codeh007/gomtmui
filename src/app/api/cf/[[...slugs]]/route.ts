@@ -1,5 +1,5 @@
+import { app } from "@/server/app";
 import { handle } from "hono/vercel";
-import { app } from "@/mtgate/server/app";
 export const GET = handle(app);
 export const PUT = handle(app);
 export const POST = handle(app);

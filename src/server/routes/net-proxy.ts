@@ -1,6 +1,6 @@
-import { Hono } from "hono";
 import { PLATFORM_CONFIGS } from "@/lib/cloud-account/platform-configs";
-import type { AppContext } from "../../types";
+import { Hono } from "hono";
+import type { AppContext } from "../types";
 
 export const netProxyRoute = new Hono<AppContext>();
 

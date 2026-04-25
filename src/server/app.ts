@@ -1,6 +1,5 @@
 import { Hono } from "hono";
 import { contextStorage } from "hono/context-storage";
-import type { AppContext } from "../types";
 import { ApiPrefix, isDebug } from "./context";
 import { createInternalError } from "./lib/api_schema";
 import { configuredCorsMiddleware } from "./middlewares/corsMiddleware";
@@ -11,6 +10,7 @@ import { githubRoute } from "./routes/github";
 import { netProxyRoute } from "./routes/net-proxy";
 import openaiV1Route from "./routes/openai_v1";
 import { serverRoute } from "./routes/server";
+import type { AppContext } from "./types";
 
 const app = new Hono<AppContext>();
 app.use(contextStorage());

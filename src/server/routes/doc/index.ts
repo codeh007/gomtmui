@@ -1,9 +1,9 @@
 import { swaggerUI } from "@hono/swagger-ui";
 import type { Hono } from "hono";
 import { openAPIRouteHandler } from "hono-openapi";
-import type { AppContext } from "../../../types";
 import { ApiPrefix } from "../../context";
 import { getServerBaseUrl } from "../../lib/sslib";
+import type { AppContext } from "../../types";
 export const configureOpenapiDoc = (app: Hono<AppContext>) => {
   app.get(`${ApiPrefix}/doc`, swaggerUI({ url: `${ApiPrefix}/openapi` }));
   app.get(

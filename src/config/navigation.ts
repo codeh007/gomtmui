@@ -16,6 +16,12 @@ export const DASH_NAV_ITEMS: NavItem[] = [
     requiredRole: "admin",
   },
   {
+    label: "设备",
+    url: "/dash/devices",
+    icon: "smartphone",
+    tooltip: "我的受管设备",
+  },
+  {
     label: "MITM",
     url: "/dash/mitm",
     icon: "network",

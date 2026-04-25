@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import type { AppContext } from "../../../types";
+import type { AppContext } from "../../types";
 import { tunnelCleanupRoute as tunnelCleanup } from "./tunnel-cleanup";
 import { tunnelSetupRoute } from "./tunnel-setup";
 

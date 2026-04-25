@@ -1,7 +1,7 @@
+import { PLATFORM_CONFIGS, type PlatformName } from "@/lib/cloud-account/platform-configs";
 import { type Context, Hono } from "hono";
 import { getSupabaseAdmin } from "mtmsdk/supabase/supabase";
-import { PLATFORM_CONFIGS, type PlatformName } from "@/lib/cloud-account/platform-configs";
-import type { AppContext } from "../../../../types";
+import type { AppContext } from "../../../types";
 
 export const chatCompletionsRoute = new Hono<AppContext>();
 

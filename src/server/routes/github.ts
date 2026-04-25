@@ -1,6 +1,6 @@
 import { Hono } from "hono";
-import type { AppContext } from "../../types";
 import { configuredCorsMiddleware } from "../middlewares/corsMiddleware";
+import type { AppContext } from "../types";
 
 const githubRoute = new Hono<AppContext>();
 
