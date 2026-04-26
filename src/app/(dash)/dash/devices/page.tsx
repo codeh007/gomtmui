@@ -4,6 +4,7 @@ import { ScrollArea } from "mtxuilib/ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "mtxuilib/ui/table";
 import { DashContent, DashHeaders } from "@/components/dash-layout";
 import { createClient } from "@/lib/supabase/server";
+import { AndroidHostActivationCard } from "@/components/devices/android-host-activation-card";
 
 interface DeviceRow {
   id: string;
@@ -86,62 +87,65 @@ export default async function DevicesPage() {
         </div>
       </DashHeaders>
       <DashContent className="flex-1 overflow-auto">
-        <Card>
-          <CardHeader>
-            <CardTitle>我的设备</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {rows.length === 0 ? (
-              <div className="rounded-md border border-dashed p-8 text-sm text-muted-foreground">暂无设备。第一阶段仅提供列表视图，后续再补设备注册、详情和任务关联。</div>
-            ) : (
-              <ScrollArea className="w-full rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>名称</TableHead>
-                      <TableHead>平台</TableHead>
-                      <TableHead>状态</TableHead>
-                      <TableHead>标签</TableHead>
-                      <TableHead>最近在线</TableHead>
-                      <TableHead>更新时间</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {rows.map((device) => (
-                      <TableRow key={device.id}>
-                        <TableCell>
-                          <div className="flex flex-col gap-1">
-                            <span className="font-medium">{device.name}</span>
-                            <span className="font-mono text-xs text-muted-foreground">{device.id}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="uppercase">{device.platform}</TableCell>
-                        <TableCell>
-                          <Badge variant={statusVariant(device.status)}>{device.status}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-1">
-                            {device.tags.length > 0 ? (
-                              device.tags.map((tag) => (
-                                <Badge key={tag} variant="outline">
-                                  {tag}
-                                </Badge>
-                              ))
-                            ) : (
-                              <span className="text-xs text-muted-foreground">-</span>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>{formatTime(device.last_seen_at)}</TableCell>
-                        <TableCell>{formatTime(device.updated_at)}</TableCell>
+        <div className="space-y-6">
+          <AndroidHostActivationCard />
+          <Card>
+            <CardHeader>
+              <CardTitle>我的设备</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {rows.length === 0 ? (
+                <div className="rounded-md border border-dashed p-8 text-sm text-muted-foreground">暂无设备。第一阶段仅提供列表视图，后续再补设备注册、详情和任务关联。</div>
+              ) : (
+                <ScrollArea className="w-full rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>名称</TableHead>
+                        <TableHead>平台</TableHead>
+                        <TableHead>状态</TableHead>
+                        <TableHead>标签</TableHead>
+                        <TableHead>最近在线</TableHead>
+                        <TableHead>更新时间</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </ScrollArea>
-            )}
-          </CardContent>
-        </Card>
+                    </TableHeader>
+                    <TableBody>
+                      {rows.map((device) => (
+                        <TableRow key={device.id}>
+                          <TableCell>
+                            <div className="flex flex-col gap-1">
+                              <span className="font-medium">{device.name}</span>
+                              <span className="font-mono text-xs text-muted-foreground">{device.id}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="uppercase">{device.platform}</TableCell>
+                          <TableCell>
+                            <Badge variant={statusVariant(device.status)}>{device.status}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-wrap gap-1">
+                              {device.tags.length > 0 ? (
+                                device.tags.map((tag) => (
+                                  <Badge key={tag} variant="outline">
+                                    {tag}
+                                  </Badge>
+                                ))
+                              ) : (
+                                <span className="text-xs text-muted-foreground">-</span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>{formatTime(device.last_seen_at)}</TableCell>
+                          <TableCell>{formatTime(device.updated_at)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </DashContent>
     </>
   );
