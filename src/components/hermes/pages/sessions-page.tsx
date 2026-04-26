@@ -272,6 +272,7 @@ export function HermesSessionsPage() {
             setSelectedSessionId(null);
           }
         }}
+        searchSnippet={selectedSessionId ? snippetMap.get(selectedSessionId) : undefined}
         sessionId={selectedSessionId}
       />
     </div>

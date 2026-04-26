@@ -26,7 +26,7 @@ import { ScrollArea } from "mtxuilib/ui/scroll-area";
 import { Separator } from "mtxuilib/ui/separator";
 import { useEffect, useMemo, useState } from "react";
 
-import { api as hermesApi } from "@/lib/hermes/api";
+import { api as hermesApi, fetchJSON } from "@/lib/hermes/api";
 import type { SessionInfo, SessionMessage } from "@/lib/hermes/types";
 import { timeAgo } from "@/lib/hermes/utils";
 
@@ -43,6 +43,10 @@ function formatMoney(value?: number | null): string {
 function formatTimestamp(value?: number | null): string {
   if (typeof value !== "number" || Number.isNaN(value) || value <= 0) return "-";
   return new Date(value * 1000).toLocaleString();
+}
+
+function normalizeSnippet(snippet: string): string {
+  return snippet.replace(/>>>|<<</g, "").replace(/\s+/g, " ").trim();
 }
 
 function ToolCallCard({
@@ -137,6 +141,7 @@ export function SessionDetailView(props: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   sessionId: string | null;
+  searchSnippet?: string;
 }) {
   const [detail, setDetail] = useState<SessionInfo | null>(null);
   const [messages, setMessages] = useState<SessionMessage[] | null>(null);
@@ -153,13 +158,7 @@ export function SessionDetailView(props: {
     setError(null);
 
     Promise.all([
-      hermesApi.getSessions(200, 0).then((response) => {
-        const match = response.sessions.find((session) => session.id === props.sessionId);
-        if (match) {
-          return match;
-        }
-        throw new Error(`Session ${props.sessionId} not found in current listing`);
-      }),
+      fetchJSON<SessionInfo>(`/api/sessions/${encodeURIComponent(props.sessionId)}`),
       hermesApi.getSessionMessages(props.sessionId),
     ])
       .then(([session, messageResponse]) => {
@@ -190,6 +189,19 @@ export function SessionDetailView(props: {
     if (!detail) return props.sessionId || "Session";
     return detail.title || detail.preview || detail.id;
   }, [detail, props.sessionId]);
+
+  const normalizedSearchSnippet = useMemo(() => {
+    if (!props.searchSnippet) return "";
+    return normalizeSnippet(props.searchSnippet).toLowerCase();
+  }, [props.searchSnippet]);
+
+  const matchedMessageIndex = useMemo(() => {
+    if (!normalizedSearchSnippet || !messages) return -1;
+    return messages.findIndex((message) => {
+      const content = (message.content || "").replace(/\s+/g, " ").toLowerCase();
+      return content.includes(normalizedSearchSnippet);
+    });
+  }, [messages, normalizedSearchSnippet]);
 
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
@@ -320,7 +332,14 @@ export function SessionDetailView(props: {
               {messages && messages.length > 0 ? (
                 <div className="space-y-3">
                   {messages.map((message, index) => (
-                    <MessageCard key={`${detail?.id || props.sessionId}-${message.id ?? index}`} message={message} />
+                    <div key={`${detail?.id || props.sessionId}-${message.id ?? index}`} className="space-y-2">
+                      {matchedMessageIndex === index ? (
+                        <div className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-primary">
+                          Search hit matched this message.
+                        </div>
+                      ) : null}
+                      <MessageCard message={message} />
+                    </div>
                   ))}
                 </div>
               ) : null}
