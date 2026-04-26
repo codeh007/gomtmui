@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "mtxuilib/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "mtxuilib/ui/table";
 import { useEffect, useState } from "react";
 
-import { hermesApi } from "@/lib/hermes/api";
+import { api as hermesApi } from "@/lib/hermes/api";
 import { formatTokenCount } from "@/lib/hermes/format";
 import type { SessionInfo, StatusResponse } from "@/lib/hermes/types";
 import { isoTimeAgo, timeAgo } from "@/lib/hermes/utils";

@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "mtxui
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "mtxuilib/ui/table";
 import { useEffect, useMemo, useState } from "react";
 
-import { hermesApi } from "@/lib/hermes/api";
+import { api as hermesApi } from "@/lib/hermes/api";
 import type { CronJob } from "@/lib/hermes/types";
 
 function formatDateTime(value?: string | null): string {

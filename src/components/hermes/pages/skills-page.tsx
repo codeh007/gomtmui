@@ -7,7 +7,7 @@ import { Input } from "mtxuilib/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "mtxuilib/ui/tabs";
 import { useEffect, useMemo, useState } from "react";
 
-import { hermesApi } from "@/lib/hermes/api";
+import { api as hermesApi } from "@/lib/hermes/api";
 import type { SkillInfo, ToolsetInfo } from "@/lib/hermes/types";
 
 function prettyCategory(raw: string | null | undefined): string {

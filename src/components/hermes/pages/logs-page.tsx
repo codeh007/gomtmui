@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "m
 import { Switch } from "mtxuilib/ui/switch";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { hermesApi } from "@/lib/hermes/api";
+import { api as hermesApi } from "@/lib/hermes/api";
 
 const FILES = ["agent", "errors", "gateway"] as const;
 const LEVELS = ["ALL", "DEBUG", "INFO", "WARNING", "ERROR"] as const;

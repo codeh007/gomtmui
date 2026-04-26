@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "m
 import type { ComponentType } from "react";
 import { useEffect, useMemo, useState } from "react";
 
-import { hermesApi } from "@/lib/hermes/api";
+import { api as hermesApi } from "@/lib/hermes/api";
 import { formatTokenCount } from "@/lib/hermes/format";
 import type { AnalyticsDailyEntry, AnalyticsModelEntry, AnalyticsResponse, AnalyticsSkillEntry } from "@/lib/hermes/types";
 import { timeAgo } from "@/lib/hermes/utils";

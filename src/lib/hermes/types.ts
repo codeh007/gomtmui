@@ -26,22 +26,41 @@ export interface StatusResponse {
 export interface SessionInfo {
   id: string;
   source: string | null;
+  user_id?: string | null;
   model: string | null;
   title: string | null;
+  model_config?: string | null;
+  system_prompt?: string | null;
+  parent_session_id?: string | null;
   started_at: number;
   ended_at: number | null;
+  end_reason?: string | null;
   last_active: number;
   is_active: boolean;
   message_count: number;
   tool_call_count: number;
   input_tokens: number;
   output_tokens: number;
+  cache_read_tokens?: number;
+  cache_write_tokens?: number;
+  reasoning_tokens?: number;
+  billing_provider?: string | null;
+  billing_base_url?: string | null;
+  billing_mode?: string | null;
+  estimated_cost_usd?: number | null;
+  actual_cost_usd?: number | null;
+  cost_status?: string | null;
+  cost_source?: string | null;
+  pricing_version?: string | null;
+  api_call_count?: number;
   preview: string | null;
 }
 
 export interface SessionMessage {
+  id?: number;
   role: "user" | "assistant" | "system" | "tool";
   content: string | null;
+  session_id?: string;
   tool_calls?: Array<{
     id: string;
     function: {
@@ -52,6 +71,13 @@ export interface SessionMessage {
   tool_name?: string;
   tool_call_id?: string;
   timestamp?: number;
+  token_count?: number | null;
+  finish_reason?: string | null;
+  reasoning?: string | null;
+  reasoning_content?: string | null;
+  reasoning_details?: unknown;
+  codex_reasoning_items?: unknown;
+  codex_message_items?: unknown;
 }
 
 export interface SessionSearchResult {

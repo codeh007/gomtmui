@@ -5,7 +5,7 @@ import { Badge } from "mtxuilib/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "mtxuilib/ui/card";
 import { useEffect, useMemo, useState } from "react";
 
-import { hermesApi } from "@/lib/hermes/api";
+import { api as hermesApi } from "@/lib/hermes/api";
 import type { EnvVarInfo } from "@/lib/hermes/types";
 
 const PROVIDER_GROUPS: Array<{ name: string; prefix: string; priority: number }> = [
