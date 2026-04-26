@@ -1,6 +1,3 @@
-import { cn } from "mtxuilib/lib/utils";
-
-export { cn };
 
 export function timeAgo(ts: number): string {
   const delta = Date.now() / 1000 - ts;
