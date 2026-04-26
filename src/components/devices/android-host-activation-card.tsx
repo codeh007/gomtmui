@@ -7,7 +7,11 @@ import { toast } from "sonner";
 import { Button } from "mtxuilib/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "mtxuilib/ui/card";
 import { bindAndroidHostDeviceAction } from "@/app/(dash)/dash/devices/actions";
-import { readAndroidActivationSurface, readAndroidHostInfo } from "@/lib/android-host/bridge";
+import {
+  readAndroidActivationSurface,
+  readAndroidHostInfo,
+  requestAndroidDeviceServiceStart,
+} from "@/lib/android-host/bridge";
 
 function buildBindingPayload(hostInfo: NonNullable<ReturnType<typeof readAndroidHostInfo>>) {
   const packageName = hostInfo.packageName?.trim();
@@ -29,6 +33,7 @@ export function AndroidHostActivationCard() {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [boundDeviceId, setBoundDeviceId] = useState<string | null>(null);
+  const [deviceServiceStarted, setDeviceServiceStarted] = useState(false);
   const hostInfo = useMemo(() => readAndroidHostInfo(), []);
   const activationSurface = useMemo(() => readAndroidActivationSurface(), []);
 
@@ -44,7 +49,7 @@ export function AndroidHostActivationCard() {
         const device = Array.isArray(result) ? result[0] : result;
         setBoundDeviceId(typeof device?.id === "string" ? device.id : null);
         toast.success("当前 Android 宿主已绑定", {
-          description: "设备已进入 bound_inactive；下一步再接前台服务启动与 runtime credential。",
+          description: "设备已进入 bound_inactive；下一步可显式启动设备服务。",
         });
         router.refresh();
       } catch (error) {
@@ -53,6 +58,20 @@ export function AndroidHostActivationCard() {
     });
   };
 
+  const handleStartDeviceService = () => {
+    const accepted = requestAndroidDeviceServiceStart();
+    if (!accepted) {
+      toast.error("当前宿主不支持启动设备服务");
+      return;
+    }
+    setDeviceServiceStarted(true);
+    toast.success("已请求启动设备服务", {
+      description: "这是 service-first 的最小激活动作；后续再补 runtime credential 与 heartbeat。",
+    });
+  };
+
+  const canStartDeviceService = Boolean(boundDeviceId) && Boolean(activationSurface?.canStartDeviceService);
+
   return (
     <Card>
       <CardHeader>
@@ -60,7 +79,7 @@ export function AndroidHostActivationCard() {
           <Smartphone className="h-4 w-4" />
           检测到 Android 宿主环境
         </CardTitle>
-        <CardDescription>当前页面运行在 gomtm-android WebView 中。此阶段先完成“登录用户绑定当前宿主设备”的最小闭环。</CardDescription>
+        <CardDescription>当前页面运行在 gomtm-android WebView 中。此阶段先完成“登录用户绑定当前宿主设备”，再显式触发设备服务启动。</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 text-sm">
         <div className="grid gap-2 sm:grid-cols-2">
@@ -87,14 +106,17 @@ export function AndroidHostActivationCard() {
         <div className="rounded-md border bg-muted/30 p-3">
           <div className="text-muted-foreground">当前激活面状态</div>
           <div className="mt-1 font-medium">
-            activation={activationSurface?.activationStatus ?? "unknown"} · runtime={activationSurface?.runtimeStatus ?? "unknown"}
+            activation={activationSurface?.activationStatus ?? "unknown"} · runtime={deviceServiceStarted ? "service_start_requested" : activationSurface?.runtimeStatus ?? "unknown"}
           </div>
-          <div className="mt-1 text-xs text-muted-foreground">绑定成功后设备应进入 bound_inactive。此时仍未启动前台服务，也不应声明在线。</div>
+          <div className="mt-1 text-xs text-muted-foreground">绑定成功后设备应进入 bound_inactive；点击“启动设备服务”后，当前轮只保证前台服务启动动作被显式触发，不把旧在线/旧节点语义重新带回来。</div>
         </div>
 
         <div className="flex flex-wrap gap-2">
           <Button type="button" disabled={isPending} onClick={handleBindCurrentDevice}>
             {isPending ? "绑定中..." : "绑定当前设备"}
+          </Button>
+          <Button type="button" disabled={!canStartDeviceService || isPending} onClick={handleStartDeviceService} variant="outline">
+            启动设备服务
           </Button>
         </div>
       </CardContent>

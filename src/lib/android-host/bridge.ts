@@ -10,11 +10,13 @@ export interface AndroidActivationSurface {
   activationStatus: "inactive" | "activating" | "active" | "unknown";
   runtimeStatus: string;
   canRequestScreenCapture: boolean;
+  canStartDeviceService?: boolean;
 }
 
 export interface AndroidHostBridgeApi {
   getHostInfo?: () => string;
   getActivationSurface?: () => string;
+  startDeviceService?: () => string;
   requestScreenCapture?: () => string;
 }
 
@@ -70,6 +72,17 @@ export function readAndroidActivationSurface(): AndroidActivationSurface | null 
       activationStatus: "unknown",
       runtimeStatus: "unknown",
       canRequestScreenCapture: false,
+      canStartDeviceService: false,
     },
   );
+}
+
+export function requestAndroidDeviceServiceStart(): boolean {
+  const bridge = getAndroidHostBridge();
+  if (!bridge?.startDeviceService) {
+    return false;
+  }
+
+  parseJson<{ accepted?: boolean }>(bridge.startDeviceService(), { accepted: false });
+  return true;
 }
