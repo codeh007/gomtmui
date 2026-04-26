@@ -1,7 +1,7 @@
 "use client";
 
 import { Smartphone } from "lucide-react";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "mtxuilib/ui/button";
@@ -33,9 +33,15 @@ export function AndroidHostActivationCard() {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [boundDeviceId, setBoundDeviceId] = useState<string | null>(null);
-  const [deviceServiceStarted, setDeviceServiceStarted] = useState(false);
   const hostInfo = useMemo(() => readAndroidHostInfo(), []);
-  const activationSurface = useMemo(() => readAndroidActivationSurface(), []);
+  const [activationSurface, setActivationSurface] = useState(() => readAndroidActivationSurface());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setActivationSurface(readAndroidActivationSurface());
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   if (!hostInfo) {
     return null;
@@ -64,9 +70,9 @@ export function AndroidHostActivationCard() {
       toast.error("当前宿主不支持启动设备服务");
       return;
     }
-    setDeviceServiceStarted(true);
+    setActivationSurface(readAndroidActivationSurface());
     toast.success("已请求启动设备服务", {
-      description: "这是 service-first 的最小激活动作；后续再补 runtime credential 与 heartbeat。",
+      description: "当前回读的是 Android 宿主壳动作面；核心业务 runtime 状态后续应改由 gomtm AAR/Go 核心提供。",
     });
   };
 
@@ -79,7 +85,7 @@ export function AndroidHostActivationCard() {
           <Smartphone className="h-4 w-4" />
           检测到 Android 宿主环境
         </CardTitle>
-        <CardDescription>当前页面运行在 gomtm-android WebView 中。此阶段先完成“登录用户绑定当前宿主设备”，再显式触发设备服务启动。</CardDescription>
+        <CardDescription>当前页面运行在 gomtm-android WebView 中。此阶段先完成“登录用户绑定当前宿主设备”，再显式触发设备服务启动；宿主壳只暴露最小动作面，不承担核心业务状态真相。</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 text-sm">
         <div className="grid gap-2 sm:grid-cols-2">
@@ -104,11 +110,11 @@ export function AndroidHostActivationCard() {
         </div>
 
         <div className="rounded-md border bg-muted/30 p-3">
-          <div className="text-muted-foreground">当前激活面状态</div>
+          <div className="text-muted-foreground">当前宿主激活面</div>
           <div className="mt-1 font-medium">
-            activation={activationSurface?.activationStatus ?? "unknown"} · runtime={deviceServiceStarted ? "service_start_requested" : activationSurface?.runtimeStatus ?? "unknown"}
+            activation={activationSurface?.activationStatus ?? "unknown"} · hostAction={activationSurface?.hostActionState ?? "unknown"}
           </div>
-          <div className="mt-1 text-xs text-muted-foreground">绑定成功后设备应进入 bound_inactive；点击“启动设备服务”后，当前轮只保证前台服务启动动作被显式触发，不把旧在线/旧节点语义重新带回来。</div>
+          <div className="mt-1 text-xs text-muted-foreground">这里显示的是 Android 壳层是否已经收到“启动设备服务”的动作回执，不代表设备核心 runtime 已 ready；真正的数据库层、核心状态与后续 heartbeat 仍应收敛到 gomtm AAR / Go 核心。</div>
         </div>
 
         <div className="flex flex-wrap gap-2">

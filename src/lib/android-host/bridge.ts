@@ -8,7 +8,8 @@ export interface AndroidHostInfo {
 export interface AndroidActivationSurface {
   available: boolean;
   activationStatus: "inactive" | "activating" | "active" | "unknown";
-  runtimeStatus: string;
+  hostActionState?: string;
+  serviceActivationRequested?: boolean;
   canRequestScreenCapture: boolean;
   canStartDeviceService?: boolean;
 }
@@ -70,7 +71,8 @@ export function readAndroidActivationSurface(): AndroidActivationSurface | null 
     {
       available: false,
       activationStatus: "unknown",
-      runtimeStatus: "unknown",
+      hostActionState: "unknown",
+      serviceActivationRequested: false,
       canRequestScreenCapture: false,
       canStartDeviceService: false,
     },
