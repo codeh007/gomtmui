@@ -7,7 +7,7 @@ import { Input } from "mtxuilib/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "mtxuilib/ui/tabs";
 import { useEffect, useMemo, useState } from "react";
 
-import { api as hermesApi } from "@/lib/hermes/api";
+import { useHermesApi } from "@/components/hermes/use-hermes-api";
 import { formatTokenCount } from "@/lib/hermes/format";
 import { getNestedValue } from "@/lib/hermes/nested";
 import type { ModelInfoResponse } from "@/lib/hermes/types";
@@ -60,6 +60,7 @@ function formatFieldType(field: SchemaField): string {
 }
 
 export function HermesConfigPage() {
+  const hermesApi = useHermesApi();
   const [data, setData] = useState<LoadState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -97,7 +98,7 @@ export function HermesConfigPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [hermesApi]);
 
   const categories = useMemo(() => {
     if (!data) return [];

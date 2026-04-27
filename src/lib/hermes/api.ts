@@ -1,6 +1,7 @@
-const BASE = "";
-
 import type { DashboardTheme } from "@/themes/types";
+import { isValidGomtmServerUrl, normalizeGomtmServerUrl } from "@/lib/gomtm-server/url";
+
+const HERMES_API_PREFIX = "/api/hermes";
 
 // Ephemeral session token for protected endpoints.
 // Injected into index.html by the server — never fetched via API.
@@ -19,18 +20,36 @@ function setSessionHeader(headers: Headers, token: string): void {
 }
 
 export async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
-  // Inject the session token into all /api/ requests.
+  // Inject the session token into Hermes requests served by the selected gomtm server.
   const headers = new Headers(init?.headers);
   const token = window.__HERMES_SESSION_TOKEN__;
   if (token) {
     setSessionHeader(headers, token);
   }
-  const res = await fetch(`${BASE}${url}`, { ...init, headers });
+  const res = await fetch(url, { ...init, headers });
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
     throw new Error(`${res.status}: ${text}`);
   }
   return res.json();
+}
+
+function requireGomtmServerUrl(baseUrl: string): string {
+  const normalizedBaseUrl = normalizeGomtmServerUrl(baseUrl);
+  if (!isValidGomtmServerUrl(normalizedBaseUrl)) {
+    throw new Error("Hermes API requires a valid gomtm server URL.");
+  }
+  return normalizedBaseUrl;
+}
+
+function buildHermesUrl(baseUrl: string, path: string): string {
+  const normalizedBaseUrl = requireGomtmServerUrl(baseUrl);
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${normalizedBaseUrl}${HERMES_API_PREFIX}${normalizedPath}`;
+}
+
+function fetchHermesJSON<T>(baseUrl: string, path: string, init?: RequestInit): Promise<T> {
+  return fetchJSON<T>(buildHermesUrl(baseUrl, path), init);
 }
 
 async function getSessionToken(): Promise<string> {
@@ -43,183 +62,174 @@ async function getSessionToken(): Promise<string> {
   throw new Error("Session token not available — page must be served by the Hermes dashboard server");
 }
 
-export const api = {
-  getStatus: () => fetchJSON<StatusResponse>("/api/status"),
-  getSessions: (limit = 20, offset = 0) =>
-    fetchJSON<PaginatedSessions>(`/api/sessions?limit=${limit}&offset=${offset}`),
-  getSessionDetail: (id: string) =>
-    fetchJSON<SessionInfo>(`/api/sessions/${encodeURIComponent(id)}`),
-  getSessionMessages: (id: string) =>
-    fetchJSON<SessionMessagesResponse>(`/api/sessions/${encodeURIComponent(id)}/messages`),
-  deleteSession: (id: string) =>
-    fetchJSON<{ ok: boolean }>(`/api/sessions/${encodeURIComponent(id)}`, {
-      method: "DELETE",
-    }),
-  getLogs: (params: { file?: string; lines?: number; level?: string; component?: string }) => {
-    const qs = new URLSearchParams();
-    if (params.file) qs.set("file", params.file);
-    if (params.lines) qs.set("lines", String(params.lines));
-    if (params.level && params.level !== "ALL") qs.set("level", params.level);
-    if (params.component && params.component !== "all") qs.set("component", params.component);
-    return fetchJSON<LogsResponse>(`/api/logs?${qs.toString()}`);
-  },
-  getAnalytics: (days: number) =>
-    fetchJSON<AnalyticsResponse>(`/api/analytics/usage?days=${days}`),
-  getConfig: () => fetchJSON<Record<string, unknown>>("/api/config"),
-  getDefaults: () => fetchJSON<Record<string, unknown>>("/api/config/defaults"),
-  getSchema: () => fetchJSON<{ fields: Record<string, unknown>; category_order: string[] }>("/api/config/schema"),
-  getModelInfo: () => fetchJSON<ModelInfoResponse>("/api/model/info"),
-  saveConfig: (config: Record<string, unknown>) =>
-    fetchJSON<{ ok: boolean }>("/api/config", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ config }),
-    }),
-  getConfigRaw: () => fetchJSON<{ yaml: string }>("/api/config/raw"),
-  saveConfigRaw: (yaml_text: string) =>
-    fetchJSON<{ ok: boolean }>("/api/config/raw", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ yaml_text }),
-    }),
-  getEnvVars: () => fetchJSON<Record<string, EnvVarInfo>>("/api/env"),
-  setEnvVar: (key: string, value: string) =>
-    fetchJSON<{ ok: boolean }>("/api/env", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key, value }),
-    }),
-  deleteEnvVar: (key: string) =>
-    fetchJSON<{ ok: boolean }>("/api/env", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key }),
-    }),
-  revealEnvVar: async (key: string) => {
-    const token = await getSessionToken();
-    return fetchJSON<{ key: string; value: string }>("/api/env/reveal", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        [SESSION_HEADER]: token,
-      },
-      body: JSON.stringify({ key }),
-    });
-  },
+export function fetchHermesSessionDetail(baseUrl: string, id: string): Promise<SessionInfo> {
+  return fetchHermesJSON<SessionInfo>(baseUrl, `/sessions/${encodeURIComponent(id)}`);
+}
 
-  // Cron jobs
-  getCronJobs: () => fetchJSON<CronJob[]>("/api/cron/jobs"),
-  createCronJob: (job: { prompt: string; schedule: string; name?: string; deliver?: string }) =>
-    fetchJSON<CronJob>("/api/cron/jobs", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(job),
-    }),
-  pauseCronJob: (id: string) =>
-    fetchJSON<{ ok: boolean }>(`/api/cron/jobs/${id}/pause`, { method: "POST" }),
-  resumeCronJob: (id: string) =>
-    fetchJSON<{ ok: boolean }>(`/api/cron/jobs/${id}/resume`, { method: "POST" }),
-  triggerCronJob: (id: string) =>
-    fetchJSON<{ ok: boolean }>(`/api/cron/jobs/${id}/trigger`, { method: "POST" }),
-  deleteCronJob: (id: string) =>
-    fetchJSON<{ ok: boolean }>(`/api/cron/jobs/${id}`, { method: "DELETE" }),
+export function createHermesApi(baseUrl: string) {
+  const validatedBaseUrl = requireGomtmServerUrl(baseUrl);
 
-  // Skills & Toolsets
-  getSkills: () => fetchJSON<SkillInfo[]>("/api/skills"),
-  toggleSkill: (name: string, enabled: boolean) =>
-    fetchJSON<{ ok: boolean }>("/api/skills/toggle", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, enabled }),
-    }),
-  getToolsets: () => fetchJSON<ToolsetInfo[]>("/api/tools/toolsets"),
+  return {
+    baseUrl: validatedBaseUrl,
+    getStatus: () => fetchHermesJSON<StatusResponse>(validatedBaseUrl, "/status"),
+    getSessions: (limit = 20, offset = 0) =>
+      fetchHermesJSON<PaginatedSessions>(validatedBaseUrl, `/sessions?limit=${limit}&offset=${offset}`),
+    getSessionDetail: (id: string) => fetchHermesSessionDetail(validatedBaseUrl, id),
+    getSessionMessages: (id: string) =>
+      fetchHermesJSON<SessionMessagesResponse>(validatedBaseUrl, `/sessions/${encodeURIComponent(id)}/messages`),
+    deleteSession: (id: string) =>
+      fetchHermesJSON<{ ok: boolean }>(validatedBaseUrl, `/sessions/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      }),
+    getLogs: (params: { file?: string; lines?: number; level?: string; component?: string }) => {
+      const qs = new URLSearchParams();
+      if (params.file) qs.set("file", params.file);
+      if (params.lines) qs.set("lines", String(params.lines));
+      if (params.level && params.level !== "ALL") qs.set("level", params.level);
+      if (params.component && params.component !== "all") qs.set("component", params.component);
+      return fetchHermesJSON<LogsResponse>(validatedBaseUrl, `/logs?${qs.toString()}`);
+    },
+    getAnalytics: (days: number) =>
+      fetchHermesJSON<AnalyticsResponse>(validatedBaseUrl, `/analytics/usage?days=${days}`),
+    getConfig: () => fetchHermesJSON<Record<string, unknown>>(validatedBaseUrl, "/config"),
+    getDefaults: () => fetchHermesJSON<Record<string, unknown>>(validatedBaseUrl, "/config/defaults"),
+    getSchema: () =>
+      fetchHermesJSON<{ fields: Record<string, unknown>; category_order: string[] }>(validatedBaseUrl, "/config/schema"),
+    getModelInfo: () => fetchHermesJSON<ModelInfoResponse>(validatedBaseUrl, "/model/info"),
+    saveConfig: (config: Record<string, unknown>) =>
+      fetchHermesJSON<{ ok: boolean }>(validatedBaseUrl, "/config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ config }),
+      }),
+    getConfigRaw: () => fetchHermesJSON<{ yaml: string }>(validatedBaseUrl, "/config/raw"),
+    saveConfigRaw: (yaml_text: string) =>
+      fetchHermesJSON<{ ok: boolean }>(validatedBaseUrl, "/config/raw", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ yaml_text }),
+      }),
+    getEnvVars: () => fetchHermesJSON<Record<string, EnvVarInfo>>(validatedBaseUrl, "/env"),
+    setEnvVar: (key: string, value: string) =>
+      fetchHermesJSON<{ ok: boolean }>(validatedBaseUrl, "/env", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key, value }),
+      }),
+    deleteEnvVar: (key: string) =>
+      fetchHermesJSON<{ ok: boolean }>(validatedBaseUrl, "/env", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key }),
+      }),
+    revealEnvVar: async (key: string) => {
+      const token = await getSessionToken();
+      return fetchHermesJSON<{ key: string; value: string }>(validatedBaseUrl, "/env/reveal", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          [SESSION_HEADER]: token,
+        },
+        body: JSON.stringify({ key }),
+      });
+    },
 
-  // Session search (FTS5)
-  searchSessions: (q: string) =>
-    fetchJSON<SessionSearchResponse>(`/api/sessions/search?q=${encodeURIComponent(q)}`),
+    // Cron jobs
+    getCronJobs: () => fetchHermesJSON<CronJob[]>(validatedBaseUrl, "/cron/jobs"),
+    createCronJob: (job: { prompt: string; schedule: string; name?: string; deliver?: string }) =>
+      fetchHermesJSON<CronJob>(validatedBaseUrl, "/cron/jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(job),
+      }),
+    pauseCronJob: (id: string) =>
+      fetchHermesJSON<{ ok: boolean }>(validatedBaseUrl, `/cron/jobs/${id}/pause`, { method: "POST" }),
+    resumeCronJob: (id: string) =>
+      fetchHermesJSON<{ ok: boolean }>(validatedBaseUrl, `/cron/jobs/${id}/resume`, { method: "POST" }),
+    triggerCronJob: (id: string) =>
+      fetchHermesJSON<{ ok: boolean }>(validatedBaseUrl, `/cron/jobs/${id}/trigger`, { method: "POST" }),
+    deleteCronJob: (id: string) =>
+      fetchHermesJSON<{ ok: boolean }>(validatedBaseUrl, `/cron/jobs/${id}`, { method: "DELETE" }),
 
-  // OAuth provider management
-  getOAuthProviders: () =>
-    fetchJSON<OAuthProvidersResponse>("/api/providers/oauth"),
-  disconnectOAuthProvider: async (providerId: string) => {
-    const token = await getSessionToken();
-    return fetchJSON<{ ok: boolean; provider: string }>(
-      `/api/providers/oauth/${encodeURIComponent(providerId)}`,
-      {
+    // Skills & Toolsets
+    getSkills: () => fetchHermesJSON<SkillInfo[]>(validatedBaseUrl, "/skills"),
+    toggleSkill: (name: string, enabled: boolean) =>
+      fetchHermesJSON<{ ok: boolean }>(validatedBaseUrl, "/skills/toggle", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, enabled }),
+      }),
+    getToolsets: () => fetchHermesJSON<ToolsetInfo[]>(validatedBaseUrl, "/tools/toolsets"),
+
+    // Session search (FTS5)
+    searchSessions: (q: string) =>
+      fetchHermesJSON<SessionSearchResponse>(validatedBaseUrl, `/sessions/search?q=${encodeURIComponent(q)}`),
+
+    // OAuth provider management
+    getOAuthProviders: () => fetchHermesJSON<OAuthProvidersResponse>(validatedBaseUrl, "/providers/oauth"),
+    disconnectOAuthProvider: async (providerId: string) => {
+      const token = await getSessionToken();
+      return fetchHermesJSON<{ ok: boolean; provider: string }>(validatedBaseUrl, `/providers/oauth/${encodeURIComponent(providerId)}`, {
         method: "DELETE",
         headers: { [SESSION_HEADER]: token },
-      },
-    );
-  },
-  startOAuthLogin: async (providerId: string) => {
-    const token = await getSessionToken();
-    return fetchJSON<OAuthStartResponse>(
-      `/api/providers/oauth/${encodeURIComponent(providerId)}/start`,
-      {
+      });
+    },
+    startOAuthLogin: async (providerId: string) => {
+      const token = await getSessionToken();
+      return fetchHermesJSON<OAuthStartResponse>(validatedBaseUrl, `/providers/oauth/${encodeURIComponent(providerId)}/start`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           [SESSION_HEADER]: token,
         },
         body: "{}",
-      },
-    );
-  },
-  submitOAuthCode: async (providerId: string, sessionId: string, code: string) => {
-    const token = await getSessionToken();
-    return fetchJSON<OAuthSubmitResponse>(
-      `/api/providers/oauth/${encodeURIComponent(providerId)}/submit`,
-      {
+      });
+    },
+    submitOAuthCode: async (providerId: string, sessionId: string, code: string) => {
+      const token = await getSessionToken();
+      return fetchHermesJSON<OAuthSubmitResponse>(validatedBaseUrl, `/providers/oauth/${encodeURIComponent(providerId)}/submit`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           [SESSION_HEADER]: token,
         },
         body: JSON.stringify({ session_id: sessionId, code }),
-      },
-    );
-  },
-  pollOAuthSession: (providerId: string, sessionId: string) =>
-    fetchJSON<OAuthPollResponse>(
-      `/api/providers/oauth/${encodeURIComponent(providerId)}/poll/${encodeURIComponent(sessionId)}`,
-    ),
-  cancelOAuthSession: async (sessionId: string) => {
-    const token = await getSessionToken();
-    return fetchJSON<{ ok: boolean }>(
-      `/api/providers/oauth/sessions/${encodeURIComponent(sessionId)}`,
-      {
+      });
+    },
+    pollOAuthSession: (providerId: string, sessionId: string) =>
+      fetchHermesJSON<OAuthPollResponse>(
+        validatedBaseUrl,
+        `/providers/oauth/${encodeURIComponent(providerId)}/poll/${encodeURIComponent(sessionId)}`,
+      ),
+    cancelOAuthSession: async (sessionId: string) => {
+      const token = await getSessionToken();
+      return fetchHermesJSON<{ ok: boolean }>(validatedBaseUrl, `/providers/oauth/sessions/${encodeURIComponent(sessionId)}`, {
         method: "DELETE",
         headers: { [SESSION_HEADER]: token },
-      },
-    );
-  },
+      });
+    },
 
-  // Gateway / update actions
-  restartGateway: () =>
-    fetchJSON<ActionResponse>("/api/gateway/restart", { method: "POST" }),
-  updateHermes: () =>
-    fetchJSON<ActionResponse>("/api/hermes/update", { method: "POST" }),
-  getActionStatus: (name: string, lines = 200) =>
-    fetchJSON<ActionStatusResponse>(
-      `/api/actions/${encodeURIComponent(name)}/status?lines=${lines}`,
-    ),
+    // Gateway / update actions
+    restartGateway: () => fetchHermesJSON<ActionResponse>(validatedBaseUrl, "/gateway/restart", { method: "POST" }),
+    updateHermes: () => fetchHermesJSON<ActionResponse>(validatedBaseUrl, "/update", { method: "POST" }),
+    getActionStatus: (name: string, lines = 200) =>
+      fetchHermesJSON<ActionStatusResponse>(validatedBaseUrl, `/actions/${encodeURIComponent(name)}/status?lines=${lines}`),
 
-  // Dashboard plugins
-  getPlugins: () =>
-    fetchJSON<PluginManifestResponse[]>("/api/dashboard/plugins"),
-  rescanPlugins: () =>
-    fetchJSON<{ ok: boolean; count: number }>("/api/dashboard/plugins/rescan"),
+    // Dashboard plugins
+    getPlugins: () => fetchHermesJSON<PluginManifestResponse[]>(validatedBaseUrl, "/dashboard/plugins"),
+    rescanPlugins: () =>
+      fetchHermesJSON<{ ok: boolean; count: number }>(validatedBaseUrl, "/dashboard/plugins/rescan"),
 
-  // Dashboard themes
-  getThemes: () =>
-    fetchJSON<DashboardThemesResponse>("/api/dashboard/themes"),
-  setTheme: (name: string) =>
-    fetchJSON<{ ok: boolean; theme: string }>("/api/dashboard/theme", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
-    }),
-};
+    // Dashboard themes
+    getThemes: () => fetchHermesJSON<DashboardThemesResponse>(validatedBaseUrl, "/dashboard/themes"),
+    setTheme: (name: string) =>
+      fetchHermesJSON<{ ok: boolean; theme: string }>(validatedBaseUrl, "/dashboard/theme", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      }),
+  };
+}
 
 export interface ActionResponse {
   name: string;

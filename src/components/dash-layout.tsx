@@ -8,6 +8,7 @@ import { InlineLoading } from "mtxuilib/mt/skeletons";
 import { Separator } from "mtxuilib/ui/separator";
 import { SidebarProvider } from "mtxuilib/ui/sidebar";
 import { type PropsWithChildren, Suspense } from "react";
+import { GomtmServerSwitcher } from "./gomtm-server-switcher";
 import { NotificationCenter } from "./notifications/NotificationCenter";
 
 interface RootAppWrapperProps extends PropsWithChildren {
@@ -59,6 +60,7 @@ export const DashHeaders = (props: { borderBottom?: boolean; children?: React.Re
       <SidebarToggle className="-ml-1" />
       <Separator orientation="vertical" className="mr-2 h-4" />
       <div className="flex flex-1 items-center gap-2">{props.children}</div>
+      <GomtmServerSwitcher />
       {/* 通知中心 */}
       <Suspense fallback={null}>
         <NotificationCenter />

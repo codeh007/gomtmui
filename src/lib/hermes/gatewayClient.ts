@@ -1,3 +1,5 @@
+import { isValidGomtmServerUrl, normalizeGomtmServerUrl } from "@/lib/gomtm-server/url";
+
 /**
  * Browser WebSocket client for the tui_gateway JSON-RPC protocol.
  *
@@ -6,7 +8,7 @@
  * (tui_gateway/transport.py + ws.py) routes the same dispatcher's writes
  * onto either stdout or a WebSocket depending on how the client connected.
  *
- *   const gw = new GatewayClient()
+ *   const gw = new GatewayClient("https://selected.example.com")
  *   await gw.connect()
  *   const { session_id } = await gw.request<{ session_id: string }>("session.create")
  *   gw.on("message.delta", (ev) => console.log(ev.payload?.text))
@@ -57,11 +59,26 @@ interface Pending {
 }
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 120_000;
+const HERMES_GATEWAY_WS_PATH = "/api/hermes/ws";
 
 /** Wildcard listener key: subscribe to every event regardless of type. */
 const ANY = "*";
 
+export function buildGatewayWebSocketUrl(baseUrl: string, token: string): string {
+  const normalizedBaseUrl = normalizeGomtmServerUrl(baseUrl);
+  if (!isValidGomtmServerUrl(normalizedBaseUrl)) {
+    throw new Error("Hermes gateway requires a valid gomtm server URL.");
+  }
+
+  const url = new URL(`${normalizedBaseUrl}${HERMES_GATEWAY_WS_PATH}`);
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  url.searchParams.set("token", token);
+  return url.toString();
+}
+
 export class GatewayClient {
+  constructor(private readonly baseUrl: string) {}
+
   private ws: WebSocket | null = null;
   private reqId = 0;
   private pending = new Map<string, Pending>();
@@ -116,10 +133,7 @@ export class GatewayClient {
       );
     }
 
-    const scheme = location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(
-      `${scheme}//${location.host}/api/ws?token=${encodeURIComponent(resolved)}`,
-    );
+    const ws = new WebSocket(buildGatewayWebSocketUrl(this.baseUrl, resolved));
     this.ws = ws;
 
     // Register message + close BEFORE awaiting open — the server emits

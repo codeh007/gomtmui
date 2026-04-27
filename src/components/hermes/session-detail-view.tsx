@@ -26,7 +26,7 @@ import { ScrollArea } from "mtxuilib/ui/scroll-area";
 import { Separator } from "mtxuilib/ui/separator";
 import { useEffect, useMemo, useState } from "react";
 
-import { api as hermesApi, fetchJSON } from "@/lib/hermes/api";
+import { useHermesApi } from "@/components/hermes/use-hermes-api";
 import type { SessionInfo, SessionMessage } from "@/lib/hermes/types";
 import { timeAgo } from "@/lib/hermes/utils";
 
@@ -143,6 +143,7 @@ export function SessionDetailView(props: {
   sessionId: string | null;
   searchSnippet?: string;
 }) {
+  const hermesApi = useHermesApi();
   const [detail, setDetail] = useState<SessionInfo | null>(null);
   const [messages, setMessages] = useState<SessionMessage[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -158,7 +159,7 @@ export function SessionDetailView(props: {
     setError(null);
 
     Promise.all([
-      fetchJSON<SessionInfo>(`/api/sessions/${encodeURIComponent(props.sessionId)}`),
+      hermesApi.getSessionDetail(props.sessionId),
       hermesApi.getSessionMessages(props.sessionId),
     ])
       .then(([session, messageResponse]) => {
@@ -183,7 +184,7 @@ export function SessionDetailView(props: {
     return () => {
       cancelled = true;
     };
-  }, [props.open, props.sessionId]);
+  }, [hermesApi, props.open, props.sessionId]);
 
   const title = useMemo(() => {
     if (!detail) return props.sessionId || "Session";

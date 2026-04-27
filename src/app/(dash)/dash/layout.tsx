@@ -5,7 +5,9 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { CommandMenu } from "@/components/command-menu";
 import { DashRoot } from "@/components/dash-layout";
+import { normalizeGomtmServerUrl } from "@/lib/gomtm-server/url";
 import { RealtimeProvider } from "@/stores/realtime-provider";
+import { GomtmServerProvider } from "./runtime/gomtm-server-provider";
 import { SidebarDash } from "./SidebarDash";
 
 export default async function Layout({ children }: { children: React.ReactNode }) {
@@ -19,13 +21,16 @@ export default async function Layout({ children }: { children: React.ReactNode }
 
   const cookie = cookieStore.get("sidebar_state");
   const defaultOpen = cookie ? cookie.value === "true" : undefined;
+  const defaultServerUrl = normalizeGomtmServerUrl(process.env.NEXT_PUBLIC_GOMTM_SERVER_URL ?? "");
   return (
     <DashRoot className="h-svh overflow-hidden" defaultOpen={defaultOpen}>
       <CommandMenu />
       <SidebarDash pathname={"/dash"} />
       <SidebarInset className="h-full overflow-hidden flex flex-col">
         <SupabaseAuthProvider>
-          <RealtimeProvider>{children}</RealtimeProvider>
+          <GomtmServerProvider defaultServerUrl={defaultServerUrl}>
+            <RealtimeProvider>{children}</RealtimeProvider>
+          </GomtmServerProvider>
         </SupabaseAuthProvider>
       </SidebarInset>
     </DashRoot>

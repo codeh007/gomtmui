@@ -6,8 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "mtxuilib/ui/card";
 import { Input } from "mtxuilib/ui/input";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { api as hermesApi } from "@/lib/hermes/api";
 import { SessionDetailView } from "@/components/hermes/session-detail-view";
+import { useHermesApi } from "@/components/hermes/use-hermes-api";
 import type { SessionInfo, SessionSearchResult } from "@/lib/hermes/types";
 import { timeAgo } from "@/lib/hermes/utils";
 
@@ -109,6 +109,7 @@ function SessionRow({
 }
 
 export function HermesSessionsPage() {
+  const hermesApi = useHermesApi();
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -146,7 +147,7 @@ export function HermesSessionsPage() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, []);
+  }, [hermesApi]);
 
   useEffect(() => {
     searchRequestVersionRef.current += 1;
@@ -191,7 +192,7 @@ export function HermesSessionsPage() {
         clearTimeout(debounceRef.current);
       }
     };
-  }, [query]);
+  }, [hermesApi, query]);
 
   const snippetMap = useMemo(() => {
     const map = new Map<string, string>();

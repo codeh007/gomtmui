@@ -5,7 +5,7 @@ import { Badge } from "mtxuilib/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "mtxuilib/ui/card";
 import { useEffect, useMemo, useState } from "react";
 
-import { api as hermesApi } from "@/lib/hermes/api";
+import { useHermesApi } from "@/components/hermes/use-hermes-api";
 import type { EnvVarInfo } from "@/lib/hermes/types";
 
 const PROVIDER_GROUPS: Array<{ name: string; prefix: string; priority: number }> = [
@@ -42,6 +42,7 @@ function getCategoryIcon(category: string) {
 }
 
 export function HermesEnvPage() {
+  const hermesApi = useHermesApi();
   const [vars, setVars] = useState<Record<string, EnvVarInfo> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -68,7 +69,7 @@ export function HermesEnvPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [hermesApi]);
 
   const providerGroups = useMemo(() => {
     if (!vars) return [];

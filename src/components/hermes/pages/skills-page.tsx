@@ -7,7 +7,7 @@ import { Input } from "mtxuilib/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "mtxuilib/ui/tabs";
 import { useEffect, useMemo, useState } from "react";
 
-import { api as hermesApi } from "@/lib/hermes/api";
+import { useHermesApi } from "@/components/hermes/use-hermes-api";
 import type { SkillInfo, ToolsetInfo } from "@/lib/hermes/types";
 
 function prettyCategory(raw: string | null | undefined): string {
@@ -20,6 +20,7 @@ function prettyCategory(raw: string | null | undefined): string {
 }
 
 export function HermesSkillsPage() {
+  const hermesApi = useHermesApi();
   const [skills, setSkills] = useState<SkillInfo[]>([]);
   const [toolsets, setToolsets] = useState<ToolsetInfo[]>([]);
   const [query, setQuery] = useState("");
@@ -48,7 +49,7 @@ export function HermesSkillsPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [hermesApi]);
 
   const normalizedQuery = query.trim().toLowerCase();
 

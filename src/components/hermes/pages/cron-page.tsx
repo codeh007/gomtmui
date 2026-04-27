@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "mtxui
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "mtxuilib/ui/table";
 import { useEffect, useMemo, useState } from "react";
 
-import { api as hermesApi } from "@/lib/hermes/api";
+import { useHermesApi } from "@/components/hermes/use-hermes-api";
 import type { CronJob } from "@/lib/hermes/types";
 
 function formatDateTime(value?: string | null): string {
@@ -36,6 +36,7 @@ function getStateVariant(job: CronJob): "default" | "secondary" | "destructive" 
 }
 
 export function HermesCronPage() {
+  const hermesApi = useHermesApi();
   const [jobs, setJobs] = useState<CronJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -62,7 +63,7 @@ export function HermesCronPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [hermesApi]);
 
   const activeCount = useMemo(() => jobs.filter((job) => job.enabled).length, [jobs]);
 

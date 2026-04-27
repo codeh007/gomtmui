@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "m
 import { Switch } from "mtxuilib/ui/switch";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { api as hermesApi } from "@/lib/hermes/api";
+import { useHermesApi } from "@/components/hermes/use-hermes-api";
 
 const FILES = ["agent", "errors", "gateway"] as const;
 const LEVELS = ["ALL", "DEBUG", "INFO", "WARNING", "ERROR"] as const;
@@ -32,6 +32,7 @@ const LINE_TONE: Record<ReturnType<typeof classifyLine>, string> = {
 };
 
 export function HermesLogsPage() {
+  const hermesApi = useHermesApi();
   const [file, setFile] = useState<(typeof FILES)[number]>("agent");
   const [level, setLevel] = useState<(typeof LEVELS)[number]>("ALL");
   const [component, setComponent] = useState<(typeof COMPONENTS)[number]>("all");
@@ -57,7 +58,7 @@ export function HermesLogsPage() {
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))
       .finally(() => setLoading(false));
-  }, [component, file, level, lineCount]);
+  }, [component, file, hermesApi, level, lineCount]);
 
   useEffect(() => {
     fetchLogs();

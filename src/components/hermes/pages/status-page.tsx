@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "mtxuilib/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "mtxuilib/ui/table";
 import { useEffect, useState } from "react";
 
-import { api as hermesApi } from "@/lib/hermes/api";
+import { useHermesApi } from "@/components/hermes/use-hermes-api";
 import { formatTokenCount } from "@/lib/hermes/format";
 import type { SessionInfo, StatusResponse } from "@/lib/hermes/types";
 import { isoTimeAgo, timeAgo } from "@/lib/hermes/utils";
@@ -71,6 +71,7 @@ function collectAlerts(status: StatusResponse): AlertItem[] {
 }
 
 export function HermesStatusPage() {
+  const hermesApi = useHermesApi();
   const [data, setData] = useState<LoadState>({ sessions: [], status: null });
   const [error, setError] = useState<string | null>(null);
 
@@ -98,7 +99,7 @@ export function HermesStatusPage() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, []);
+  }, [hermesApi]);
 
   if (error) {
     return <div className="rounded-lg border border-destructive/30 px-4 py-3 text-sm text-destructive">{error}</div>;

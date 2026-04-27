@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "m
 import type { ComponentType } from "react";
 import { useEffect, useMemo, useState } from "react";
 
-import { api as hermesApi } from "@/lib/hermes/api";
+import { useHermesApi } from "@/components/hermes/use-hermes-api";
 import { formatTokenCount } from "@/lib/hermes/format";
 import type { AnalyticsDailyEntry, AnalyticsModelEntry, AnalyticsResponse, AnalyticsSkillEntry } from "@/lib/hermes/types";
 import { timeAgo } from "@/lib/hermes/utils";
@@ -203,6 +203,7 @@ function SkillTable({ skills }: { skills: AnalyticsSkillEntry[] }) {
 }
 
 export function HermesAnalyticsPage() {
+  const hermesApi = useHermesApi();
   const [days, setDays] = useState<number>(30);
   const [data, setData] = useState<AnalyticsResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -231,7 +232,7 @@ export function HermesAnalyticsPage() {
     return () => {
       cancelled = true;
     };
-  }, [days]);
+  }, [days, hermesApi]);
 
   const totalTokens = useMemo(() => {
     if (!data) return 0;
