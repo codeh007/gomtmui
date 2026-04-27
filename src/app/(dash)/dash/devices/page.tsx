@@ -108,10 +108,9 @@ export default async function DevicesPage() {
     throw new Error("未登录，无法读取设备列表");
   }
 
-  const { data: devices, error } = await supabase
-    .from("devices")
-    .select("id, created_at, updated_at, name, platform, status, owner_user_id, last_seen_at, tags, activation_status, presence_status, runtime_status, last_error, metadata")
-    .order("updated_at", { ascending: false });
+  const { data: devices, error } = await supabase.rpc("device_list_cursor", {
+    p_limit: 100,
+  });
 
   if (error) {
     throw error;

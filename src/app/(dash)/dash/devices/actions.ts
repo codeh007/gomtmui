@@ -16,6 +16,11 @@ export interface ActivateAndroidHostDeviceInput {
   metadata?: Record<string, unknown>;
 }
 
+export interface StopAndroidHostDeviceInput {
+  deviceId: string;
+  lastError?: string | null;
+}
+
 async function requireCurrentUser() {
   const supabase = await createClient();
   const {
@@ -99,4 +104,20 @@ export async function activateAndroidHostDeviceAction(input: ActivateAndroidHost
 
   revalidatePath("/dash/devices");
   return heartbeatedDevice;
+}
+
+export async function stopAndroidHostDeviceAction(input: StopAndroidHostDeviceInput) {
+  const { supabase } = await requireCurrentUser();
+
+  const { data, error } = await supabase.rpc("device_mark_runtime_stopped", {
+    p_device_id: input.deviceId,
+    p_last_error: input.lastError ?? null,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  revalidatePath("/dash/devices");
+  return data;
 }

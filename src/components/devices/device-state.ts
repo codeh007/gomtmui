@@ -17,6 +17,11 @@ export interface AndroidHostStartStateInput {
   boundDeviceId: string | null;
 }
 
+export interface AndroidHostStopStateInput {
+  activationSurfaceCanStop: boolean;
+  boundDeviceId: string | null;
+}
+
 function activationVariant(value: string): DeviceBadgeVariant {
   switch (value) {
     case "active":
@@ -77,4 +82,8 @@ export function buildDeviceStateItems(input: DeviceStateItemsInput): DeviceState
 
 export function canStartAndroidHostDeviceService(input: AndroidHostStartStateInput) {
   return Boolean(input.boundDeviceId) && input.activationSurfaceCanStart;
+}
+
+export function canStopAndroidHostDeviceService(input: AndroidHostStopStateInput) {
+  return Boolean(input.boundDeviceId) && input.activationSurfaceCanStop;
 }

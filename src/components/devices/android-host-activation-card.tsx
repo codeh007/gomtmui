@@ -6,13 +6,38 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "mtxuilib/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "mtxuilib/ui/card";
-import { activateAndroidHostDeviceAction, bindAndroidHostDeviceAction } from "@/app/(dash)/dash/devices/actions";
-import { buildDeviceStateItems, canStartAndroidHostDeviceService } from "@/components/devices/device-state";
+import { activateAndroidHostDeviceAction, bindAndroidHostDeviceAction, stopAndroidHostDeviceAction } from "@/app/(dash)/dash/devices/actions";
+import { buildDeviceStateItems, canStartAndroidHostDeviceService, canStopAndroidHostDeviceService } from "@/components/devices/device-state";
 import {
+  type AndroidActivationSurface,
   readAndroidActivationSurface,
   readAndroidHostInfo,
   requestAndroidDeviceServiceStart,
+  requestAndroidDeviceServiceStop,
 } from "@/lib/android-host/bridge";
+
+function wait(ms: number) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+async function waitForAndroidActivationSurface(
+  predicate: (surface: AndroidActivationSurface | null) => boolean,
+  syncSurface: (surface: AndroidActivationSurface | null) => void,
+  timeoutMs = 5000,
+) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt <= timeoutMs) {
+    const surface = readAndroidActivationSurface();
+    syncSurface(surface);
+    if (predicate(surface)) {
+      return true;
+    }
+    await wait(250);
+  }
+  return false;
+}
 
 function buildBindingPayload(hostInfo: NonNullable<ReturnType<typeof readAndroidHostInfo>>) {
   const packageName = hostInfo.packageName?.trim();
@@ -98,6 +123,13 @@ export function AndroidHostActivationCard({ currentDevice = null }: AndroidHostA
     const bindingPayload = buildBindingPayload(hostInfo);
     startTransition(async () => {
       try {
+        const hostConfirmed = await waitForAndroidActivationSurface(
+          (surface) => surface?.serviceActivationRequested === true,
+          setActivationSurface,
+        );
+        if (!hostConfirmed) {
+          throw new Error("宿主尚未确认设备服务已启动，未推进数据库状态");
+        }
         await activateAndroidHostDeviceAction({
           deviceId: boundDeviceId,
           capabilities: {
@@ -121,9 +153,49 @@ export function AndroidHostActivationCard({ currentDevice = null }: AndroidHostA
     });
   };
 
+  const handleStopDeviceService = () => {
+    if (!boundDeviceId) {
+      toast.error("请先绑定当前设备");
+      return;
+    }
+
+    const accepted = requestAndroidDeviceServiceStop();
+    if (!accepted) {
+      toast.error("当前宿主不支持停止设备服务");
+      return;
+    }
+
+    startTransition(async () => {
+      try {
+        const hostConfirmed = await waitForAndroidActivationSurface(
+          (surface) => surface?.serviceActivationRequested === false,
+          setActivationSurface,
+        );
+        if (!hostConfirmed) {
+          throw new Error("宿主尚未确认设备服务已停止，未回退数据库状态");
+        }
+        await stopAndroidHostDeviceAction({
+          deviceId: boundDeviceId,
+          lastError: null,
+        });
+        setActivationSurface(readAndroidActivationSurface());
+        toast.success("已请求停止设备服务", {
+          description: "数据库中的当前设备状态已回退到 inactive/stopped。",
+        });
+        router.refresh();
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "停止设备服务后回退数据库状态失败");
+      }
+    });
+  };
+
   const canStartDeviceService = canStartAndroidHostDeviceService({
     boundDeviceId,
     activationSurfaceCanStart: Boolean(activationSurface?.canStartDeviceService),
+  });
+  const canStopDeviceService = canStopAndroidHostDeviceService({
+    boundDeviceId,
+    activationSurfaceCanStop: Boolean(activationSurface?.canStopDeviceService),
   });
   const currentDeviceStateItems = currentDevice
     ? buildDeviceStateItems({
@@ -193,6 +265,9 @@ export function AndroidHostActivationCard({ currentDevice = null }: AndroidHostA
           </Button>
           <Button type="button" disabled={!canStartDeviceService || isPending} onClick={handleStartDeviceService} variant="outline">
             启动设备服务
+          </Button>
+          <Button type="button" disabled={!canStopDeviceService || isPending} onClick={handleStopDeviceService} variant="outline">
+            停止设备服务
           </Button>
         </div>
       </CardContent>

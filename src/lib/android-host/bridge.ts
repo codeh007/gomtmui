@@ -12,12 +12,14 @@ export interface AndroidActivationSurface {
   serviceActivationRequested?: boolean;
   canRequestScreenCapture: boolean;
   canStartDeviceService?: boolean;
+  canStopDeviceService?: boolean;
 }
 
 export interface AndroidHostBridgeApi {
   getHostInfo?: () => string;
   getActivationSurface?: () => string;
   startDeviceService?: () => string;
+  stopDeviceService?: () => string;
   requestScreenCapture?: () => string;
 }
 
@@ -75,6 +77,7 @@ export function readAndroidActivationSurface(): AndroidActivationSurface | null 
       serviceActivationRequested: false,
       canRequestScreenCapture: false,
       canStartDeviceService: false,
+      canStopDeviceService: false,
     },
   );
 }
@@ -86,5 +89,15 @@ export function requestAndroidDeviceServiceStart(): boolean {
   }
 
   const result = parseJson<{ accepted?: boolean }>(bridge.startDeviceService(), { accepted: false });
+  return result.accepted === true;
+}
+
+export function requestAndroidDeviceServiceStop(): boolean {
+  const bridge = getAndroidHostBridge();
+  if (!bridge?.stopDeviceService) {
+    return false;
+  }
+
+  const result = parseJson<{ accepted?: boolean }>(bridge.stopDeviceService(), { accepted: false });
   return result.accepted === true;
 }

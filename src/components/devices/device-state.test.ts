@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDeviceStateItems, canStartAndroidHostDeviceService } from "./device-state";
+import { buildDeviceStateItems, canStartAndroidHostDeviceService, canStopAndroidHostDeviceService } from "./device-state";
 
 describe("buildDeviceStateItems", () => {
   it("returns canonical activation, presence, and runtime items", () => {
@@ -40,6 +40,35 @@ describe("canStartAndroidHostDeviceService", () => {
     expect(
       canStartAndroidHostDeviceService({
         activationSurfaceCanStart: true,
+        boundDeviceId: "device-1",
+      }),
+    ).toBe(true);
+  });
+});
+
+describe("canStopAndroidHostDeviceService", () => {
+  it("returns false when no bound device exists", () => {
+    expect(
+      canStopAndroidHostDeviceService({
+        activationSurfaceCanStop: true,
+        boundDeviceId: null,
+      }),
+    ).toBe(false);
+  });
+
+  it("returns false when host surface blocks stop", () => {
+    expect(
+      canStopAndroidHostDeviceService({
+        activationSurfaceCanStop: false,
+        boundDeviceId: "device-1",
+      }),
+    ).toBe(false);
+  });
+
+  it("returns true when host allows stop and device is bound", () => {
+    expect(
+      canStopAndroidHostDeviceService({
+        activationSurfaceCanStop: true,
         boundDeviceId: "device-1",
       }),
     ).toBe(true);
