@@ -16,6 +16,15 @@ interface DeviceRow {
   owner_user_id: string;
   last_seen_at: string | null;
   tags: string[];
+  activation_status: string;
+  presence_status: string;
+  runtime_status: string;
+  last_error: string | null;
+  metadata: Record<string, unknown> | null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function formatTime(value: string | null) {
@@ -37,18 +46,50 @@ function formatTime(value: string | null) {
   }).format(date);
 }
 
-function statusVariant(status: string): "default" | "secondary" | "destructive" | "outline" {
-  switch (status) {
+function presenceVariant(s: string): "default" | "secondary" | "destructive" | "outline" {
+  switch (s) {
     case "online":
-    case "idle":
       return "default";
-    case "busy":
+    case "stale":
       return "secondary";
-    case "error":
     case "offline":
       return "destructive";
     default:
       return "outline";
+  }
+}
+
+function activationLabel(s: string) {
+  switch (s) {
+    case "inactive":
+      return "未激活";
+    case "activating":
+      return "激活中";
+    case "active":
+      return "已激活";
+    case "disabled":
+      return "已禁用";
+    default:
+      return s;
+  }
+}
+
+function runtimeLabel(s: string) {
+  switch (s) {
+    case "stopped":
+      return "已停止";
+    case "booting":
+      return "启动中";
+    case "ready":
+      return "就绪";
+    case "busy":
+      return "忙碌";
+    case "degraded":
+      return "退化";
+    case "error":
+      return "错误";
+    default:
+      return s;
   }
 }
 
@@ -69,7 +110,7 @@ export default async function DevicesPage() {
 
   const { data: devices, error } = await supabase
     .from("devices")
-    .select("id, created_at, updated_at, name, platform, status, owner_user_id, last_seen_at, tags")
+    .select("id, created_at, updated_at, name, platform, status, owner_user_id, last_seen_at, tags, activation_status, presence_status, runtime_status, last_error, metadata")
     .order("updated_at", { ascending: false });
 
   if (error) {
@@ -77,6 +118,9 @@ export default async function DevicesPage() {
   }
 
   const rows = (devices ?? []) as DeviceRow[];
+  const currentAndroidHostDevice = rows.find((device) => {
+    return device.platform === "android" && isRecord(device.metadata) && device.metadata.hostKind === "android-host";
+  });
 
   return (
     <>
@@ -88,7 +132,20 @@ export default async function DevicesPage() {
       </DashHeaders>
       <DashContent className="flex-1 overflow-auto">
         <div className="space-y-6">
-          <AndroidHostActivationCard />
+          <AndroidHostActivationCard
+            currentDevice={
+              currentAndroidHostDevice
+                ? {
+                    id: currentAndroidHostDevice.id,
+                    activationStatus: currentAndroidHostDevice.activation_status,
+                    presenceStatus: currentAndroidHostDevice.presence_status,
+                    runtimeStatus: currentAndroidHostDevice.runtime_status,
+                    lastSeenAt: currentAndroidHostDevice.last_seen_at,
+                    lastError: currentAndroidHostDevice.last_error,
+                  }
+                : null
+            }
+          />
           <Card>
             <CardHeader>
               <CardTitle>我的设备</CardTitle>
@@ -103,10 +160,12 @@ export default async function DevicesPage() {
                       <TableRow>
                         <TableHead>名称</TableHead>
                         <TableHead>平台</TableHead>
-                        <TableHead>状态</TableHead>
+                        <TableHead>激活</TableHead>
+                        <TableHead>在线</TableHead>
+                        <TableHead>运行时</TableHead>
                         <TableHead>标签</TableHead>
-                        <TableHead>最近在线</TableHead>
-                        <TableHead>更新时间</TableHead>
+                        <TableHead>最近心跳</TableHead>
+                        <TableHead>错误</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -120,7 +179,15 @@ export default async function DevicesPage() {
                           </TableCell>
                           <TableCell className="uppercase">{device.platform}</TableCell>
                           <TableCell>
-                            <Badge variant={statusVariant(device.status)}>{device.status}</Badge>
+                            <Badge variant="outline">{activationLabel(device.activation_status)}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={presenceVariant(device.presence_status)}>{device.presence_status}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={device.runtime_status === "error" ? "destructive" : "secondary"}>
+                              {runtimeLabel(device.runtime_status)}
+                            </Badge>
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-wrap gap-1">
@@ -136,7 +203,9 @@ export default async function DevicesPage() {
                             </div>
                           </TableCell>
                           <TableCell>{formatTime(device.last_seen_at)}</TableCell>
-                          <TableCell>{formatTime(device.updated_at)}</TableCell>
+                          <TableCell className="max-w-[200px] truncate text-xs text-muted-foreground">
+                            {device.last_error ?? "-"}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>

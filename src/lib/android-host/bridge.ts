@@ -85,6 +85,6 @@ export function requestAndroidDeviceServiceStart(): boolean {
     return false;
   }
 
-  parseJson<{ accepted?: boolean }>(bridge.startDeviceService(), { accepted: false });
-  return true;
+  const result = parseJson<{ accepted?: boolean }>(bridge.startDeviceService(), { accepted: false });
+  return result.accepted === true;
 }

@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "mtxuilib/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "mtxuilib/ui/card";
-import { bindAndroidHostDeviceAction } from "@/app/(dash)/dash/devices/actions";
+import { activateAndroidHostDeviceAction, bindAndroidHostDeviceAction } from "@/app/(dash)/dash/devices/actions";
+import { buildDeviceStateItems, canStartAndroidHostDeviceService } from "@/components/devices/device-state";
 import {
   readAndroidActivationSurface,
   readAndroidHostInfo,
@@ -29,12 +30,29 @@ function buildBindingPayload(hostInfo: NonNullable<ReturnType<typeof readAndroid
   };
 }
 
-export function AndroidHostActivationCard() {
+export interface AndroidHostCurrentDevice {
+  id: string;
+  activationStatus: string;
+  presenceStatus: string;
+  runtimeStatus: string;
+  lastSeenAt: string | null;
+  lastError: string | null;
+}
+
+interface AndroidHostActivationCardProps {
+  currentDevice?: AndroidHostCurrentDevice | null;
+}
+
+export function AndroidHostActivationCard({ currentDevice = null }: AndroidHostActivationCardProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [boundDeviceId, setBoundDeviceId] = useState<string | null>(null);
+  const [boundDeviceId, setBoundDeviceId] = useState<string | null>(currentDevice?.id ?? null);
   const hostInfo = useMemo(() => readAndroidHostInfo(), []);
   const [activationSurface, setActivationSurface] = useState(() => readAndroidActivationSurface());
+
+  useEffect(() => {
+    setBoundDeviceId(currentDevice?.id ?? null);
+  }, [currentDevice?.id]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -52,10 +70,11 @@ export function AndroidHostActivationCard() {
     startTransition(async () => {
       try {
         const result = await bindAndroidHostDeviceAction(payload);
-        const device = Array.isArray(result) ? result[0] : result;
-        setBoundDeviceId(typeof device?.id === "string" ? device.id : null);
+        const deviceId = typeof result?.device?.id === "string" ? result.device.id : null;
+        const credentialVersion = typeof result?.runtimeCredential?.version === "number" ? result.runtimeCredential.version : null;
+        setBoundDeviceId(deviceId);
         toast.success("当前 Android 宿主已绑定", {
-          description: "设备已进入 bound_inactive；下一步可显式启动设备服务。",
+          description: credentialVersion === null ? "设备已进入 bound_inactive；下一步可显式启动设备服务。" : `设备已进入 bound_inactive，并签发运行凭据 v${credentialVersion}。`,
         });
         router.refresh();
       } catch (error) {
@@ -65,18 +84,54 @@ export function AndroidHostActivationCard() {
   };
 
   const handleStartDeviceService = () => {
+    if (!boundDeviceId) {
+      toast.error("请先绑定当前设备");
+      return;
+    }
+
     const accepted = requestAndroidDeviceServiceStart();
     if (!accepted) {
       toast.error("当前宿主不支持启动设备服务");
       return;
     }
-    setActivationSurface(readAndroidActivationSurface());
-    toast.success("已请求启动设备服务", {
-      description: "当前回读的是 Android 宿主壳动作面；核心业务 runtime 状态后续应改由 gomtm AAR/Go 核心提供。",
+
+    const bindingPayload = buildBindingPayload(hostInfo);
+    startTransition(async () => {
+      try {
+        await activateAndroidHostDeviceAction({
+          deviceId: boundDeviceId,
+          capabilities: {
+            device_service: "requested",
+            screen_capture: activationSurface?.canRequestScreenCapture ? "prompt_available" : "unknown",
+          },
+          metadata: {
+            ...bindingPayload.metadata,
+            activation_source: "gomtmui_webview_bridge",
+            host_action_state: activationSurface?.hostActionState ?? "device_service_activation_requested",
+          },
+        });
+        setActivationSurface(readAndroidActivationSurface());
+        toast.success("已请求启动设备服务", {
+          description: "数据库中的设备运行态已推进到第一阶段最小闭环，可在设备列表查看三层状态。",
+        });
+        router.refresh();
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "启动设备服务后推进数据库状态失败");
+      }
     });
   };
 
-  const canStartDeviceService = Boolean(boundDeviceId) && Boolean(activationSurface?.canStartDeviceService);
+  const canStartDeviceService = canStartAndroidHostDeviceService({
+    boundDeviceId,
+    activationSurfaceCanStart: Boolean(activationSurface?.canStartDeviceService),
+  });
+  const currentDeviceStateItems = currentDevice
+    ? buildDeviceStateItems({
+        activationStatus: currentDevice.activationStatus,
+        presenceStatus: currentDevice.presenceStatus,
+        runtimeStatus: currentDevice.runtimeStatus,
+      })
+    : [];
 
   return (
     <Card>
@@ -116,6 +171,21 @@ export function AndroidHostActivationCard() {
           </div>
           <div className="mt-1 text-xs text-muted-foreground">这里显示的是 Android 壳层是否已经收到“启动设备服务”的动作回执，不代表设备核心 runtime 已 ready；真正的数据库层、核心状态与后续 heartbeat 仍应收敛到 gomtm AAR / Go 核心。</div>
         </div>
+
+        {currentDevice ? (
+          <div className="rounded-md border bg-muted/30 p-3">
+            <div className="text-muted-foreground">数据库中的当前设备状态</div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {currentDeviceStateItems.map((item) => (
+                <span key={item.label} className="rounded-full border px-2 py-1 text-xs">
+                  {item.label}:{item.value}
+                </span>
+              ))}
+            </div>
+            <div className="mt-2 text-xs text-muted-foreground">最近在线：{currentDevice.lastSeenAt ?? "-"}</div>
+            <div className="mt-1 text-xs text-muted-foreground">最近错误：{currentDevice.lastError ?? "-"}</div>
+          </div>
+        ) : null}
 
         <div className="flex flex-wrap gap-2">
           <Button type="button" disabled={isPending} onClick={handleBindCurrentDevice}>
