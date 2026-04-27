@@ -2,7 +2,6 @@ export interface AndroidHostInfo {
   hostKind: string;
   packageName?: string;
   appVersion?: string;
-  dashP2pUrl?: string;
 }
 
 export interface AndroidActivationSurface {

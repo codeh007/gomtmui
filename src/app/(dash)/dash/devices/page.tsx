@@ -13,7 +13,6 @@ interface DeviceRow {
   updated_at: string;
   name: string;
   platform: string;
-  status: string;
   owner_user_id: string;
   last_seen_at: string | null;
   tags: string[];

@@ -5,7 +5,7 @@ import {
   type PeerCapabilityTruth,
 } from "@/lib/p2p/discovery-contracts";
 
-export type P2PShellKind = "server-shell" | "device-shell";
+export type P2PShellKind = "server-shell";
 
 export type RuntimeNodeSummary = {
   peerId: string;

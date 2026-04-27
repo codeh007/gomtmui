@@ -25,7 +25,6 @@ function buildBindingPayload(hostInfo: NonNullable<ReturnType<typeof readAndroid
       hostKind: hostInfo.hostKind,
       packageName: packageName ?? null,
       appVersion: appVersion ?? null,
-      dashP2pUrl: hostInfo.dashP2pUrl ?? null,
     },
     tags: ["android-host"],
   };
