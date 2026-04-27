@@ -71,7 +71,7 @@ export function AndroidHostActivationCard({ devices = [] }: AndroidHostActivatio
         const credentialVersion = typeof result?.runtimeCredential?.version === "number" ? result.runtimeCredential.version : null;
         setBoundDeviceId(deviceId);
         toast.success("当前 Android 宿主已绑定", {
-          description: credentialVersion === null ? "设备已进入 bound_inactive；下一步可显式启动设备服务。" : `设备已进入 bound_inactive，并签发运行凭据 v${credentialVersion}。`,
+          description: credentialVersion === null ? "设备已绑定；当前保持 inactive/offline/stopped，下一步可显式启动设备服务。" : `设备已绑定，并签发运行凭据 v${credentialVersion}；当前保持 inactive/offline/stopped。`,
         });
         router.refresh();
       } catch (error) {
