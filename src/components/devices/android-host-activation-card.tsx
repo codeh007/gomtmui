@@ -7,37 +7,13 @@ import { toast } from "sonner";
 import { Button } from "mtxuilib/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "mtxuilib/ui/card";
 import { activateAndroidHostDeviceAction, bindAndroidHostDeviceAction, stopAndroidHostDeviceAction } from "@/app/(dash)/dash/devices/actions";
-import { buildDeviceStateItems, canStartAndroidHostDeviceService, canStopAndroidHostDeviceService } from "@/components/devices/device-state";
+import { buildDeviceStateItems, canStartAndroidHostDeviceService, canStopAndroidHostDeviceService, resolveAndroidHostRuntimeDevice, type AndroidHostRuntimeDevice, waitForPolledValue } from "@/components/devices/device-state";
 import {
-  type AndroidActivationSurface,
   readAndroidActivationSurface,
   readAndroidHostInfo,
   requestAndroidDeviceServiceStart,
   requestAndroidDeviceServiceStop,
 } from "@/lib/android-host/bridge";
-
-function wait(ms: number) {
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, ms);
-  });
-}
-
-async function waitForAndroidActivationSurface(
-  predicate: (surface: AndroidActivationSurface | null) => boolean,
-  syncSurface: (surface: AndroidActivationSurface | null) => void,
-  timeoutMs = 5000,
-) {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt <= timeoutMs) {
-    const surface = readAndroidActivationSurface();
-    syncSurface(surface);
-    if (predicate(surface)) {
-      return true;
-    }
-    await wait(250);
-  }
-  return false;
-}
 
 function buildBindingPayload(hostInfo: NonNullable<ReturnType<typeof readAndroidHostInfo>>) {
   const packageName = hostInfo.packageName?.trim();
@@ -55,29 +31,26 @@ function buildBindingPayload(hostInfo: NonNullable<ReturnType<typeof readAndroid
   };
 }
 
-export interface AndroidHostCurrentDevice {
-  id: string;
-  activationStatus: string;
-  presenceStatus: string;
-  runtimeStatus: string;
-  lastSeenAt: string | null;
-  lastError: string | null;
-}
-
 interface AndroidHostActivationCardProps {
-  currentDevice?: AndroidHostCurrentDevice | null;
+  devices?: AndroidHostRuntimeDevice[];
 }
 
-export function AndroidHostActivationCard({ currentDevice = null }: AndroidHostActivationCardProps) {
+export function AndroidHostActivationCard({ devices = [] }: AndroidHostActivationCardProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [boundDeviceId, setBoundDeviceId] = useState<string | null>(currentDevice?.id ?? null);
   const hostInfo = useMemo(() => readAndroidHostInfo(), []);
+  const matchedDevice = useMemo(() => {
+    if (!hostInfo) {
+      return null;
+    }
+    return resolveAndroidHostRuntimeDevice(devices, hostInfo);
+  }, [devices, hostInfo]);
+  const [boundDeviceId, setBoundDeviceId] = useState<string | null>(matchedDevice?.id ?? null);
   const [activationSurface, setActivationSurface] = useState(() => readAndroidActivationSurface());
 
   useEffect(() => {
-    setBoundDeviceId(currentDevice?.id ?? null);
-  }, [currentDevice?.id]);
+    setBoundDeviceId(matchedDevice?.id ?? null);
+  }, [matchedDevice?.id]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -120,31 +93,20 @@ export function AndroidHostActivationCard({ currentDevice = null }: AndroidHostA
       return;
     }
 
-    const bindingPayload = buildBindingPayload(hostInfo);
     startTransition(async () => {
       try {
-        const hostConfirmed = await waitForAndroidActivationSurface(
+        const hostConfirmed = await waitForPolledValue(
+          readAndroidActivationSurface,
           (surface) => surface?.serviceActivationRequested === true,
           setActivationSurface,
         );
         if (!hostConfirmed) {
           throw new Error("宿主尚未确认设备服务已启动，未推进数据库状态");
         }
-        await activateAndroidHostDeviceAction({
-          deviceId: boundDeviceId,
-          capabilities: {
-            device_service: "requested",
-            screen_capture: activationSurface?.canRequestScreenCapture ? "prompt_available" : "unknown",
-          },
-          metadata: {
-            ...bindingPayload.metadata,
-            activation_source: "gomtmui_webview_bridge",
-            host_action_state: activationSurface?.hostActionState ?? "device_service_activation_requested",
-          },
-        });
+        await activateAndroidHostDeviceAction({ deviceId: boundDeviceId });
         setActivationSurface(readAndroidActivationSurface());
         toast.success("已请求启动设备服务", {
-          description: "数据库中的设备运行态已推进到第一阶段最小闭环，可在设备列表查看三层状态。",
+          description: "数据库中的设备状态已推进到 activating/booting；后续 ready 必须由真实 runtime heartbeat 推进。",
         });
         router.refresh();
       } catch (error) {
@@ -167,7 +129,8 @@ export function AndroidHostActivationCard({ currentDevice = null }: AndroidHostA
 
     startTransition(async () => {
       try {
-        const hostConfirmed = await waitForAndroidActivationSurface(
+        const hostConfirmed = await waitForPolledValue(
+          readAndroidActivationSurface,
           (surface) => surface?.serviceActivationRequested === false,
           setActivationSurface,
         );
@@ -197,11 +160,11 @@ export function AndroidHostActivationCard({ currentDevice = null }: AndroidHostA
     boundDeviceId,
     activationSurfaceCanStop: Boolean(activationSurface?.canStopDeviceService),
   });
-  const currentDeviceStateItems = currentDevice
+  const currentDeviceStateItems = matchedDevice
     ? buildDeviceStateItems({
-        activationStatus: currentDevice.activationStatus,
-        presenceStatus: currentDevice.presenceStatus,
-        runtimeStatus: currentDevice.runtimeStatus,
+        activationStatus: matchedDevice.activationStatus,
+        presenceStatus: matchedDevice.presenceStatus,
+        runtimeStatus: matchedDevice.runtimeStatus,
       })
     : [];
 
@@ -244,7 +207,7 @@ export function AndroidHostActivationCard({ currentDevice = null }: AndroidHostA
           <div className="mt-1 text-xs text-muted-foreground">这里显示的是 Android 壳层是否已经收到“启动设备服务”的动作回执，不代表设备核心 runtime 已 ready；真正的数据库层、核心状态与后续 heartbeat 仍应收敛到 gomtm AAR / Go 核心。</div>
         </div>
 
-        {currentDevice ? (
+        {matchedDevice ? (
           <div className="rounded-md border bg-muted/30 p-3">
             <div className="text-muted-foreground">数据库中的当前设备状态</div>
             <div className="mt-2 flex flex-wrap gap-2">
@@ -254,8 +217,8 @@ export function AndroidHostActivationCard({ currentDevice = null }: AndroidHostA
                 </span>
               ))}
             </div>
-            <div className="mt-2 text-xs text-muted-foreground">最近在线：{currentDevice.lastSeenAt ?? "-"}</div>
-            <div className="mt-1 text-xs text-muted-foreground">最近错误：{currentDevice.lastError ?? "-"}</div>
+            <div className="mt-2 text-xs text-muted-foreground">最近在线：{matchedDevice.lastSeenAt ?? "-"}</div>
+            <div className="mt-1 text-xs text-muted-foreground">最近错误：{matchedDevice.lastError ?? "-"}</div>
           </div>
         ) : null}
 

@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { buildDeviceStateItems, canStartAndroidHostDeviceService, canStopAndroidHostDeviceService } from "./device-state";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { buildDeviceStateItems, canStartAndroidHostDeviceService, canStopAndroidHostDeviceService, resolveAndroidHostRuntimeDevice, waitForPolledValue } from "./device-state";
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe("buildDeviceStateItems", () => {
   it("returns canonical activation, presence, and runtime items", () => {
@@ -72,5 +76,103 @@ describe("canStopAndroidHostDeviceService", () => {
         boundDeviceId: "device-1",
       }),
     ).toBe(true);
+  });
+});
+
+describe("resolveAndroidHostRuntimeDevice", () => {
+  it("matches the exact hostKind/packageName pair", () => {
+    expect(
+      resolveAndroidHostRuntimeDevice(
+        [
+          {
+            id: "device-1",
+            activationStatus: "inactive",
+            presenceStatus: "offline",
+            runtimeStatus: "stopped",
+            lastSeenAt: null,
+            lastError: null,
+            hostKind: "android-host",
+            packageName: "com.gomtm.one",
+          },
+          {
+            id: "device-2",
+            activationStatus: "inactive",
+            presenceStatus: "offline",
+            runtimeStatus: "stopped",
+            lastSeenAt: null,
+            lastError: null,
+            hostKind: "android-host",
+            packageName: "com.gomtm.two",
+          },
+        ],
+        {
+          hostKind: "android-host",
+          packageName: "com.gomtm.two",
+        },
+      )?.id,
+    ).toBe("device-2");
+  });
+
+  it("returns null when packageName does not match", () => {
+    expect(
+      resolveAndroidHostRuntimeDevice(
+        [
+          {
+            id: "device-1",
+            activationStatus: "inactive",
+            presenceStatus: "offline",
+            runtimeStatus: "stopped",
+            lastSeenAt: null,
+            lastError: null,
+            hostKind: "android-host",
+            packageName: "com.gomtm.one",
+          },
+        ],
+        {
+          hostKind: "android-host",
+          packageName: "com.gomtm.other",
+        },
+      ),
+    ).toBeNull();
+  });
+});
+
+describe("waitForPolledValue", () => {
+  it("returns false when the predicate never becomes true", async () => {
+    vi.useFakeTimers();
+    const syncValue = vi.fn();
+    const promise = waitForPolledValue(
+      () => false,
+      (value) => value,
+      syncValue,
+      500,
+      100,
+    );
+
+    await vi.advanceTimersByTimeAsync(600);
+
+    await expect(promise).resolves.toBe(false);
+    expect(syncValue).toHaveBeenCalled();
+  });
+
+  it("returns true once a later poll satisfies the predicate", async () => {
+    vi.useFakeTimers();
+    const syncValue = vi.fn();
+    let callCount = 0;
+    const promise = waitForPolledValue(
+      () => {
+        callCount += 1;
+        return callCount >= 3;
+      },
+      (value) => value,
+      syncValue,
+      1000,
+      100,
+    );
+
+    await vi.advanceTimersByTimeAsync(250);
+
+    await expect(promise).resolves.toBe(true);
+    expect(syncValue).toHaveBeenCalledTimes(3);
   });
 });

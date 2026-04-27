@@ -22,6 +22,22 @@ export interface AndroidHostStopStateInput {
   boundDeviceId: string | null;
 }
 
+export interface AndroidHostRuntimeDevice {
+  id: string;
+  activationStatus: string;
+  presenceStatus: string;
+  runtimeStatus: string;
+  lastSeenAt: string | null;
+  lastError: string | null;
+  hostKind: string | null;
+  packageName: string | null;
+}
+
+export interface AndroidHostIdentityInput {
+  hostKind: string;
+  packageName?: string;
+}
+
 function activationVariant(value: string): DeviceBadgeVariant {
   switch (value) {
     case "active":
@@ -68,6 +84,17 @@ function normalizeStatus(value: string | null | undefined, fallback: string) {
   return trimmed ? trimmed : fallback;
 }
 
+function normalizeIdentityValue(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
 export function buildDeviceStateItems(input: DeviceStateItemsInput): DeviceStateItem[] {
   const activationStatus = normalizeStatus(input.activationStatus, "inactive");
   const presenceStatus = normalizeStatus(input.presenceStatus, "offline");
@@ -86,4 +113,37 @@ export function canStartAndroidHostDeviceService(input: AndroidHostStartStateInp
 
 export function canStopAndroidHostDeviceService(input: AndroidHostStopStateInput) {
   return Boolean(input.boundDeviceId) && input.activationSurfaceCanStop;
+}
+
+export function resolveAndroidHostRuntimeDevice(devices: AndroidHostRuntimeDevice[], host: AndroidHostIdentityInput) {
+  const hostKind = normalizeIdentityValue(host.hostKind);
+  const packageName = normalizeIdentityValue(host.packageName);
+  if (!hostKind || !packageName) {
+    return null;
+  }
+
+  return (
+    devices.find((device) => {
+      return normalizeIdentityValue(device.hostKind) === hostKind && normalizeIdentityValue(device.packageName) === packageName;
+    }) ?? null
+  );
+}
+
+export async function waitForPolledValue<T>(
+  readValue: () => T,
+  predicate: (value: T) => boolean,
+  syncValue: (value: T) => void,
+  timeoutMs = 5000,
+  intervalMs = 250,
+) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt <= timeoutMs) {
+    const value = readValue();
+    syncValue(value);
+    if (predicate(value)) {
+      return true;
+    }
+    await wait(intervalMs);
+  }
+  return false;
 }

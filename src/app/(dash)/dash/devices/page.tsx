@@ -5,6 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "m
 import { DashContent, DashHeaders } from "@/components/dash-layout";
 import { createClient } from "@/lib/supabase/server";
 import { AndroidHostActivationCard } from "@/components/devices/android-host-activation-card";
+import type { AndroidHostRuntimeDevice } from "@/components/devices/device-state";
 
 interface DeviceRow {
   id: string;
@@ -117,8 +118,22 @@ export default async function DevicesPage() {
   }
 
   const rows = (devices ?? []) as DeviceRow[];
-  const currentAndroidHostDevice = rows.find((device) => {
-    return device.platform === "android" && isRecord(device.metadata) && device.metadata.hostKind === "android-host";
+  const androidHostDevices: AndroidHostRuntimeDevice[] = rows.flatMap((device) => {
+    if (device.platform !== "android" || !isRecord(device.metadata) || device.metadata.hostKind !== "android-host") {
+      return [];
+    }
+    return [
+      {
+        id: device.id,
+        activationStatus: device.activation_status,
+        presenceStatus: device.presence_status,
+        runtimeStatus: device.runtime_status,
+        lastSeenAt: device.last_seen_at,
+        lastError: device.last_error,
+        hostKind: typeof device.metadata.hostKind === "string" ? device.metadata.hostKind : null,
+        packageName: typeof device.metadata.packageName === "string" ? device.metadata.packageName : null,
+      },
+    ];
   });
 
   return (
@@ -131,20 +146,7 @@ export default async function DevicesPage() {
       </DashHeaders>
       <DashContent className="flex-1 overflow-auto">
         <div className="space-y-6">
-          <AndroidHostActivationCard
-            currentDevice={
-              currentAndroidHostDevice
-                ? {
-                    id: currentAndroidHostDevice.id,
-                    activationStatus: currentAndroidHostDevice.activation_status,
-                    presenceStatus: currentAndroidHostDevice.presence_status,
-                    runtimeStatus: currentAndroidHostDevice.runtime_status,
-                    lastSeenAt: currentAndroidHostDevice.last_seen_at,
-                    lastError: currentAndroidHostDevice.last_error,
-                  }
-                : null
-            }
-          />
+          <AndroidHostActivationCard devices={androidHostDevices} />
           <Card>
             <CardHeader>
               <CardTitle>我的设备</CardTitle>

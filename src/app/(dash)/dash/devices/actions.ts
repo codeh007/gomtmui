@@ -12,8 +12,6 @@ export interface BindAndroidHostDeviceInput {
 
 export interface ActivateAndroidHostDeviceInput {
   deviceId: string;
-  capabilities?: Record<string, unknown>;
-  metadata?: Record<string, unknown>;
 }
 
 export interface StopAndroidHostDeviceInput {
@@ -77,33 +75,19 @@ export async function bindAndroidHostDeviceAction(input: BindAndroidHostDeviceIn
 export async function activateAndroidHostDeviceAction(input: ActivateAndroidHostDeviceInput) {
   const { supabase } = await requireCurrentUser();
 
-  const { error: startedError } = await supabase.rpc("device_mark_runtime_started", {
+  const { data, error } = await supabase.rpc("device_mark_runtime_started", {
     p_device_id: input.deviceId,
     p_runtime_status: "booting",
     p_presence_status: "offline",
     p_last_error: null,
   });
 
-  if (startedError) {
-    throw startedError;
-  }
-
-  const { data: heartbeatedDevice, error: heartbeatError } = await supabase.rpc("device_heartbeat", {
-    p_device_id: input.deviceId,
-    p_presence_status: "online",
-    p_runtime_status: "ready",
-    p_poll_state: "waiting_task",
-    p_last_error: null,
-    p_capabilities: input.capabilities ?? {},
-    p_metadata: input.metadata ?? {},
-  });
-
-  if (heartbeatError) {
-    throw heartbeatError;
+  if (error) {
+    throw error;
   }
 
   revalidatePath("/dash/devices");
-  return heartbeatedDevice;
+  return data;
 }
 
 export async function stopAndroidHostDeviceAction(input: StopAndroidHostDeviceInput) {
