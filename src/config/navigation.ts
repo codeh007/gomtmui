@@ -16,12 +16,6 @@ export const DASH_NAV_ITEMS: NavItem[] = [
     tooltip: "我的受管设备",
   },
   {
-    label: "P2P",
-    url: "/dash/p2p",
-    icon: "network",
-    tooltip: "P2P 网络连接与节点发现",
-  },
-  {
     label: "账号",
     url: "/dash/cloud-accounts",
     icon: "user",
@@ -38,6 +32,12 @@ export const DASH_NAV_ITEMS: NavItem[] = [
     url: "/dash/campaigns",
     icon: "megaphone",
     tooltip: "营销活动管理",
+  },
+  {
+    label: "代理",
+    url: "/dash/mproxy",
+    icon: "globe",
+    tooltip: "订阅导入与提取代理",
   },
   {
     label: "任务",

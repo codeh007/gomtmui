@@ -1,3 +1,5 @@
+import { buildGomtmServerApiUrl } from "@/lib/gomtm-server/url";
+
 export type ServerSelfNode = {
   peerId: string;
   platform: string;
@@ -14,14 +16,6 @@ export type CanonicalServerSelfNodeRecord = {
   runtime_status?: string;
 };
 
-function normalizeServerUrl(serverUrl: string) {
-  const normalized = serverUrl.trim().replace(/\/+$/, "");
-  if (normalized === "") {
-    throw new Error("请先在 P2P 页面配置 gomtm server 地址。");
-  }
-  return normalized;
-}
-
 function asRecord(value: unknown) {
   return value !== null && typeof value === "object" ? (value as Record<string, unknown>) : null;
 }
@@ -31,8 +25,7 @@ function asString(value: unknown) {
 }
 
 export async function fetchServerSelfNode(serverUrl: string): Promise<ServerSelfNode> {
-  const normalizedServerUrl = normalizeServerUrl(serverUrl);
-  const response = await fetch(`${normalizedServerUrl}/api/p2p/self`, {
+  const response = await fetch(buildGomtmServerApiUrl(serverUrl, "/api/p2p/self", "请先在 P2P 页面配置 gomtm server 地址。"), {
     cache: "no-store",
     credentials: "omit",
     method: "GET",

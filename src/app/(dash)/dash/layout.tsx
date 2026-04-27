@@ -6,8 +6,8 @@ import { redirect } from "next/navigation";
 import { CommandMenu } from "@/components/command-menu";
 import { DashRoot } from "@/components/dash-layout";
 import { normalizeGomtmServerUrl } from "@/lib/gomtm-server/url";
+import { GomtmServerProvider } from "@/lib/gomtm-server/provider";
 import { RealtimeProvider } from "@/stores/realtime-provider";
-import { GomtmServerProvider } from "./runtime/gomtm-server-provider";
 import { SidebarDash } from "./SidebarDash";
 
 export default async function Layout({ children }: { children: React.ReactNode }) {

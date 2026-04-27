@@ -1,3 +1,5 @@
+import { buildGomtmServerApiUrl } from "@/lib/gomtm-server/url";
+
 export type ServerPeerDirectoryRecord = {
   expiresAt?: string;
   lastSeenAt?: string;
@@ -5,14 +7,6 @@ export type ServerPeerDirectoryRecord = {
   peerId: string;
   source?: string;
 };
-
-function normalizeServerUrl(serverUrl: string) {
-  const normalized = serverUrl.trim().replace(/\/+$/, "");
-  if (normalized === "") {
-    throw new Error("请先在 P2P 主页面配置后端地址。");
-  }
-  return normalized;
-}
 
 function asRecord(value: unknown) {
   return value !== null && typeof value === "object" ? (value as Record<string, unknown>) : null;
@@ -58,12 +52,14 @@ async function parseErrorMessage(response: Response) {
 }
 
 export async function fetchServerPeerDirectory(serverUrl: string): Promise<ServerPeerDirectoryRecord[]> {
-  const normalizedServerUrl = normalizeServerUrl(serverUrl);
-  const response = await fetch(`${normalizedServerUrl}/api/p2p/directory/peers`, {
+  const response = await fetch(
+    buildGomtmServerApiUrl(serverUrl, "/api/p2p/directory/peers", "请先在 P2P 主页面配置后端地址。"),
+    {
     cache: "no-store",
     credentials: "omit",
     method: "GET",
-  });
+    },
+  );
 
   if (!response.ok) {
     throw new Error(await parseErrorMessage(response));

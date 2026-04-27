@@ -1,11 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useGomtmServer } from "@/lib/gomtm-server/provider";
+import { isValidGomtmServerUrl, normalizeGomtmServerUrl } from "@/lib/gomtm-server/url";
 import { fetchServerPeerDirectory } from "@/lib/p2p/server-peer-directory-api";
 import { fetchServerSelfNode } from "@/lib/p2p/server-self-node-api";
 import type { P2PShellState } from "./p2p-runtime-contract";
 
-const STORAGE_KEY = "gomtm:p2p:server-url";
+const INVALID_SERVER_URL_MESSAGE = "请输入 http(s) 地址";
 
 type ServerShellNodeSummary = {
   peerId: string;
@@ -27,17 +29,6 @@ export type P2PServerShellState = {
   saveServerUrl: () => Promise<void>;
 };
 
-function readStoredServerUrl() {
-  return typeof window === "undefined" ? "" : window.localStorage.getItem(STORAGE_KEY)?.trim() ?? "";
-}
-
-function persistStoredServerUrl(value: string) {
-  if (typeof window === "undefined") {
-    return;
-  }
-  window.localStorage.setItem(STORAGE_KEY, value);
-}
-
 function getRuntimeNodeSummary(input: { lastDiscoveredAt?: string; multiaddrs?: string[]; peerId?: string }): ServerShellNodeSummary | null {
   const peerId = input.peerId?.trim() ?? "";
   if (peerId === "") {
@@ -53,23 +44,29 @@ function getRuntimeNodeSummary(input: { lastDiscoveredAt?: string; multiaddrs?: 
 }
 
 export function useServerShellRuntime(): P2PShellState {
-  const [serverUrl, setServerUrl] = useState("");
-  const [serverUrlInput, setServerUrlInput] = useState("");
+  const { clearServerUrl, saveServerUrl: saveGomtmServerUrl, serverUrl, serverUrlInput, setServerUrlInput } = useGomtmServer();
   const [status, setStatus] = useState<P2PServerShellState["status"]>("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [currentNode, setCurrentNode] = useState<ServerShellNodeSummary | null>(null);
   const [peers, setPeers] = useState<ServerShellNodeSummary[]>([]);
+  const skipNextEmptyServerReloadRef = useRef(false);
 
-  const reload = useCallback(async (nextServerUrl: string) => {
-    const normalized = nextServerUrl.trim();
-    setServerUrl(normalized);
-    setServerUrlInput(normalized);
+  const reload = useCallback(async (nextServerUrl: string, options?: { emptyErrorMessage?: string | null }) => {
+    const normalized = normalizeGomtmServerUrl(nextServerUrl);
 
     if (normalized === "") {
       setStatus("needs-server-url");
       setCurrentNode(null);
       setPeers([]);
-      setErrorMessage(null);
+      setErrorMessage(options?.emptyErrorMessage ?? null);
+      return;
+    }
+
+    if (!isValidGomtmServerUrl(normalized)) {
+      setStatus("error");
+      setCurrentNode(null);
+      setPeers([]);
+      setErrorMessage(INVALID_SERVER_URL_MESSAGE);
       return;
     }
 
@@ -110,14 +107,39 @@ export function useServerShellRuntime(): P2PShellState {
   }, []);
 
   useEffect(() => {
-    void reload(readStoredServerUrl());
-  }, [reload]);
+    if (normalizeGomtmServerUrl(serverUrl) === "" && skipNextEmptyServerReloadRef.current) {
+      skipNextEmptyServerReloadRef.current = false;
+      return;
+    }
+
+    void reload(serverUrl);
+  }, [reload, serverUrl]);
 
   const saveServerUrl = useCallback(async () => {
-    const normalized = serverUrlInput.trim();
-    persistStoredServerUrl(normalized);
-    await reload(normalized);
-  }, [reload, serverUrlInput]);
+    const normalizedInput = normalizeGomtmServerUrl(serverUrlInput);
+
+    if (normalizedInput === "") {
+      skipNextEmptyServerReloadRef.current = true;
+      clearServerUrl();
+      await reload("", { emptyErrorMessage: INVALID_SERVER_URL_MESSAGE });
+      return;
+    }
+
+    if (!isValidGomtmServerUrl(normalizedInput)) {
+      await reload(normalizedInput);
+      return;
+    }
+
+    if (!saveGomtmServerUrl()) {
+      await reload(normalizedInput);
+      return;
+    }
+
+    if (normalizedInput === serverUrl) {
+      await reload(normalizedInput);
+      return;
+    }
+  }, [clearServerUrl, reload, saveGomtmServerUrl, serverUrl, serverUrlInput]);
 
   return {
     shellKind: "server-shell",

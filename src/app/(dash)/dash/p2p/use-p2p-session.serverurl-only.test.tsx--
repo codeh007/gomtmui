@@ -1,0 +1,268 @@
+// @vitest-environment jsdom
+
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { GomtmServerProvider } from "../runtime/gomtm-server-provider";
+import { P2PShellProvider, useP2PShellState } from "./runtime/p2p-runtime-provider";
+
+const { fetchServerPeerDirectoryMock, fetchServerSelfNodeMock } = vi.hoisted(() => ({
+  fetchServerPeerDirectoryMock: vi.fn(),
+  fetchServerSelfNodeMock: vi.fn(),
+}));
+
+vi.mock("@/lib/p2p/server-peer-directory-api", () => ({
+  fetchServerPeerDirectory: fetchServerPeerDirectoryMock,
+}));
+
+vi.mock("@/lib/p2p/server-self-node-api", () => ({
+  fetchServerSelfNode: fetchServerSelfNodeMock,
+}));
+
+function SessionProbe() {
+  const session = useP2PShellState();
+
+  return (
+    <>
+      <div data-testid="shell-kind">{session.shellKind}</div>
+      <div data-testid="status">{session.status}</div>
+      <div data-testid="current-peer-id">{session.currentNode?.peerId ?? ""}</div>
+      <div data-testid="peer-count">{String(session.peers.length)}</div>
+      <div data-testid="error-message">{session.errorMessage ?? ""}</div>
+      <div data-testid="is-connected">{String(session.isConnected)}</div>
+      <div data-testid="server-url">{session.serverUrl}</div>
+      <div data-testid="server-url-input">{session.serverUrlInput}</div>
+      <button
+        type="button"
+        onClick={() => session.setServerUrlInput(" https://gomtm2.next.example.com/dash/hermes?tab=1#hash ")}
+      >
+        set override
+      </button>
+      <button type="button" onClick={() => session.setServerUrlInput(session.serverUrl)}>
+        set same
+      </button>
+      <button type="button" onClick={() => session.setServerUrlInput("notaurl") }>
+        set invalid
+      </button>
+      <button type="button" onClick={() => session.setServerUrlInput("   ")}>
+        set empty
+      </button>
+      <button type="button" onClick={() => void session.saveServerUrl()}>
+        save
+      </button>
+    </>
+  );
+}
+
+afterEach(() => {
+  cleanup();
+  localStorage.clear();
+  vi.restoreAllMocks();
+  fetchServerPeerDirectoryMock.mockReset();
+  fetchServerSelfNodeMock.mockReset();
+});
+
+describe("P2PShellProvider server-shell hard cut", () => {
+  it("从 dash 级 gomtm server provider 读取统一后端地址", async () => {
+    const serverUrl = "https://gomtm2.yuepa8.com";
+
+    fetchServerSelfNodeMock.mockResolvedValue({
+      peerId: "12D3KooWShellTruth",
+      connectionAddr: "/dns4/gomtm2.yuepa8.com/tcp/443/tls/ws/p2p/12D3KooWShellTruth",
+    });
+    fetchServerPeerDirectoryMock.mockResolvedValue([
+      {
+        peerId: "12D3KooWPeerA",
+        multiaddrs: ["/dns4/peer-a.example.com/tcp/443/tls/ws/p2p/12D3KooWPeerA"],
+        lastSeenAt: "2026-04-23T00:00:00Z",
+      },
+      {
+        peerId: "12D3KooWShellTruth",
+        multiaddrs: ["/dns4/gomtm2.yuepa8.com/tcp/443/tls/ws/p2p/12D3KooWShellTruth"],
+        lastSeenAt: "2026-04-23T00:01:00Z",
+      },
+    ]);
+
+    localStorage.setItem("gomtm:dash:server-url", serverUrl);
+
+    render(
+      <GomtmServerProvider defaultServerUrl="https://default.example.com">
+        <P2PShellProvider>
+          <SessionProbe />
+        </P2PShellProvider>
+      </GomtmServerProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("status").textContent).toBe("peer_candidates_ready");
+    });
+
+    expect(screen.getByTestId("shell-kind").textContent).toBe("server-shell");
+    expect(screen.getByTestId("current-peer-id").textContent).toBe("12D3KooWShellTruth");
+    expect(screen.getByTestId("peer-count").textContent).toBe("1");
+    expect(screen.getByTestId("error-message").textContent).toBe("");
+    expect(screen.getByTestId("server-url").textContent).toBe(serverUrl);
+    expect(screen.getByTestId("server-url-input").textContent).toBe(serverUrl);
+    expect(fetchServerSelfNodeMock).toHaveBeenCalledWith(serverUrl);
+  });
+
+  it("通过共享 provider 保存时会归一化到 dash server key 且不再写旧 key", async () => {
+    fetchServerSelfNodeMock.mockResolvedValue({
+      peerId: "12D3KooWShellTruth",
+      connectionAddr: "/dns4/gomtm2.next.example.com/tcp/443/tls/ws/p2p/12D3KooWShellTruth",
+    });
+    fetchServerPeerDirectoryMock.mockResolvedValue([]);
+
+    render(
+      <GomtmServerProvider defaultServerUrl="">
+        <P2PShellProvider>
+          <SessionProbe />
+        </P2PShellProvider>
+      </GomtmServerProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "set override" }));
+    fireEvent.click(screen.getByRole("button", { name: "save" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("status").textContent).toBe("peer_candidates_ready");
+    });
+
+    expect(localStorage.getItem("gomtm:dash:server-url")).toBe("https://gomtm2.next.example.com");
+    expect(localStorage.getItem("gomtm:p2p:server-url")).toBeNull();
+    expect(screen.getByTestId("server-url").textContent).toBe("https://gomtm2.next.example.com");
+    expect(screen.getByTestId("server-url-input").textContent).toBe("https://gomtm2.next.example.com");
+    expect(fetchServerSelfNodeMock).toHaveBeenCalledWith("https://gomtm2.next.example.com");
+  });
+
+  it("同一个后端地址重复保存时会重新发起节点发现", async () => {
+    const serverUrl = "https://gomtm2.yuepa8.com";
+
+    fetchServerSelfNodeMock.mockResolvedValue({
+      peerId: "12D3KooWShellTruth",
+      connectionAddr: "/dns4/gomtm2.yuepa8.com/tcp/443/tls/ws/p2p/12D3KooWShellTruth",
+    });
+    fetchServerPeerDirectoryMock.mockResolvedValue([]);
+
+    localStorage.setItem("gomtm:dash:server-url", serverUrl);
+
+    render(
+      <GomtmServerProvider defaultServerUrl="https://default.example.com">
+        <P2PShellProvider>
+          <SessionProbe />
+        </P2PShellProvider>
+      </GomtmServerProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("status").textContent).toBe("peer_candidates_ready");
+    });
+
+    expect(fetchServerSelfNodeMock).toHaveBeenCalledTimes(1);
+    expect(fetchServerPeerDirectoryMock).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "set same" }));
+    fireEvent.click(screen.getByRole("button", { name: "save" }));
+
+    await waitFor(() => {
+      expect(fetchServerSelfNodeMock).toHaveBeenCalledTimes(2);
+    });
+
+    expect(fetchServerPeerDirectoryMock).toHaveBeenCalledTimes(2);
+    expect(screen.getByTestId("error-message").textContent).toBe("");
+  });
+
+  it("输入非法 URL 时不会静默 no-op，而是暴露已有错误提示", async () => {
+    fetchServerSelfNodeMock.mockResolvedValue({
+      peerId: "12D3KooWShellTruth",
+      connectionAddr: "/dns4/gomtm2.next.example.com/tcp/443/tls/ws/p2p/12D3KooWShellTruth",
+    });
+    fetchServerPeerDirectoryMock.mockResolvedValue([]);
+
+    render(
+      <GomtmServerProvider defaultServerUrl="">
+        <P2PShellProvider>
+          <SessionProbe />
+        </P2PShellProvider>
+      </GomtmServerProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "set invalid" }));
+    fireEvent.click(screen.getByRole("button", { name: "save" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("error-message").textContent).toBe("请输入 http(s) 地址");
+    });
+
+    expect(screen.getByTestId("status").textContent).toBe("error");
+    expect(fetchServerSelfNodeMock).not.toHaveBeenCalled();
+    expect(fetchServerPeerDirectoryMock).not.toHaveBeenCalled();
+  });
+
+  it("输入空地址时会回到 needs-server-url 并清空当前节点状态", async () => {
+    const serverUrl = "https://gomtm2.yuepa8.com";
+
+    fetchServerSelfNodeMock.mockResolvedValue({
+      peerId: "12D3KooWShellTruth",
+      connectionAddr: "/dns4/gomtm2.yuepa8.com/tcp/443/tls/ws/p2p/12D3KooWShellTruth",
+    });
+    fetchServerPeerDirectoryMock.mockResolvedValue([]);
+
+    localStorage.setItem("gomtm:dash:server-url", serverUrl);
+
+    render(
+      <GomtmServerProvider defaultServerUrl="https://default.example.com">
+        <P2PShellProvider>
+          <SessionProbe />
+        </P2PShellProvider>
+      </GomtmServerProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("status").textContent).toBe("peer_candidates_ready");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "set empty" }));
+    fireEvent.click(screen.getByRole("button", { name: "save" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("status").textContent).toBe("needs-server-url");
+    });
+
+    expect(screen.getByTestId("current-peer-id").textContent).toBe("");
+    expect(screen.getByTestId("peer-count").textContent).toBe("0");
+    expect(screen.getByTestId("is-connected").textContent).toBe("false");
+    expect(screen.getByTestId("error-message").textContent).toBe("请输入 http(s) 地址");
+    expect(screen.getByTestId("server-url").textContent).toBe("");
+    expect(localStorage.getItem("gomtm:dash:server-url")).toBeNull();
+    expect(fetchServerSelfNodeMock).toHaveBeenCalledTimes(1);
+    expect(fetchServerPeerDirectoryMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("当后端未返回 server self truth 时停在 error 且保持 server-shell 语义", async () => {
+    const serverUrl = "https://gomtm2.yuepa8.com";
+
+    fetchServerSelfNodeMock.mockRejectedValue(new Error("gomtm server 未返回 self node truth。"));
+    fetchServerPeerDirectoryMock.mockResolvedValue([]);
+
+    localStorage.setItem("gomtm:dash:server-url", serverUrl);
+
+    render(
+      <GomtmServerProvider defaultServerUrl="https://default.example.com">
+        <P2PShellProvider>
+          <SessionProbe />
+        </P2PShellProvider>
+      </GomtmServerProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("status").textContent).toBe("error");
+    });
+
+    expect(screen.getByTestId("shell-kind").textContent).toBe("server-shell");
+    expect(screen.getByTestId("current-peer-id").textContent).toBe("");
+    expect(screen.getByTestId("peer-count").textContent).toBe("0");
+    expect(screen.getByTestId("error-message").textContent).toBe("gomtm server 未返回 self node truth。");
+    expect(screen.getByTestId("server-url").textContent).toBe(serverUrl);
+    expect(screen.getByTestId("server-url-input").textContent).toBe(serverUrl);
+  });
+});

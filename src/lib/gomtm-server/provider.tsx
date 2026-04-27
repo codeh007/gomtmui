@@ -8,6 +8,7 @@ import {
 } from "./url";
 
 type GomtmServerContextValue = {
+  clearServerUrl: () => void;
   defaultServerUrl: string;
   isUsingDefault: boolean;
   saveServerUrl: () => boolean;
@@ -64,9 +65,18 @@ export function GomtmServerProvider({ children, defaultServerUrl }: { children: 
     return true;
   };
 
+  const clearServerUrl = () => {
+    localStorage.removeItem(GOMTM_DASH_SERVER_URL_STORAGE_KEY);
+    setState({
+      serverUrl: "",
+      serverUrlInput: "",
+    });
+  };
+
   return (
     <GomtmServerContext.Provider
       value={{
+        clearServerUrl,
         defaultServerUrl: normalizedDefaultServerUrl,
         isUsingDefault: state.serverUrl === normalizedDefaultServerUrl,
         saveServerUrl,

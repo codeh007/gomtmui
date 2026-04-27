@@ -7,6 +7,7 @@ import { cloudAccountRoute } from "./routes/cloud-account";
 import { cloudflareRoute } from "./routes/cloudflare";
 import { configureOpenapiDoc } from "./routes/doc";
 import { githubRoute } from "./routes/github";
+import { mproxyRoute } from "./routes/mproxy";
 import { netProxyRoute } from "./routes/net-proxy";
 import openaiV1Route from "./routes/openai_v1";
 import type { AppContext } from "./types";
@@ -17,6 +18,7 @@ app.use("*", async (c, next) => {
   console.log(`[mtgate] incoming request: ${c.req.method} ${c.req.path}`);
   await next();
 });
+app.route(ApiPrefix, mproxyRoute);
 configureOpenapiDoc(app);
 app.use("*", configuredCorsMiddleware());
 app.route(ApiPrefix, openaiV1Route);

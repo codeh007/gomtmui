@@ -3,6 +3,7 @@
 import { createElement, Fragment } from "react";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { GomtmServerProvider } from "@/app/(dash)/dash/runtime/gomtm-server-provider";
 import { useServerShellRuntime } from "@/app/(dash)/dash/p2p/runtime/use-server-shell-runtime";
 import { fetchServerSelfNode } from "./server-self-node-api";
 
@@ -132,7 +133,7 @@ describe("useServerShellRuntime", () => {
   });
 
   it("reads only server self truth and peer directory for the server shell", async () => {
-    window.localStorage.setItem("gomtm:p2p:server-url", "https://gomtm2.yuepa8.com");
+    window.localStorage.setItem("gomtm:dash:server-url", "https://gomtm2.yuepa8.com");
 
     fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
       if (input === "https://gomtm2.yuepa8.com/api/p2p/self") {
@@ -168,7 +169,7 @@ describe("useServerShellRuntime", () => {
 
     vi.stubGlobal("fetch", fetchMock);
 
-    render(createElement(ServerShellProbe));
+    render(createElement(GomtmServerProvider, { defaultServerUrl: "" }, createElement(ServerShellProbe)));
 
     await waitFor(() => {
       expect(screen.getByTestId("status").textContent).toBe("peer_candidates_ready");
@@ -193,7 +194,7 @@ describe("useServerShellRuntime", () => {
   });
 
   it("errors when server self truth is missing and does not fall back to browser truth", async () => {
-    window.localStorage.setItem("gomtm:p2p:server-url", "https://gomtm2.yuepa8.com");
+    window.localStorage.setItem("gomtm:dash:server-url", "https://gomtm2.yuepa8.com");
 
     fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
       if (input === "https://gomtm2.yuepa8.com/api/p2p/self") {
@@ -217,7 +218,7 @@ describe("useServerShellRuntime", () => {
 
     vi.stubGlobal("fetch", fetchMock);
 
-    render(createElement(ServerShellProbe));
+    render(createElement(GomtmServerProvider, { defaultServerUrl: "" }, createElement(ServerShellProbe)));
 
     await waitFor(() => {
       expect(screen.getByTestId("status").textContent).toBe("error");
@@ -229,7 +230,7 @@ describe("useServerShellRuntime", () => {
   });
 
   it("fails closed when self truth is malformed and never reports ready without currentNode", async () => {
-    window.localStorage.setItem("gomtm:p2p:server-url", "https://gomtm2.yuepa8.com");
+    window.localStorage.setItem("gomtm:dash:server-url", "https://gomtm2.yuepa8.com");
 
     fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
       if (input === "https://gomtm2.yuepa8.com/api/p2p/self") {
@@ -260,7 +261,7 @@ describe("useServerShellRuntime", () => {
 
     vi.stubGlobal("fetch", fetchMock);
 
-    render(createElement(ServerShellProbe));
+    render(createElement(GomtmServerProvider, { defaultServerUrl: "" }, createElement(ServerShellProbe)));
 
     await waitFor(() => {
       expect(screen.getByTestId("status").textContent).toBe("error");
