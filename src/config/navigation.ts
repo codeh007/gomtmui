@@ -10,22 +10,10 @@ export interface NavItem {
 
 export const DASH_NAV_ITEMS: NavItem[] = [
   {
-    label: "Server Instances",
-    url: "/dash/instances",
-    icon: "server",
-    requiredRole: "admin",
-  },
-  {
     label: "设备",
     url: "/dash/devices",
     icon: "smartphone",
     tooltip: "我的受管设备",
-  },
-  {
-    label: "MITM",
-    url: "/dash/mitm",
-    icon: "network",
-    tooltip: "中间人代理",
   },
   {
     label: "P2P",

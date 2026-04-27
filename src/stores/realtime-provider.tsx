@@ -11,14 +11,8 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    // Global subscription for 'servers' table (原 workers 表)
-    // This allows multiple components to benefit from real-time updates without creating multiple connections
     const channel = sb
       .channel("global-db-changes")
-      .on("postgres_changes", { event: "*", schema: "public", table: "servers" }, () => {
-        void queryClient.invalidateQueries({ queryKey: getRpcQueryKey("server_list_cursor") });
-        void queryClient.invalidateQueries({ queryKey: getRpcQueryKey("server_get") });
-      })
       .on("postgres_changes", { event: "*", schema: "public", table: "cloud_accounts" }, () => {
         void queryClient.invalidateQueries({ queryKey: getRpcQueryKey("cloud_account_list_cursor") });
         void queryClient.invalidateQueries({ queryKey: getRpcQueryKey("cloud_account_get") });

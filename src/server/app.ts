@@ -9,7 +9,6 @@ import { configureOpenapiDoc } from "./routes/doc";
 import { githubRoute } from "./routes/github";
 import { netProxyRoute } from "./routes/net-proxy";
 import openaiV1Route from "./routes/openai_v1";
-import { serverRoute } from "./routes/server";
 import type { AppContext } from "./types";
 
 const app = new Hono<AppContext>();
@@ -24,8 +23,6 @@ app.route(ApiPrefix, openaiV1Route);
 app.route(ApiPrefix, netProxyRoute);
 app.route(ApiPrefix, cloudflareRoute);
 app.route(ApiPrefix, githubRoute);
-app.route(ApiPrefix, serverRoute);
-
 app.route(ApiPrefix, cloudAccountRoute);
 
 app.onError((err, c) => {

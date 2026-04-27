@@ -1,6 +1,6 @@
 "use client";
 
-import { type LucideIcon, Megaphone, Server, Users, Zap } from "lucide-react";
+import { type LucideIcon, Megaphone, Users, Zap } from "lucide-react";
 import { useRpcQuery } from "mtmsdk/supabase/use-sb-query/use-rpc-query";
 import { Button } from "mtxuilib/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "mtxuilib/ui/card";
@@ -13,7 +13,7 @@ import { CloudAccountRecordSchema } from "../cloud-account/schemas";
 import { ContactRecordSchema } from "../contacts/schemas";
 
 export function DashboardOverview() {
-  const { isAdmin } = useCurrentUserRole();
+  useCurrentUserRole();
 
   const accountsQuery = useRpcQuery(
     "cloud_account_list_cursor",
@@ -25,25 +25,9 @@ export function DashboardOverview() {
 
   const contactsQuery = useRpcQuery("contact_list_cursor", { p_limit: 1 }, { schema: z.array(ContactRecordSchema) });
 
-  const serverInstancesQuery = useRpcQuery(
-    "server_list_cursor",
-    { p_limit: 100 },
-    {
-      schema: z.array(
-        z.object({
-          id: z.string(),
-          state: z.any().nullable(),
-        }),
-      ),
-    },
-  );
-
-  const serverInstances = serverInstancesQuery.data;
   const accounts = accountsQuery.data;
   const campaigns = campaignsQuery.data;
   const contacts = contactsQuery.data;
-
-  const onlineCount = serverInstances?.filter((s) => s.state?.status === "ready").length ?? 0;
 
   const connectedAccounts = accounts?.length || 0;
   const activeCampaigns = campaigns?.filter((c) => c.status === "active").length || 0;
@@ -81,20 +65,6 @@ export function DashboardOverview() {
             status={getQueryStatus(campaignsQuery)}
           />
         </ErrorBoundary>
-        {isAdmin && (
-          <ErrorBoundary name="DashboardStats:Instances" fallback={<StatsCardFallback title="Server Instances" />}>
-            <StatsCard
-              title="Server Instances"
-              value={onlineCount.toString()}
-              icon={Server}
-              description="Online instances"
-              emptyDescription="No online instances"
-              isEmpty={onlineCount === 0}
-              href="/dash/instances"
-              status={getQueryStatus(serverInstancesQuery)}
-            />
-          </ErrorBoundary>
-        )}
         <ErrorBoundary name="DashboardStats:Contacts" fallback={<StatsCardFallback title="Contacts" />}>
           <StatsCard
             title="Contacts"

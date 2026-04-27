@@ -1,6 +1,6 @@
 "use client";
 
-import { Home, Laptop, Monitor, Moon, Settings, Sun, Tag } from "lucide-react";
+import { Home, Laptop, Moon, Settings, Sun, Tag } from "lucide-react";
 import { useRpcQuery } from "mtmsdk/supabase/use-sb-query/use-rpc-query";
 import {
   CommandDialog,
@@ -15,16 +15,12 @@ import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import * as React from "react";
 import { z } from "zod";
-import { useCurrentUserRole } from "@/hooks/use-current-user-role";
-import { useServerInstanceListInfinite } from "./server-instance/hooks";
 
 export function CommandMenu() {
   const [open, setOpen] = React.useState(false);
   const [selectedTagId, setSelectedTagId] = React.useState<string | null>(null);
   const router = useRouter();
   const { setTheme } = useTheme();
-  const { isAdmin } = useCurrentUserRole();
-
   const { data: tagsData } = useRpcQuery(
     "tag_list",
     {},
@@ -43,13 +39,6 @@ export function CommandMenu() {
     },
   );
   const tags = tagsData || [];
-
-  const { data } = useServerInstanceListInfinite({
-    pageSize: 50,
-    enabled: open && isAdmin,
-    poll: false,
-  });
-  const instances = data?.pages.flat() || [];
 
   const selectedTag = selectedTagId ? tags.find((t) => t.id === selectedTagId) : null;
 
@@ -101,12 +90,6 @@ export function CommandMenu() {
             <Home className="mr-2 h-4 w-4" />
             <span>Hermes 工作台</span>
           </CommandItem>
-          {isAdmin && (
-            <CommandItem onSelect={() => runCommand(() => router.push("/dash/instances"))}>
-              <Monitor className="mr-2 h-4 w-4" />
-              <span>服务实例列表</span>
-            </CommandItem>
-          )}
           <CommandItem onSelect={() => runCommand(() => router.push("/dash/settings"))}>
             <Settings className="mr-2 h-4 w-4" />
             <span>系统设置</span>
@@ -134,30 +117,6 @@ export function CommandMenu() {
                 </CommandItem>
               ))}
             </CommandGroup>
-            <CommandSeparator />
-          </>
-        )}
-
-        {isAdmin && (
-          <>
-            <CommandGroup heading={selectedTag ? `标签 [${selectedTag.name}] 下的实例` : "服务实例"}>
-              {instances.map((instance) => (
-                <CommandItem
-                  key={instance.id}
-                  onSelect={() => runCommand(() => router.push(`/dash/instances`))}
-                  value={instance.id ?? ""}
-                >
-                  <Monitor className="mr-2 h-4 w-4" />
-                  <span>{instance.id?.substring(0, 8) || "Unknown"}</span>
-                </CommandItem>
-              ))}
-              {instances.length === 0 && (
-                <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                  {selectedTag ? "该标签下没有实例" : "暂无实例"}
-                </div>
-              )}
-            </CommandGroup>
-
             <CommandSeparator />
           </>
         )}

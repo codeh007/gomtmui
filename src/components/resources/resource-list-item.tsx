@@ -103,7 +103,7 @@ export const ListItemWorker = ({ item, compact, onClick }: ListItemProps) => {
       asChild
       className={cn(compact && "border-none shadow-none bg-transparent hover:bg-accent/50")}
     >
-      <Wrapper href="/dash/instances" onClick={onClick}>
+      <Wrapper href="#" onClick={onClick}>
         <ItemMedia>
           <Terminal className="size-4 text-blue-500" />
         </ItemMedia>
