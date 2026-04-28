@@ -52,7 +52,7 @@ export function MitmCaCard() {
   });
 
   const state = stateQuery.data;
-  const caDownloadUrl = state?.download_path ? buildMproxyCaDownloadUrl(serverUrl || defaultServerUrl, state.download_path) : null;
+  const caDownloadUrl = state?.initialized && state.download_path ? buildMproxyCaDownloadUrl(serverUrl || defaultServerUrl, state.download_path) : null;
 
   return (
     <Card>

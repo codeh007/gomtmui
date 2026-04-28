@@ -204,7 +204,13 @@ export function buildProxyUri(
 }
 
 export function buildMproxyCaDownloadUrl(serverOrigin: string, downloadPath: string) {
-  return new URL(downloadPath, serverOrigin).toString();
+  const trimmedOrigin = serverOrigin.trim();
+  const trimmedPath = downloadPath.trim();
+  if (!trimmedOrigin || !trimmedPath) {
+    return null;
+  }
+
+  return new URL(trimmedPath, trimmedOrigin).toString();
 }
 
 export function normalizeProxyEndpoint(value: string) {
