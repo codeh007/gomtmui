@@ -10,6 +10,7 @@ import { githubRoute } from "./routes/github";
 import { mproxyRoute } from "./routes/mproxy";
 import { netProxyRoute } from "./routes/net-proxy";
 import openaiV1Route from "./routes/openai_v1";
+import { serverRoute } from "./routes/server";
 import type { AppContext } from "./types";
 
 const app = new Hono<AppContext>();
@@ -26,6 +27,7 @@ app.route(ApiPrefix, netProxyRoute);
 app.route(ApiPrefix, cloudflareRoute);
 app.route(ApiPrefix, githubRoute);
 app.route(ApiPrefix, cloudAccountRoute);
+app.route(ApiPrefix, serverRoute);
 
 app.onError((err, c) => {
   const errorResponse = createInternalError(err.message);
