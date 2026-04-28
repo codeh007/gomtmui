@@ -62,4 +62,11 @@ export const DASH_NAV_ITEMS: NavItem[] = [
     icon: "cpu",
     tooltip: "Hermes Agent 工作台",
   },
+  {
+    label: "配置",
+    url: "/dash/gomtm/configs",
+    icon: "settings",
+    tooltip: "gomtm worker 配置控制面",
+    requiredRole: "admin",
+  },
 ];
