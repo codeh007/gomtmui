@@ -2,6 +2,8 @@ import { z } from "zod";
 
 export const MIXED_PROXY_DEFAULT_PORT = 10085;
 export const subscriptionFetchPath = "/api/cf/mproxy/subscription/fetch";
+export const mproxyCaStatePath = "/api/cf/mproxy/mitm/ca/state";
+export const mproxyCaInitPath = "/api/cf/mproxy/mitm/ca/init";
 export function buildVmessProfilePath(extractId: string) {
   return `/api/cf/mproxy/extracts/${encodeURIComponent(extractId)}/vmess/profile`;
 }
@@ -119,6 +121,16 @@ export const mproxyExtractUpdateSchema = z.object({
   updated_at: z.string(),
 }).passthrough();
 
+export const mproxyCaStateSchema = z.object({
+  download_path: z.string(),
+  file_name: z.string(),
+  initialized: z.boolean(),
+  not_after: z.string().nullable(),
+  not_before: z.string().nullable(),
+  sha256_fingerprint: z.string().nullable(),
+  subject_common_name: z.string().nullable(),
+});
+
 export type SubscriptionPayload = z.infer<typeof subscriptionPayloadSchema>;
 export type SubscriptionImportResult = z.infer<typeof subscriptionImportResultSchema>[number];
 export type MProxyNodeRow = z.infer<typeof mproxyNodeRowSchema>;
@@ -126,6 +138,7 @@ export type ExtractCreateResult = z.infer<typeof extractCreateResultSchema>[numb
 export type MProxyExtractRow = z.infer<typeof mproxyExtractRowSchema>;
 export type MProxyExtractUpdateRow = z.infer<typeof mproxyExtractUpdateSchema>;
 export type MProxyTrafficMode = z.infer<typeof trafficModeSchema>;
+export type MProxyCaState = z.infer<typeof mproxyCaStateSchema>;
 export const proxyEndpointSchema = z
   .string()
   .trim()
@@ -188,6 +201,10 @@ export function buildProxyUri(
 ) {
   const { host, port } = splitProxyEndpoint(endpoint);
   return `${scheme}://${encodeURIComponent(username)}:${encodeURIComponent(password)}@${host}:${port}`;
+}
+
+export function buildMproxyCaDownloadUrl(serverOrigin: string, downloadPath: string) {
+  return new URL(downloadPath, serverOrigin).toString();
 }
 
 export function normalizeProxyEndpoint(value: string) {

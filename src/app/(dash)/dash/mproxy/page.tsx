@@ -4,6 +4,7 @@ import { readStoredProxyEndpoint, writeStoredProxyEndpoint } from "@/components/
 import { DashContent, DashHeaders } from "@/components/dash-layout";
 import { ErrorBoundary } from "@/components/common/error-boundary";
 import { ExtractRecordsCard } from "@/components/mproxy/extract-records-card";
+import { MitmCaCard } from "@/components/mproxy/mitm-ca-card";
 import { NodePoolCard } from "@/components/mproxy/node-pool-card";
 import { SubscriptionImportCard } from "@/components/mproxy/subscription-import-card";
 import { useEffect, useState } from "react";
@@ -32,6 +33,9 @@ export default function MProxyPage() {
           <p>提取记录现在同时暴露运行模式和入口策略。</p>
           <p className="mt-1">选择 <code>mitm</code> 后，客户端在使用 HTTPS 前需要先导入 mproxy CA 证书；只有 VMess 上游会显示 VMess profile/subscription 输出。</p>
         </div>
+        <ErrorBoundary name="MitmCaCard">
+          <MitmCaCard />
+        </ErrorBoundary>
         <ErrorBoundary name="SubscriptionImportCard">
           <SubscriptionImportCard />
         </ErrorBoundary>

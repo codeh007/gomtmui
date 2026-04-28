@@ -1,7 +1,8 @@
-import { mproxyExtractRowSchema } from "@/components/mproxy/schemas";
+import { mproxyCaStateSchema, mproxyExtractRowSchema } from "@/components/mproxy/schemas";
 import { type Context, Hono } from "hono";
 import { z } from "zod";
 import { getSupabase } from "mtmsdk/supabase/supabase";
+import { generateMproxyCA } from "../lib/mproxy-ca";
 import type { AppContext } from "../types";
 
 export const mproxyRoute = new Hono<AppContext>();
@@ -61,10 +62,34 @@ const vmessOutboundSchema = z
   .passthrough();
 
 type MproxyExtractRow = z.infer<typeof mproxyExtractRowSchema>;
+type MproxyCAStateRow = z.infer<typeof mproxyCaStateSchema>;
+type RpcError = { code?: string | null; message: string };
 type ExtractListRpcClient = {
   rpc(
     functionName: "mproxy_extract_list",
-  ): Promise<{ data: MproxyExtractRow[] | null; error: { code?: string | null; message: string } | null }>;
+  ): Promise<{ data: MproxyExtractRow[] | null; error: RpcError | null }>;
+};
+type CAStateRpcClient = {
+  rpc(functionName: "mproxy_ca_state_get"): Promise<{ data: MproxyCAStateRow[] | null; error: RpcError | null }>;
+};
+type CAPermissionRpcClient = {
+  rpc(
+    functionName: "has_permission",
+    args: { p_action: string; p_resource: string },
+  ): Promise<{ data: boolean | null; error: RpcError | null }>;
+};
+type CAInitRpcClient = {
+  rpc(
+    functionName: "mproxy_ca_init",
+    args: {
+      p_cert_pem: string;
+      p_not_after: string;
+      p_not_before: string;
+      p_private_key_pem: string;
+      p_sha256_fingerprint: string;
+      p_subject_common_name: string;
+    },
+  ): Promise<{ data: MproxyCAStateRow[] | null; error: RpcError | null }>;
 };
 
 type ResolvedVmessExtract = {
@@ -75,6 +100,94 @@ type ResolvedVmessExtract = {
   upstreamTag: string;
   vmessOutbound: z.infer<typeof vmessOutboundSchema>;
 };
+
+const defaultCAState: MproxyCAStateRow = {
+  download_path: "/api/mproxy/mitm/ca.crt",
+  file_name: "gomtm-mitm-ca.crt",
+  initialized: false,
+  not_after: null,
+  not_before: null,
+  sha256_fingerprint: null,
+  subject_common_name: null,
+};
+
+mproxyRoute.get("/mproxy/mitm/ca/state", async (c) => {
+  const supabase = getSupabase(c);
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+  if (authError || !user) {
+    return jsonNoStore({ error: "unauthorized" }, 401);
+  }
+
+  const caStateClient = supabase as unknown as CAStateRpcClient;
+  const { data, error } = await caStateClient.rpc("mproxy_ca_state_get");
+  if (error) {
+    return jsonNoStore({ error: error.message }, 502);
+  }
+
+  const rows = z.array(mproxyCaStateSchema).safeParse(data ?? []);
+  if (!rows.success) {
+    return jsonNoStore({ error: "ca state payload is invalid" }, 502);
+  }
+
+  return jsonNoStore(rows.data[0] ?? defaultCAState, 200);
+});
+
+mproxyRoute.post("/mproxy/mitm/ca/init", async (c) => {
+  const supabase = getSupabase(c);
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+  if (authError || !user) {
+    return jsonNoStore({ error: "unauthorized" }, 401);
+  }
+
+  const permissionClient = supabase as unknown as CAPermissionRpcClient;
+  const permission = await permissionClient.rpc("has_permission", {
+    p_action: "manage",
+    p_resource: "user_roles",
+  });
+  if (permission.error) {
+    return jsonNoStore({ error: permission.error.message }, 502);
+  }
+  if (permission.data !== true) {
+    return jsonNoStore({ error: "forbidden" }, 403);
+  }
+
+  const generated = await generateMproxyCA();
+  const caInitClient = supabase as unknown as CAInitRpcClient;
+  const result = await caInitClient.rpc("mproxy_ca_init", {
+    p_cert_pem: generated.certPem,
+    p_not_after: generated.notAfter,
+    p_not_before: generated.notBefore,
+    p_private_key_pem: generated.privateKeyPem,
+    p_sha256_fingerprint: generated.sha256Fingerprint,
+    p_subject_common_name: generated.subjectCommonName,
+  });
+  if (result.error) {
+    return jsonNoStore({ error: result.error.message }, 502);
+  }
+
+  const rows = z.array(mproxyCaStateSchema).safeParse(result.data ?? []);
+  if (!rows.success) {
+    return jsonNoStore({ error: "ca init payload is invalid" }, 502);
+  }
+
+  return jsonNoStore(
+    rows.data[0] ?? {
+      ...defaultCAState,
+      initialized: true,
+      not_after: generated.notAfter,
+      not_before: generated.notBefore,
+      sha256_fingerprint: generated.sha256Fingerprint,
+      subject_common_name: generated.subjectCommonName,
+    },
+    200,
+  );
+});
 
 mproxyRoute.post("/mproxy/subscription/fetch", async (c) => {
   if (!isTrustedDashboardRequest(c.req.raw)) {
