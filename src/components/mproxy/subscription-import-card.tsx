@@ -67,8 +67,8 @@ export function SubscriptionImportCard() {
       }
 
       setLastImport(row);
-      await queryClient.invalidateQueries({ queryKey: getRpcQueryKey("mproxy_node_list") });
-      toast.success(`订阅已导入，新增 ${row.inserted_count} 个节点，更新 ${row.updated_count} 个节点`);
+      await queryClient.invalidateQueries({ queryKey: getRpcQueryKey("mproxy_upstream_list") });
+      toast.success(`订阅已导入，新增 ${row.inserted_count} 个上游，更新 ${row.updated_count} 个上游`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "订阅导入失败");
     }
