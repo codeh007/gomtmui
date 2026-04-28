@@ -19,7 +19,7 @@ type MProxySchemaQueryReturn<TSchema extends z.ZodTypeAny> = Omit<UseQueryAnyRet
 
 declare module "mtmsdk/supabase/use-sb-query/use-rpc-query" {
   export function useRpcQuery<TSchema extends z.ZodTypeAny>(
-    functionName: "mproxy_node_list",
+    functionName: "mproxy_upstream_list",
     args: { p_kw?: string | null } | undefined,
     options: Record<string, unknown> & { schema: TSchema },
   ): MProxySchemaQueryReturn<TSchema>;
@@ -31,7 +31,7 @@ declare module "mtmsdk/supabase/use-sb-query/use-rpc-query" {
   ): MProxySchemaQueryReturn<TSchema>;
 
   export function useRpcQuery(
-    functionName: "mproxy_node_list",
+    functionName: "mproxy_upstream_list",
     args?: { p_kw?: string | null },
     options?: Record<string, unknown> & { schema?: undefined },
   ): UseQueryAnyReturn<MProxyNodeRow[]>;
@@ -68,7 +68,14 @@ declare module "mtmsdk/supabase/use-sb-query/use-rpc-mutation" {
       UseMutationOptions<
         RpcMutationResult<ExtractCreateResult[]>,
         PostgrestError,
-        { p_display_name: string; p_expires_at: string; p_node_id: string },
+        {
+          p_allow_plain_proxy: boolean;
+          p_allow_vmess_wrapper: boolean;
+          p_display_name: string;
+          p_expires_at: string;
+          p_traffic_mode: "standard" | "mitm";
+          p_upstream_id: string;
+        },
         unknown
       >,
       "mutationFn"
@@ -76,7 +83,14 @@ declare module "mtmsdk/supabase/use-sb-query/use-rpc-mutation" {
   ): UseMutationResult<
     RpcMutationResult<ExtractCreateResult[]>,
     PostgrestError,
-    { p_display_name: string; p_expires_at: string; p_node_id: string },
+    {
+      p_allow_plain_proxy: boolean;
+      p_allow_vmess_wrapper: boolean;
+      p_display_name: string;
+      p_expires_at: string;
+      p_traffic_mode: "standard" | "mitm";
+      p_upstream_id: string;
+    },
     unknown
   >;
 
@@ -86,7 +100,14 @@ declare module "mtmsdk/supabase/use-sb-query/use-rpc-mutation" {
       UseMutationOptions<
         RpcMutationResult<MProxyExtractUpdateRow>,
         PostgrestError,
-        { p_disabled: boolean; p_expires_at: string; p_id: string },
+        {
+          p_allow_plain_proxy?: boolean;
+          p_allow_vmess_wrapper?: boolean;
+          p_disabled: boolean;
+          p_expires_at: string;
+          p_id: string;
+          p_traffic_mode?: "standard" | "mitm";
+        },
         unknown
       >,
       "mutationFn"
@@ -94,7 +115,14 @@ declare module "mtmsdk/supabase/use-sb-query/use-rpc-mutation" {
   ): UseMutationResult<
     RpcMutationResult<MProxyExtractUpdateRow>,
     PostgrestError,
-    { p_disabled: boolean; p_expires_at: string; p_id: string },
+    {
+      p_allow_plain_proxy?: boolean;
+      p_allow_vmess_wrapper?: boolean;
+      p_disabled: boolean;
+      p_expires_at: string;
+      p_id: string;
+      p_traffic_mode?: "standard" | "mitm";
+    },
     unknown
   >;
 

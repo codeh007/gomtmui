@@ -2,12 +2,19 @@ import { z } from "zod";
 
 export const MIXED_PROXY_DEFAULT_PORT = 10085;
 export const subscriptionFetchPath = "/api/cf/mproxy/subscription/fetch";
+export function buildVmessProfilePath(extractId: string) {
+  return `/api/cf/mproxy/extracts/${encodeURIComponent(extractId)}/vmess/profile`;
+}
+
+export function buildVmessSubscriptionPath(extractId: string) {
+  return `/api/cf/mproxy/extracts/${encodeURIComponent(extractId)}/vmess/subscription`;
+}
 export const mproxyControlPlaneHeader = "x-gomtm-control-plane";
 export const mproxyControlPlaneHeaderValue = "mproxy-subscription-import";
 export const proxyEndpointStorageKey = "gomtm:mproxy:proxy-endpoint";
 export const mproxyRpcNames = {
   subscriptionImport: "mproxy_subscription_import",
-  nodeList: "mproxy_node_list",
+  upstreamList: "mproxy_upstream_list",
   extractCreate: "mproxy_extract_create",
   extractList: "mproxy_extract_list",
   extractUpdate: "mproxy_extract_update",
@@ -15,6 +22,8 @@ export const mproxyRpcNames = {
 } as const;
 
 export const sourceTypeSchema = z.enum(["paste", "url"]);
+export const trafficModeSchema = z.enum(["standard", "mitm"]);
+const jsonObjectSchema = z.record(z.string(), z.unknown());
 
 const outboundSchema = z
   .object({
@@ -45,15 +54,20 @@ export const subscriptionImportResultSchema = z.array(
 );
 
 export const mproxyNodeRowSchema = z.object({
-  id: z.string().uuid(),
-  subscription_id: z.string().uuid(),
-  source_name: z.string(),
-  tag: z.string(),
-  protocol: z.string(),
-  server: z.string(),
-  server_port: z.number().int(),
-  disabled: z.boolean(),
-});
+  id: z.string().uuid().nullable(),
+  subscription_id: z.string().uuid().nullable(),
+  source_name: z.string().nullable(),
+  source_url: z.string().nullable(),
+  tag: z.string().nullable(),
+  protocol: z.string().nullable(),
+  server: z.string().nullable(),
+  server_port: z.number().int().nullable(),
+  outbound: jsonObjectSchema.nullable(),
+  disabled: z.boolean().nullable(),
+  is_direct: z.boolean().nullable(),
+  created_at: z.string().nullable(),
+  updated_at: z.string().nullable(),
+}).passthrough();
 
 export const mproxyNodeListSchema = z.array(mproxyNodeRowSchema);
 
@@ -63,20 +77,29 @@ export const extractCreateResultSchema = z.array(
     username: z.string(),
     password: z.string(),
     expires_at: z.string(),
+    traffic_mode: trafficModeSchema,
+    allow_plain_proxy: z.boolean(),
+    allow_vmess_wrapper: z.boolean(),
   }),
 );
 
 export const mproxyExtractRowSchema = z.object({
-  id: z.string().uuid(),
-  display_name: z.string(),
-  username: z.string(),
-  password: z.string(),
-  expires_at: z.string(),
-  disabled: z.boolean(),
-  node_id: z.string().uuid(),
-  node_tag: z.string(),
-  node_protocol: z.string(),
-});
+  id: z.string().uuid().nullable(),
+  display_name: z.string().nullable(),
+  username: z.string().nullable(),
+  password: z.string().nullable(),
+  expires_at: z.string().nullable(),
+  disabled: z.boolean().nullable(),
+  traffic_mode: z.string().nullable(),
+  allow_plain_proxy: z.boolean().nullable(),
+  allow_vmess_wrapper: z.boolean().nullable(),
+  upstream_id: z.string().uuid().nullable(),
+  upstream_tag: z.string().nullable(),
+  upstream_protocol: z.string().nullable(),
+  upstream_subscription_id: z.string().uuid().nullable(),
+  upstream_source_name: z.string().nullable(),
+  upstream_outbound: jsonObjectSchema.nullable(),
+}).passthrough();
 
 export const mproxyExtractListSchema = z.array(mproxyExtractRowSchema);
 
@@ -87,11 +110,14 @@ export const mproxyExtractUpdateSchema = z.object({
   password: z.string(),
   expires_at: z.string(),
   disabled: z.boolean(),
-  node_id: z.string().uuid(),
+  upstream_id: z.string().uuid(),
+  traffic_mode: trafficModeSchema,
+  allow_plain_proxy: z.boolean(),
+  allow_vmess_wrapper: z.boolean(),
   user_id: z.string().uuid(),
   created_at: z.string(),
   updated_at: z.string(),
-});
+}).passthrough();
 
 export type SubscriptionPayload = z.infer<typeof subscriptionPayloadSchema>;
 export type SubscriptionImportResult = z.infer<typeof subscriptionImportResultSchema>[number];
@@ -99,6 +125,7 @@ export type MProxyNodeRow = z.infer<typeof mproxyNodeRowSchema>;
 export type ExtractCreateResult = z.infer<typeof extractCreateResultSchema>[number];
 export type MProxyExtractRow = z.infer<typeof mproxyExtractRowSchema>;
 export type MProxyExtractUpdateRow = z.infer<typeof mproxyExtractUpdateSchema>;
+export type MProxyTrafficMode = z.infer<typeof trafficModeSchema>;
 export const proxyEndpointSchema = z
   .string()
   .trim()
