@@ -4,12 +4,14 @@ export const MIXED_PROXY_DEFAULT_PORT = 10085;
 export const subscriptionFetchPath = "/api/cf/mproxy/subscription/fetch";
 export const mproxyCaStatePath = "/api/cf/mproxy/mitm/ca/state";
 export const mproxyCaInitPath = "/api/cf/mproxy/mitm/ca/init";
-export function buildVmessProfilePath(extractId: string) {
-  return `/api/cf/mproxy/extracts/${encodeURIComponent(extractId)}/vmess/profile`;
+export const mproxyCaCertPath = "/api/cf/mproxy/mitm/ca/cert";
+
+export function buildVmessProfilePath(extractId: string, serverOrigin = "") {
+  return appendServerOriginQuery(`/api/cf/mproxy/extracts/${encodeURIComponent(extractId)}/vmess/profile`, serverOrigin);
 }
 
-export function buildVmessSubscriptionPath(extractId: string) {
-  return `/api/cf/mproxy/extracts/${encodeURIComponent(extractId)}/vmess/subscription`;
+export function buildVmessSubscriptionPath(extractId: string, serverOrigin = "") {
+  return appendServerOriginQuery(`/api/cf/mproxy/extracts/${encodeURIComponent(extractId)}/vmess/subscription`, serverOrigin);
 }
 export const mproxyControlPlaneHeader = "x-gomtm-control-plane";
 export const mproxyControlPlaneHeaderValue = "mproxy-subscription-import";
@@ -211,6 +213,17 @@ export function buildMproxyCaDownloadUrl(serverOrigin: string, downloadPath: str
   }
 
   return new URL(trimmedPath, trimmedOrigin).toString();
+}
+
+function appendServerOriginQuery(path: string, serverOrigin: string) {
+  const trimmedServerOrigin = serverOrigin.trim();
+  if (!trimmedServerOrigin) {
+    return path;
+  }
+
+  const url = new URL(path, "http://localhost");
+  url.searchParams.set("server_origin", trimmedServerOrigin);
+  return `${url.pathname}${url.search}`;
 }
 
 export function normalizeProxyEndpoint(value: string) {

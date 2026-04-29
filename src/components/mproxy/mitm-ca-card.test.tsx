@@ -6,12 +6,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MitmCaCard } from "./mitm-ca-card";
 
-const useGomtmServerMock = vi.fn();
 const useCurrentUserRoleMock = vi.fn();
-
-vi.mock("@/lib/gomtm-server/provider", () => ({
-  useGomtmServer: () => useGomtmServerMock(),
-}));
 
 vi.mock("@/hooks/use-current-user-role", () => ({
   useCurrentUserRole: () => useCurrentUserRoleMock(),
@@ -38,7 +33,7 @@ vi.mock("mtxuilib/ui/card", () => ({
 
 function createCaState(overrides: Partial<Record<string, unknown>> = {}) {
   return {
-    download_path: "/api/mproxy/mitm/ca.crt",
+    download_path: "/api/cf/mproxy/mitm/ca/cert",
     file_name: "gomtm-mitm-ca.crt",
     initialized: true,
     not_after: "2036-01-01T00:00:00.000Z",
@@ -66,10 +61,6 @@ function renderCard() {
 
 describe("MitmCaCard", () => {
   beforeEach(() => {
-    useGomtmServerMock.mockReturnValue({
-      defaultServerUrl: "https://gomtm.example",
-      serverUrl: "",
-    });
     useCurrentUserRoleMock.mockReturnValue({
       isAdmin: true,
       isLoading: false,
@@ -82,7 +73,6 @@ describe("MitmCaCard", () => {
 
   afterEach(() => {
     cleanup();
-    useGomtmServerMock.mockReset();
     useCurrentUserRoleMock.mockReset();
     vi.restoreAllMocks();
   });
@@ -99,14 +89,14 @@ describe("MitmCaCard", () => {
       expect(screen.getByText("未初始化")).toBeTruthy();
     });
 
-    expect(screen.queryByRole("link", { name: "打开下载入口" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "下载根证书" })).toBeNull();
   });
 
-  it("does not crash or render the download link when no gomtm server origin is configured", async () => {
-    useGomtmServerMock.mockReturnValue({
-      defaultServerUrl: "",
-      serverUrl: "",
-    });
+  it("uses the CA state download_path as the single source of truth", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce({
+      json: async () => createCaState({ download_path: "/api/cf/mproxy/mitm/ca/cert?download=1" }),
+      ok: true,
+    } as Response);
 
     renderCard();
 
@@ -114,6 +104,7 @@ describe("MitmCaCard", () => {
       expect(screen.getByText("已初始化")).toBeTruthy();
     });
 
-    expect(screen.queryByRole("link", { name: "打开下载入口" })).toBeNull();
+    expect(screen.getByText("/api/cf/mproxy/mitm/ca/cert?download=1")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "下载根证书" }).getAttribute("href")).toBe("/api/cf/mproxy/mitm/ca/cert?download=1");
   });
 });

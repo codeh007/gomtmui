@@ -1,8 +1,13 @@
-import { mproxyCaStateSchema, mproxyExtractRowSchema } from "@/components/mproxy/schemas";
+import { mproxyCaCertPath, mproxyCaStateSchema, mproxyExtractRowSchema } from "@/components/mproxy/schemas";
 import { type Context, Hono } from "hono";
 import { z } from "zod";
 import { getSupabase } from "mtmsdk/supabase/supabase";
 import { generateMproxyCA } from "../lib/mproxy-ca";
+import {
+  buildMproxyVmessWrapperProfile,
+  readWrapperSecretFromConfigYaml,
+  resolveWrapperServerOrigin,
+} from "../lib/mproxy-vmess-wrapper";
 import type { AppContext } from "../types";
 
 export const mproxyRoute = new Hono<AppContext>();
@@ -24,46 +29,10 @@ const extractIdParamSchema = z.object({
   extract_id: z.string().uuid(),
 });
 
-const vmessOutboundSchema = z
-  .object({
-    alter_id: z.number().int().optional(),
-    packet_encoding: z.string().optional(),
-    security: z.string().optional(),
-    server: z.string().min(1),
-    server_port: z.number().int().positive(),
-    tls: z
-      .object({
-        alpn: z.array(z.string()).optional(),
-        enabled: z.boolean().optional(),
-        insecure: z.boolean().optional(),
-        server_name: z.string().optional(),
-        utls: z
-          .object({
-            fingerprint: z.string().optional(),
-          })
-          .passthrough()
-          .optional(),
-      })
-      .passthrough()
-      .optional(),
-    transport: z
-      .object({
-        headers: z.record(z.string(), z.unknown()).optional(),
-        host: z.union([z.string(), z.array(z.string())]).optional(),
-        path: z.string().optional(),
-        service_name: z.string().optional(),
-        type: z.string().optional(),
-      })
-      .passthrough()
-      .optional(),
-    type: z.literal("vmess"),
-    uuid: z.string().min(1),
-  })
-  .passthrough();
-
 type MproxyExtractRow = z.infer<typeof mproxyExtractRowSchema>;
 type MproxyCAStateRow = z.infer<typeof mproxyCaStateSchema>;
 type RpcError = { code?: string | null; message: string };
+type RpcSingleton<TRecord> = TRecord[] | TRecord | null;
 type ExtractListRpcClient = {
   rpc(
     functionName: "mproxy_extract_list",
@@ -92,17 +61,47 @@ type CAInitRpcClient = {
   ): Promise<{ data: MproxyCAStateRow[] | null; error: RpcError | null }>;
 };
 
+type RuntimeConfigRecord = {
+  config_yaml?: string | null;
+  version?: number | null;
+};
+
+type RuntimeConfigRpcClient = {
+  rpc(
+    functionName: "gomtm_runtime_config_get",
+    args: { p_name: string },
+  ): Promise<{ data: RpcSingleton<RuntimeConfigRecord>; error: RpcError | null }>;
+};
+
+type CACertRecord = {
+  cert_pem?: string | null;
+};
+
+type CACertRpcClient = {
+  rpc(functionName: "mproxy_ca_cert_get"): Promise<{ data: RpcSingleton<CACertRecord>; error: RpcError | null }>;
+};
+
 type ResolvedVmessExtract = {
   displayName: string;
   extractId: string;
   trafficMode: "standard" | "mitm";
-  upstreamProtocol: "vmess";
   upstreamTag: string;
-  vmessOutbound: z.infer<typeof vmessOutboundSchema>;
+  password: string;
+  username: string;
 };
 
+const selectedServerRuntimeSchema = z.object({
+  config_profile_name: z.string().min(1),
+  config_profile_version: z.coerce.string().min(1),
+  vmess_wrapper: z.object({
+    enabled: z.boolean(),
+    path: z.string().optional(),
+    status: z.string(),
+  }),
+});
+
 const defaultCAState: MproxyCAStateRow = {
-  download_path: "/api/mproxy/mitm/ca.crt",
+  download_path: mproxyCaCertPath,
   file_name: "gomtm-mitm-ca.crt",
   initialized: false,
   not_after: null,
@@ -132,7 +131,7 @@ mproxyRoute.get("/mproxy/mitm/ca/state", async (c) => {
     return jsonNoStore({ error: "ca state payload is invalid" }, 502);
   }
 
-  return jsonNoStore(rows.data[0] ?? defaultCAState, 200);
+  return jsonNoStore(normalizeCAState(rows.data[0] ?? defaultCAState), 200);
 });
 
 mproxyRoute.post("/mproxy/mitm/ca/init", async (c) => {
@@ -177,16 +176,49 @@ mproxyRoute.post("/mproxy/mitm/ca/init", async (c) => {
   }
 
   return jsonNoStore(
-    rows.data[0] ?? {
-      ...defaultCAState,
-      initialized: true,
-      not_after: generated.notAfter,
-      not_before: generated.notBefore,
-      sha256_fingerprint: generated.sha256Fingerprint,
-      subject_common_name: generated.subjectCommonName,
-    },
+    normalizeCAState(
+      rows.data[0] ?? {
+        ...defaultCAState,
+        initialized: true,
+        not_after: generated.notAfter,
+        not_before: generated.notBefore,
+        sha256_fingerprint: generated.sha256Fingerprint,
+        subject_common_name: generated.subjectCommonName,
+      },
+    ),
     200,
   );
+});
+
+mproxyRoute.get("/mproxy/mitm/ca/cert", async (c) => {
+  const supabase = getSupabase(c);
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+  if (authError || !user) {
+    return jsonNoStore({ error: "unauthorized" }, 401);
+  }
+
+  const certClient = supabase as unknown as CACertRpcClient;
+  const result = await certClient.rpc("mproxy_ca_cert_get");
+  if (result.error) {
+    return jsonNoStore({ error: result.error.message }, 502);
+  }
+
+  const certPem = normalizeSingletonRpcRow(result.data)?.cert_pem?.trim() ?? "";
+  if (!certPem) {
+    return jsonNoStore({ error: "ca cert unavailable" }, 404);
+  }
+
+  return new Response(certPem, {
+    status: 200,
+    headers: {
+      "cache-control": "no-store",
+      "content-disposition": 'attachment; filename="gomtm-mitm-ca.crt"',
+      "content-type": "application/x-x509-ca-cert",
+    },
+  });
 });
 
 mproxyRoute.post("/mproxy/subscription/fetch", async (c) => {
@@ -266,7 +298,12 @@ mproxyRoute.get("/mproxy/extracts/:extract_id/vmess/profile", async (c) => {
     return resolved;
   }
 
-  const profile = buildVmessProfile(resolved);
+  const wrapper = await resolveVmessWrapperProfile(c, resolved);
+  if (wrapper instanceof Response) {
+    return wrapper;
+  }
+
+  const profile = wrapper.profile;
   const uri = buildVmessUri(profile);
   return jsonNoStore(
     {
@@ -274,7 +311,7 @@ mproxyRoute.get("/mproxy/extracts/:extract_id/vmess/profile", async (c) => {
       extract_id: resolved.extractId,
       profile,
       traffic_mode: resolved.trafficMode,
-      upstream_protocol: resolved.upstreamProtocol,
+      upstream_protocol: "vmess_wrapper",
       upstream_tag: resolved.upstreamTag,
       uri,
     },
@@ -288,7 +325,12 @@ mproxyRoute.get("/mproxy/extracts/:extract_id/vmess/subscription", async (c) => 
     return resolved;
   }
 
-  const uri = buildVmessUri(buildVmessProfile(resolved));
+  const wrapper = await resolveVmessWrapperProfile(c, resolved);
+  if (wrapper instanceof Response) {
+    return wrapper;
+  }
+
+  const uri = buildVmessUri(wrapper.profile);
   return textNoStore(encodeBase64(`${uri}\n`), 200);
 });
 
@@ -329,59 +371,89 @@ async function resolveOwnedVmessExtract(c: Context<AppContext>) {
     return jsonNoStore({ error: "vmess wrapper is disabled for this extract" }, 403);
   }
 
-  if (row.upstream_protocol !== "vmess") {
-    return jsonNoStore({ error: "upstream protocol is not vmess" }, 400);
+  const username = row.username?.trim() ?? "";
+  const password = row.password?.trim() ?? "";
+  if (!username || !password) {
+    return jsonNoStore({ error: "extract route is missing proxy credentials" }, 400);
   }
 
-  if (!row.upstream_outbound) {
-    return jsonNoStore({ error: "extract route is missing upstream outbound" }, 400);
-  }
-
-  const vmessOutbound = vmessOutboundSchema.safeParse(row.upstream_outbound);
-  if (!vmessOutbound.success) {
-    return jsonNoStore({ error: "extract route vmess outbound is invalid" }, 400);
-  }
-
-  const upstreamTag = row.upstream_tag?.trim() || row.display_name?.trim() || "VMess extract";
+  const upstreamTag = row.upstream_tag?.trim() || row.display_name?.trim() || "MProxy extract";
   const displayName = row.display_name?.trim() || upstreamTag;
   const trafficMode = row.traffic_mode === "mitm" ? "mitm" : "standard";
 
   return {
     displayName,
     extractId: parsedParams.data.extract_id,
+    password,
     trafficMode,
-    upstreamProtocol: "vmess",
     upstreamTag,
-    vmessOutbound: vmessOutbound.data,
+    username,
   } satisfies ResolvedVmessExtract;
 }
 
-function buildVmessProfile(resolved: ResolvedVmessExtract) {
-  const transportType = normalizeTransportType(resolved.vmessOutbound.transport?.type);
-  const host = normalizeHost(resolved.vmessOutbound.transport?.host);
-  const tls = resolved.vmessOutbound.tls;
-  const displayName = resolved.trafficMode === "mitm" ? `${resolved.displayName} [MITM]` : resolved.displayName;
+async function resolveVmessWrapperProfile(c: Context<AppContext>, resolved: ResolvedVmessExtract) {
+  let serverOrigin: string;
+  try {
+    serverOrigin = resolveWrapperServerOrigin(c.req.query("server_origin") ?? "", process.env.NEXT_PUBLIC_GOMTM_SERVER_URL ?? "");
+  } catch (error) {
+    return jsonNoStore({ error: error instanceof Error ? error.message : "invalid gomtm server origin" }, 400);
+  }
 
-  return {
-    add: resolved.vmessOutbound.server,
-    aid: String(resolved.vmessOutbound.alter_id ?? 0),
-    alpn: tls?.alpn?.[0] ?? "",
-    fp: tls?.utls?.fingerprint ?? "",
-    host,
-    id: resolved.vmessOutbound.uuid,
-    net: transportType,
-    path: transportType === "grpc" ? resolved.vmessOutbound.transport?.service_name ?? "" : resolved.vmessOutbound.transport?.path ?? "",
-    port: String(resolved.vmessOutbound.server_port),
-    ps: displayName,
-    scy: resolved.vmessOutbound.security ?? resolved.vmessOutbound.packet_encoding ?? "auto",
-    sni: tls?.server_name ?? "",
-    tls: tls?.enabled ? "tls" : "",
-    type: "none",
-    v: "2",
-  };
+  let serverRuntime: z.infer<typeof selectedServerRuntimeSchema>;
+  try {
+    serverRuntime = await resolveSelectedServerRuntime(serverOrigin);
+  } catch (error) {
+    return jsonNoStore(
+      { error: error instanceof Error ? error.message : "failed to load gomtm server runtime metadata" },
+      502,
+    );
+  }
+
+  if (serverRuntime.vmess_wrapper.enabled !== true) {
+    return jsonNoStore({ error: "selected gomtm server vmess wrapper is unavailable" }, 409);
+  }
+
+  const configClient = getSupabase(c) as unknown as RuntimeConfigRpcClient;
+  const runtimeConfig = await configClient.rpc("gomtm_runtime_config_get", {
+    p_name: serverRuntime.config_profile_name,
+  });
+  if (runtimeConfig.error) {
+    return jsonNoStore({ error: runtimeConfig.error.message }, 502);
+  }
+
+  const configYaml = normalizeSingletonRpcRow(runtimeConfig.data)?.config_yaml?.trim() ?? "";
+  const runtimeConfigVersion = normalizeSingletonRpcRow(runtimeConfig.data)?.version;
+  if (!configYaml) {
+    return jsonNoStore({ error: "published runtime config not found" }, 404);
+  }
+  if (String(runtimeConfigVersion ?? "") !== serverRuntime.config_profile_version) {
+    return jsonNoStore({ error: "selected gomtm server runtime config version does not match published config" }, 409);
+  }
+
+  let secretB64: string;
+  try {
+    secretB64 = readWrapperSecretFromConfigYaml(configYaml);
+  } catch (error) {
+    return jsonNoStore({ error: error instanceof Error ? error.message : "invalid runtime config" }, 502);
+  }
+
+  try {
+    const profile = await buildMproxyVmessWrapperProfile({
+      displayName: resolved.displayName,
+      password: resolved.password,
+      secretB64,
+      serverOrigin,
+      trafficMode: resolved.trafficMode,
+      username: resolved.username,
+    });
+
+    return { profile };
+  } catch (error) {
+    return jsonNoStore({ error: error instanceof Error ? error.message : "failed to build vmess wrapper profile" }, 502);
+  }
 }
 
-function buildVmessUri(profile: ReturnType<typeof buildVmessProfile>) {
+function buildVmessUri(profile: Awaited<ReturnType<typeof buildMproxyVmessWrapperProfile>>) {
   return `vmess://${encodeBase64(JSON.stringify(profile))}`;
 }
 
@@ -393,27 +465,41 @@ function encodeBase64(value: string) {
   return globalThis.btoa(value);
 }
 
-function normalizeTransportType(value?: string) {
-  if (value === "ws" || value === "grpc" || value === "http" || value === "tcp") {
-    return value;
-  }
-
-  return "tcp";
-}
-
-function normalizeHost(value?: string | string[]) {
-  if (Array.isArray(value)) {
-    return value[0] ?? "";
-  }
-
-  return value ?? "";
-}
-
 function jsonNoStore(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
     status,
     headers: NO_STORE_JSON_HEADERS,
   });
+}
+
+function normalizeSingletonRpcRow<TRecord>(data: RpcSingleton<TRecord>) {
+  if (Array.isArray(data)) {
+    return data[0] ?? null;
+  }
+
+  return data;
+}
+
+function normalizeCAState(state: MproxyCAStateRow): MproxyCAStateRow {
+  return {
+    ...state,
+    download_path: mproxyCaCertPath,
+  };
+}
+
+async function resolveSelectedServerRuntime(serverOrigin: string) {
+  const response = await fetch(new URL("/api/mproxy/runtime", serverOrigin), {
+    cache: "no-store",
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) {
+    const message = body && typeof body === "object" && "error" in body && typeof body.error === "string"
+      ? body.error
+      : "failed to load gomtm server runtime metadata";
+    throw new Error(message);
+  }
+
+  return selectedServerRuntimeSchema.parse(body);
 }
 
 function textNoStore(payload: string, status = 200) {

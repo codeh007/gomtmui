@@ -40,6 +40,7 @@ type ExtractDraftMap = Record<
 interface ExtractRecordsCardProps {
   proxyEndpoint: string;
   onProxyEndpointChange: (value: string) => void;
+  serverOrigin: string;
 }
 
 function getExtractDisplayName(row: MProxyExtractRow) {
@@ -54,7 +55,7 @@ function normalizeTrafficMode(value: string | null) {
   return value === trafficModeSchema.enum.mitm ? trafficModeSchema.enum.mitm : trafficModeSchema.enum.standard;
 }
 
-export function ExtractRecordsCard({ proxyEndpoint, onProxyEndpointChange }: ExtractRecordsCardProps) {
+export function ExtractRecordsCard({ proxyEndpoint, onProxyEndpointChange, serverOrigin }: ExtractRecordsCardProps) {
   const queryClient = useQueryClient();
   const [drafts, setDrafts] = useState<ExtractDraftMap>({});
   const normalizedProxyEndpoint = useMemo(() => {
@@ -116,10 +117,6 @@ export function ExtractRecordsCard({ proxyEndpoint, onProxyEndpointChange }: Ext
         throw new Error("至少启用一个入口策略");
       }
 
-      if (draft.allowVmessWrapper && row.upstream_protocol !== "vmess") {
-        throw new Error("只有 VMess 上游可以启用 VMess 输出");
-      }
-
       const result = await updateMutation.mutateAsync({
         p_allow_plain_proxy: draft.allowPlainProxy,
         p_allow_vmess_wrapper: draft.allowVmessWrapper,
@@ -162,7 +159,7 @@ export function ExtractRecordsCard({ proxyEndpoint, onProxyEndpointChange }: Ext
     <Card>
       <CardHeader>
         <CardTitle>提取记录</CardTitle>
-        <CardDescription>通过 RPC 管理提取记录、运行模式和入口策略，并在支持时打开 VMess profile/subscription 输出。</CardDescription>
+          <CardDescription>通过 RPC 管理提取记录、运行模式和入口策略，并为当前选中的 gomtm server 生成 VMess wrapper profile/subscription 输出。</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="mb-4 grid gap-2 rounded-lg border border-dashed p-4 md:grid-cols-[180px_minmax(0,1fr)] md:items-center">
@@ -173,7 +170,7 @@ export function ExtractRecordsCard({ proxyEndpoint, onProxyEndpointChange }: Ext
               onChange={(event) => onProxyEndpointChange(event.target.value)}
               placeholder="例如：proxy.example.com:10085"
             />
-            <p className="text-xs text-muted-foreground">标准代理 URI 复制使用这里显式配置的 mproxy 入口；VMess profile/subscription 输出走下方 API 路由。</p>
+            <p className="text-xs text-muted-foreground">标准代理 URI 复制使用这里显式配置的 mproxy 入口；VMess wrapper 输出会绑定到当前选中的 gomtm server。</p>
           </div>
         </div>
 
@@ -221,12 +218,12 @@ export function ExtractRecordsCard({ proxyEndpoint, onProxyEndpointChange }: Ext
                     expiresAt: row.expires_at ? toDateTimeLocalValue(row.expires_at) : defaultExpiryValue(30),
                     trafficMode: normalizeTrafficMode(row.traffic_mode),
                   };
-                  const vmessProfileUrl = buildVmessRenderUrl(buildVmessProfilePath, row.id);
-                  const vmessSubscriptionUrl = buildVmessRenderUrl(buildVmessSubscriptionPath, row.id);
+                  const vmessProfileUrl = buildVmessRenderUrl(buildVmessProfilePath, row.id, serverOrigin);
+                  const vmessSubscriptionUrl = buildVmessRenderUrl(buildVmessSubscriptionPath, row.id, serverOrigin);
                   const canPersist = Boolean(row.id);
                   const credentials = row.username && row.password ? { password: row.password, username: row.username } : null;
                   const canRenderPlain = effectiveDraft.allowPlainProxy && Boolean(credentials);
-                  const canRenderVmess = effectiveDraft.allowVmessWrapper && row.upstream_protocol === "vmess" && Boolean(credentials);
+                  const canRenderVmess = effectiveDraft.allowVmessWrapper && Boolean(credentials) && Boolean(serverOrigin.trim());
                   const updateDraft = (mutate: (current: ExtractDraftMap[string]) => ExtractDraftMap[string]) => {
                     if (!rowKey) {
                       return;
@@ -297,15 +294,15 @@ export function ExtractRecordsCard({ proxyEndpoint, onProxyEndpointChange }: Ext
                             >
                               标准代理
                             </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant={effectiveDraft.allowVmessWrapper ? "default" : "outline"}
-                              onClick={() => updateDraft((current) => ({ ...current, allowVmessWrapper: !current.allowVmessWrapper }))}
-                              disabled={!canPersist || row.upstream_protocol !== "vmess"}
-                            >
-                              VMess 输出
-                            </Button>
+                             <Button
+                               type="button"
+                               size="sm"
+                               variant={effectiveDraft.allowVmessWrapper ? "default" : "outline"}
+                               onClick={() => updateDraft((current) => ({ ...current, allowVmessWrapper: !current.allowVmessWrapper }))}
+                               disabled={!canPersist}
+                             >
+                               VMess 输出
+                             </Button>
                           </div>
                           {effectiveDraft.trafficMode === trafficModeSchema.enum.mitm ? (
                             <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-300">
@@ -345,7 +342,7 @@ export function ExtractRecordsCard({ proxyEndpoint, onProxyEndpointChange }: Ext
                               <OpenOutputButton label="VMess 订阅" url={vmessSubscriptionUrl} />
                             </>
                           ) : effectiveDraft.allowVmessWrapper ? (
-                            <span className="text-xs text-muted-foreground">当前记录缺少 VMess 所需字段，无法渲染 VMess 输出</span>
+                            <span className="text-xs text-muted-foreground">请先选择 gomtm server，才能生成 VMess 输出</span>
                           ) : null}
                         </div>
                       </TableCell>
@@ -373,16 +370,20 @@ export function ExtractRecordsCard({ proxyEndpoint, onProxyEndpointChange }: Ext
   );
 }
 
-function buildVmessRenderUrl(buildPath: (extractId: string) => string, extractId: string | null) {
+function buildVmessRenderUrl(
+  buildPath: (extractId: string, serverOrigin: string) => string,
+  extractId: string | null,
+  serverOrigin: string,
+) {
   if (typeof window === "undefined") {
     return null;
   }
 
-  if (!extractId) {
+  if (!extractId || !serverOrigin.trim()) {
     return null;
   }
 
-  return new URL(buildPath(extractId), window.location.origin).toString();
+  return new URL(buildPath(extractId, serverOrigin), window.location.origin).toString();
 }
 
 function OpenOutputButton({ label, url }: { label: string; url: string | null }) {

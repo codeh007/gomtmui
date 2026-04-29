@@ -11,6 +11,11 @@ import {
   verifyRuntimeConfigSignature,
 } from "./signing";
 import { buildManagedLinuxStartupCommand } from "./command";
+import {
+  ensureVmessWrapperSecret,
+  InvalidConfigYamlError,
+  VmessWrapperSecretPlaceholderError,
+} from "./vmess-wrapper-secret";
 
 export const gomtmConfigsRoute = new Hono<AppContext>();
 
@@ -140,11 +145,20 @@ gomtmConfigsRoute.post("/config-profiles", zValidator("json", createProfileSchem
   }
 
   const body = c.req.valid("json");
+  let nextConfigYaml: string;
+  try {
+    nextConfigYaml = ensureVmessWrapperSecret(body.config_yaml);
+  } catch (error) {
+    if (error instanceof InvalidConfigYamlError || error instanceof VmessWrapperSecretPlaceholderError) {
+      return c.json({ error: error.message }, 400);
+    }
+    throw error;
+  }
   const { data, error } = await auth.supabase.rpc<GomtmConfigProfileRecord[] | GomtmConfigProfileRecord | null>("gomtm_config_profile_create", {
     p_name: body.name,
     p_description: body.description,
     p_target_kind: body.target_kind,
-    p_config_yaml: body.config_yaml,
+    p_config_yaml: nextConfigYaml,
   });
   if (error) {
     return createControlPlaneRpcErrorResponse(c, error, "failed to create config profile");
@@ -172,11 +186,20 @@ gomtmConfigsRoute.put("/config-profiles/:name", zValidator("json", upsertProfile
   }
 
   const body = c.req.valid("json");
+  let nextConfigYaml: string;
+  try {
+    nextConfigYaml = ensureVmessWrapperSecret(body.config_yaml);
+  } catch (error) {
+    if (error instanceof InvalidConfigYamlError || error instanceof VmessWrapperSecretPlaceholderError) {
+      return c.json({ error: error.message }, 400);
+    }
+    throw error;
+  }
   const { data, error } = await auth.supabase.rpc<GomtmConfigProfileRecord[] | GomtmConfigProfileRecord | null>("gomtm_config_profile_upsert", {
     p_name: c.req.param("name"),
     p_description: body.description,
     p_target_kind: body.target_kind,
-    p_config_yaml: body.config_yaml,
+    p_config_yaml: nextConfigYaml,
   });
   if (error) {
     return createControlPlaneRpcErrorResponse(c, error, "failed to save config profile");

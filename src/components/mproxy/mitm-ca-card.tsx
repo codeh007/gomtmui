@@ -4,16 +4,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, ShieldAlert, ShieldCheck } from "lucide-react";
 import { Button } from "mtxuilib/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "mtxuilib/ui/card";
-import { useGomtmServer } from "@/lib/gomtm-server/provider";
 import { useCurrentUserRole } from "@/hooks/use-current-user-role";
-import { buildMproxyCaDownloadUrl, mproxyCaInitPath, mproxyCaStatePath, mproxyCaStateSchema } from "./schemas";
+import { mproxyCaCertPath, mproxyCaInitPath, mproxyCaStatePath, mproxyCaStateSchema } from "./schemas";
 import { toast } from "sonner";
 
 const caStateQueryKey = ["mproxy-ca-state"] as const;
 
 export function MitmCaCard() {
   const queryClient = useQueryClient();
-  const { defaultServerUrl, serverUrl } = useGomtmServer();
   const { isAdmin, isLoading: isRoleLoading } = useCurrentUserRole();
   const stateQuery = useQuery({
     queryKey: caStateQueryKey,
@@ -52,13 +50,13 @@ export function MitmCaCard() {
   });
 
   const state = stateQuery.data;
-  const caDownloadUrl = state?.initialized && state.download_path ? buildMproxyCaDownloadUrl(serverUrl || defaultServerUrl, state.download_path) : null;
+  const caDownloadUrl = state?.initialized && state.download_path ? state.download_path : null;
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>MITM CA</CardTitle>
-        <CardDescription>MITM 模式使用环境级单 CA。证书元数据由数据库持久化，下载入口继续由 gomtm server 暴露。</CardDescription>
+        <CardDescription>MITM 模式使用环境级单 CA。证书元数据由数据库持久化，根证书下载由 gomtmui 后端直接提供。</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 text-sm">
         <div className="rounded-lg border border-dashed p-4">
@@ -71,7 +69,7 @@ export function MitmCaCard() {
               </div>
               <div>
                 <span className="font-medium">下载：</span>
-                <code>{state?.download_path ?? "/api/mproxy/mitm/ca.crt"}</code>
+                <code>{state?.download_path ?? mproxyCaCertPath}</code>
               </div>
               <div>
                 <span className="font-medium">文件名：</span>
@@ -106,7 +104,7 @@ export function MitmCaCard() {
           {!isAdmin && !isRoleLoading ? <span className="text-xs text-muted-foreground">仅管理员可执行 CA 初始化。</span> : null}
           {caDownloadUrl ? (
             <a className="text-xs text-primary underline-offset-4 hover:underline" href={caDownloadUrl} rel="noreferrer" target="_blank">
-              打开下载入口
+              下载根证书
             </a>
           ) : null}
         </div>

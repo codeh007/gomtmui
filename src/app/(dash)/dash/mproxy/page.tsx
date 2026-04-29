@@ -7,10 +7,13 @@ import { ExtractRecordsCard } from "@/components/mproxy/extract-records-card";
 import { MitmCaCard } from "@/components/mproxy/mitm-ca-card";
 import { NodePoolCard } from "@/components/mproxy/node-pool-card";
 import { SubscriptionImportCard } from "@/components/mproxy/subscription-import-card";
+import { useGomtmServer } from "@/lib/gomtm-server/provider";
 import { useEffect, useState } from "react";
 
 export default function MProxyPage() {
   const [proxyEndpoint, setProxyEndpoint] = useState("");
+  const { defaultServerUrl, serverUrl } = useGomtmServer();
+  const selectedServerOrigin = serverUrl || defaultServerUrl;
 
   useEffect(() => {
     setProxyEndpoint(readStoredProxyEndpoint());
@@ -30,8 +33,9 @@ export default function MProxyPage() {
       </DashHeaders>
       <DashContent className="flex flex-col gap-6 overflow-auto p-4 md:p-6">
         <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-          <p>提取记录现在同时暴露运行模式和入口策略。</p>
-          <p className="mt-1">选择 <code>mitm</code> 后，客户端在使用 HTTPS 前需要先导入 mproxy CA 证书；只有 VMess 上游会显示 VMess profile/subscription 输出。</p>
+          <p>提取记录现在同时暴露运行模式和入口策略，VMess 输出则表示进入当前选中的 gomtm server wrapper。</p>
+          <p className="mt-1">选择 <code>mitm</code> 后，客户端在使用 HTTPS 前需要先导入根证书；VMess profile/subscription 会跟随当前 gomtm server 与其已发布 runtime config。</p>
+          <p className="mt-1">当前 gomtm server：<code>{selectedServerOrigin || "未配置"}</code></p>
         </div>
         <ErrorBoundary name="MitmCaCard">
           <MitmCaCard />
@@ -43,7 +47,11 @@ export default function MProxyPage() {
           <NodePoolCard proxyEndpoint={proxyEndpoint} onProxyEndpointChange={setProxyEndpoint} />
         </ErrorBoundary>
         <ErrorBoundary name="ExtractRecordsCard">
-          <ExtractRecordsCard proxyEndpoint={proxyEndpoint} onProxyEndpointChange={setProxyEndpoint} />
+          <ExtractRecordsCard
+            onProxyEndpointChange={setProxyEndpoint}
+            proxyEndpoint={proxyEndpoint}
+            serverOrigin={selectedServerOrigin}
+          />
         </ErrorBoundary>
       </DashContent>
     </>

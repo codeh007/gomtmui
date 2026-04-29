@@ -163,6 +163,65 @@ describe("gomtm config control-plane routes", () => {
     });
   });
 
+  it("injects vmess wrapper_secret before creating a config profile", async () => {
+    rpc.mockResolvedValueOnce({
+      data: [{ name: "custom1", status: "draft", current_version: 0 }],
+      error: null,
+    });
+
+    const response = await app.request("http://example.com/api/cf/gomtm/config-profiles", {
+      method: "POST",
+      headers: {
+        ...trustedDashboardHeaders,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        name: "custom1",
+        description: "desc",
+        target_kind: "linux",
+        config_yaml: [
+          "mproxy:",
+          "  runtime:",
+          "    enable: true",
+          "  entries:",
+          "    vmess:",
+          "      enable: true",
+          "      transport: ws",
+          "",
+        ].join("\n"),
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(rpc).toHaveBeenCalledWith(
+      "gomtm_config_profile_create",
+      expect.objectContaining({
+        p_name: "custom1",
+        p_config_yaml: expect.stringContaining("wrapper_secret:"),
+      }),
+    );
+  });
+
+  it("returns 400 for malformed config yaml when creating a config profile", async () => {
+    const response = await app.request("http://example.com/api/cf/gomtm/config-profiles", {
+      method: "POST",
+      headers: {
+        ...trustedDashboardHeaders,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        name: "custom1",
+        description: "desc",
+        target_kind: "linux",
+        config_yaml: "mproxy:\n  entries:\n    vmess: [\n",
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "invalid config_yaml" });
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
   it("returns 409 when the create-only RPC reports a name conflict", async () => {
     rpc.mockResolvedValueOnce({
       data: null,
@@ -242,6 +301,94 @@ describe("gomtm config control-plane routes", () => {
       p_target_kind: "linux",
       p_config_yaml: "server:\n  listen: :8383\n",
     });
+  });
+
+  it("preserves an existing vmess wrapper_secret when saving a config profile", async () => {
+    rpc.mockResolvedValueOnce({
+      data: [{ name: "custom1", status: "draft", current_version: 2 }],
+      error: null,
+    });
+
+    const response = await app.request("http://example.com/api/cf/gomtm/config-profiles/custom1", {
+      method: "PUT",
+      headers: {
+        ...trustedDashboardHeaders,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        description: "desc",
+        target_kind: "linux",
+        config_yaml: [
+          "mproxy:",
+          "  runtime:",
+          "    enable: true",
+          "  entries:",
+          "    vmess:",
+          "      enable: true",
+          "      transport: ws",
+          "      wrapper_secret: KEEP_ME",
+          "",
+        ].join("\n"),
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(rpc).toHaveBeenCalledWith("gomtm_config_profile_upsert", {
+      p_name: "custom1",
+      p_description: "desc",
+      p_target_kind: "linux",
+      p_config_yaml: expect.stringContaining("wrapper_secret: KEEP_ME"),
+    });
+  });
+
+  it("returns 400 for malformed config yaml when saving a config profile", async () => {
+    const response = await app.request("http://example.com/api/cf/gomtm/config-profiles/custom1", {
+      method: "PUT",
+      headers: {
+        ...trustedDashboardHeaders,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        description: "desc",
+        target_kind: "linux",
+        config_yaml: "mproxy:\n  entries:\n    vmess: [\n",
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "invalid config_yaml" });
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when saving a config profile with env placeholder vmess wrapper_secret", async () => {
+    const response = await app.request("http://example.com/api/cf/gomtm/config-profiles/custom1", {
+      method: "PUT",
+      headers: {
+        ...trustedDashboardHeaders,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        description: "desc",
+        target_kind: "linux",
+        config_yaml: [
+          "mproxy:",
+          "  runtime:",
+          "    enable: true",
+          "  entries:",
+          "    vmess:",
+          "      enable: true",
+          "      transport: ws",
+          "      wrapper_secret: ${env.GOMTM_VMESS_WRAPPER_SECRET}",
+          "",
+        ].join("\n"),
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: "mproxy.entries.vmess.wrapper_secret must be a concrete base64 value; ${env.*} placeholders are not allowed",
+    });
+    expect(rpc).not.toHaveBeenCalled();
   });
 
   it("returns a stable 500 when singleton upsert RPC returns an empty array", async () => {
