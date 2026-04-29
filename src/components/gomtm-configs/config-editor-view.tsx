@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Copy, Loader2, Rocket, Save } from "lucide-react";
@@ -9,7 +9,6 @@ import { Button } from "mtxuilib/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "mtxuilib/ui/card";
 import { Input } from "mtxuilib/ui/input";
 import { Label } from "mtxuilib/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "mtxuilib/ui/select";
 import { Textarea } from "mtxuilib/ui/textarea";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -17,7 +16,6 @@ import {
   createDefaultGomtmConfigDocument,
   createDefaultGomtmConfigProfile,
   extractGomtmConfigDocument,
-  gomtmConfigTargetKinds,
   GomtmConfigDocumentSchema,
   GomtmConfigProfileSchema,
   overlayGomtmConfigDocument,
@@ -27,7 +25,6 @@ import {
   type GomtmConfigDocument,
   type GomtmConfigProfile,
   type GomtmConfigProfileUpsert,
-  type GomtmConfigTargetKind,
 } from "./config-schema";
 import { createConfigProfile, fetchStartupCommand, publishConfigProfile, saveConfigProfile } from "@/lib/gomtm-configs/api";
 
@@ -43,7 +40,6 @@ interface ConfigEditorViewProps {
 type ConfigEditorFormValues = {
   name: string;
   description: string;
-  target_kind: GomtmConfigTargetKind;
   server_listen: string;
   server_instance_id: string;
   server_storage_root_dir: string;
@@ -61,7 +57,6 @@ function hasSameFormValues(left: ConfigEditorFormValues, right: ConfigEditorForm
   return (
     left.name === right.name &&
     left.description === right.description &&
-    left.target_kind === right.target_kind &&
     left.server_listen === right.server_listen &&
     left.server_instance_id === right.server_instance_id &&
     left.server_storage_root_dir === right.server_storage_root_dir &&
@@ -80,7 +75,6 @@ function getFormValues(profile: GomtmConfigProfile, document: GomtmConfigDocumen
   return {
     name: profile.name,
     description: profile.description,
-    target_kind: profile.target_kind,
     server_listen: document.server.listen,
     server_instance_id: document.server.instance_id,
     server_storage_root_dir: document.server.storage.root_dir,
@@ -123,27 +117,51 @@ function getDocumentFromFormValues(values: ConfigEditorFormValues) {
   });
 }
 
-function buildStructuredPayload(values: ConfigEditorFormValues, baseConfigSource: Record<string, unknown>): GomtmConfigProfileUpsert {
+function buildStructuredPayload(
+  values: ConfigEditorFormValues,
+  baseConfigSource: Record<string, unknown>,
+  targetKind: GomtmConfigProfile["target_kind"],
+): GomtmConfigProfileUpsert {
   const nextDocument = getDocumentFromFormValues(values);
   const nextConfigSource = overlayGomtmConfigDocument(baseConfigSource, nextDocument);
 
   return {
     name: values.name,
     description: values.description,
-    target_kind: values.target_kind,
+    target_kind: targetKind,
     config_yaml: stringifyGomtmConfigSource(nextConfigSource),
   };
 }
 
-function buildYamlPayload(values: ConfigEditorFormValues, rawYaml: string): GomtmConfigProfileUpsert {
+function buildYamlPayload(values: ConfigEditorFormValues, rawYaml: string, targetKind: GomtmConfigProfile["target_kind"]): GomtmConfigProfileUpsert {
   const parsedSource = parseGomtmConfigYaml(rawYaml);
 
   return {
     name: values.name,
     description: values.description,
-    target_kind: values.target_kind,
+    target_kind: targetKind,
     config_yaml: stringifyGomtmConfigSource(parsedSource),
   };
+}
+
+function getLifecycleBadgeLabel(status: string | null | undefined) {
+  if (status === "published") {
+    return "已发布";
+  }
+
+  if (status === "draft") {
+    return "草稿中";
+  }
+
+  return status || "未保存";
+}
+
+function getDraftVersionLabel(version: number | null | undefined) {
+  return version != null ? `草稿 v${version}` : "草稿未保存";
+}
+
+function getPublishedVersionLabel(version: number | null | undefined) {
+  return version != null ? `已发布 v${version}` : "尚未发布";
 }
 
 function createEditorState(profile: GomtmConfigProfile) {
@@ -172,6 +190,7 @@ function getSaveErrorMessage(error: unknown) {
 export function ConfigEditorView({ initialProfile, isNew = false }: ConfigEditorViewProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const yamlImportInputRef = useRef<HTMLInputElement | null>(null);
   const [mode, setMode] = useState<EditorMode>("form");
   const [profile, setProfile] = useState(() => GomtmConfigProfileSchema.parse(initialProfile));
   const initialEditorState = useMemo(() => createEditorState(profile), [profile]);
@@ -192,7 +211,10 @@ export function ConfigEditorView({ initialProfile, isNew = false }: ConfigEditor
     defaultValues: formDefaults,
     onSubmit: async ({ value }) => {
       try {
-        const payload = mode === "yaml" ? buildYamlPayload(value, rawConfigYamlRef.current) : buildStructuredPayload(value, rawConfigSource);
+        const payload =
+          mode === "yaml"
+            ? buildYamlPayload(value, rawConfigYamlRef.current, profile.target_kind)
+            : buildStructuredPayload(value, rawConfigSource, profile.target_kind);
 
         setRawConfigSource(parseGomtmConfigYaml(payload.config_yaml));
         updateRawConfigYaml(payload.config_yaml);
@@ -265,9 +287,9 @@ export function ConfigEditorView({ initialProfile, isNew = false }: ConfigEditor
 
   const metadataBadges = useMemo(
     () => [
-      { label: `status: ${profile.status}` },
-      { label: `draft v${profile.current_version ?? "-"}` },
-      { label: `published v${profile.published_version ?? "-"}` },
+      { label: getLifecycleBadgeLabel(profile.status) },
+      { label: getDraftVersionLabel(profile.current_version) },
+      { label: getPublishedVersionLabel(profile.published_version) },
     ],
     [profile.current_version, profile.published_version, profile.status],
   );
@@ -282,7 +304,7 @@ export function ConfigEditorView({ initialProfile, isNew = false }: ConfigEditor
 
     if (nextMode === "yaml") {
       try {
-        const payload = buildStructuredPayload(form.state.values, rawConfigSource);
+        const payload = buildStructuredPayload(form.state.values, rawConfigSource, profile.target_kind);
         setRawConfigSource(parseGomtmConfigYaml(payload.config_yaml));
         updateRawConfigYaml(payload.config_yaml);
         setYamlError(null);
@@ -297,11 +319,9 @@ export function ConfigEditorView({ initialProfile, isNew = false }: ConfigEditor
       const parsedSource = parseGomtmConfigYaml(rawConfigYamlRef.current);
       const parsedDocument = extractGomtmConfigDocument(parsedSource);
       const nextFormValues: ConfigEditorFormValues = {
-        ...form.state.values,
         ...getFormValues(profile, parsedDocument),
         name: form.state.values.name,
         description: form.state.values.description,
-        target_kind: form.state.values.target_kind,
       };
 
       setRawConfigSource(parsedSource);
@@ -312,6 +332,37 @@ export function ConfigEditorView({ initialProfile, isNew = false }: ConfigEditor
       setYamlError(error instanceof Error ? error.message : "YAML 解析失败");
       toast.error(error instanceof Error ? error.message : "YAML 解析失败");
     }
+  };
+
+  const handleYamlImport = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    try {
+      updateRawConfigYaml(await file.text());
+      setYamlError(null);
+      toast.success("YAML 已导入");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "YAML 导入失败";
+      setYamlError(message);
+      toast.error(message);
+    } finally {
+      event.target.value = "";
+    }
+  };
+
+  const handleYamlExport = () => {
+    const objectUrl = URL.createObjectURL(new Blob([rawConfigYamlRef.current], { type: "application/x-yaml;charset=utf-8" }));
+    const downloadLink = document.createElement("a");
+    downloadLink.href = objectUrl;
+    downloadLink.download = `${profile.name || "gomtm-config"}.yaml`;
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+    URL.revokeObjectURL(objectUrl);
   };
 
   return (
@@ -361,26 +412,6 @@ export function ConfigEditorView({ initialProfile, isNew = false }: ConfigEditor
                     onBlur={field.handleBlur}
                     onChange={(event) => field.handleChange(event.target.value)}
                   />
-                </div>
-              )}
-            </form.Field>
-
-            <form.Field name="target_kind">
-              {(field) => (
-                <div className="space-y-2">
-                  <Label htmlFor="target-kind">目标类型</Label>
-                  <Select value={field.state.value} onValueChange={(value) => field.handleChange(value as GomtmConfigTargetKind)}>
-                    <SelectTrigger id="target-kind">
-                      <SelectValue placeholder="选择目标类型" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {gomtmConfigTargetKinds.map((targetKind) => (
-                        <SelectItem key={targetKind} value={targetKind}>
-                          {targetKind}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
                 </div>
               )}
             </form.Field>
@@ -531,14 +562,34 @@ export function ConfigEditorView({ initialProfile, isNew = false }: ConfigEditor
               </div>
             </div>
           ) : (
-            <div className="space-y-2">
-              <Label htmlFor="raw-yaml">原始 YAML</Label>
-              <Textarea
-                id="raw-yaml"
-                className="min-h-[420px] font-mono text-sm"
-                value={rawConfigYaml}
-                onChange={(event) => updateRawConfigYaml(event.target.value)}
-              />
+            <div className="space-y-3">
+              <div className="flex flex-wrap justify-end gap-2">
+                <input
+                  ref={yamlImportInputRef}
+                  aria-label="导入 YAML 文件"
+                  className="hidden"
+                  type="file"
+                  accept=".yaml,.yml,text/yaml,application/x-yaml"
+                  onChange={(event) => {
+                    void handleYamlImport(event);
+                  }}
+                />
+                <Button type="button" variant="outline" onClick={() => yamlImportInputRef.current?.click()}>
+                  导入 YAML
+                </Button>
+                <Button type="button" variant="outline" onClick={handleYamlExport}>
+                  导出 YAML
+                </Button>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="raw-yaml">原始 YAML</Label>
+                <Textarea
+                  id="raw-yaml"
+                  className="min-h-[420px] font-mono text-sm"
+                  value={rawConfigYaml}
+                  onChange={(event) => updateRawConfigYaml(event.target.value)}
+                />
+              </div>
             </div>
           )}
 

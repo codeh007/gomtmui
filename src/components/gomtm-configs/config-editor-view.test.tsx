@@ -174,15 +174,22 @@ describe("ConfigEditorView", () => {
     renderView();
 
     expect(screen.getByLabelText("配置名称")).toBeTruthy();
+    expect(screen.queryByLabelText("目标类型")).toBeNull();
     expect((screen.getByLabelText("监听地址") as HTMLInputElement).value).toBe(":7777");
     expect((screen.getByLabelText("Supabase URL") as HTMLInputElement).value).toBe("https://example.supabase.co");
     expect((screen.getByLabelText("启用 Hermes Gateway") as HTMLInputElement).checked).toBe(true);
     expect(screen.queryByLabelText("原始 YAML")).toBeNull();
     expect(screen.queryByRole("button", { name: "YAML" })).toBeNull();
+    expect(screen.queryByText("status: draft")).toBeNull();
+    expect(screen.getByText("草稿中")).toBeTruthy();
+    expect(screen.getByText("草稿 v2")).toBeTruthy();
+    expect(screen.getByText("已发布 v1")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "高级 YAML 编辑器" }));
 
     expect((screen.getByLabelText("原始 YAML") as HTMLTextAreaElement).value).toBe(initialProfile.config_yaml);
+    expect(screen.getByRole("button", { name: "导入 YAML" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "导出 YAML" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "返回表单" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "返回表单" }));
@@ -230,6 +237,28 @@ describe("ConfigEditorView", () => {
     expect(payload.config_yaml).toEqual(expect.stringContaining('url: "https://prod.supabase.co"'));
     expect(payload.config_yaml).toEqual(expect.stringContaining("enable: false"));
     expect(payload).not.toHaveProperty("config_json");
+  });
+
+  it("keeps the stored target kind when saving without exposing it in the visible form", async () => {
+    saveConfigProfile.mockResolvedValue({ ...initialProfile, target_kind: "android" });
+
+    renderView({
+      target_kind: "android",
+    });
+
+    expect(screen.queryByLabelText("目标类型")).toBeNull();
+
+    fireEvent.change(screen.getByLabelText("描述"), {
+      target: { value: "android profile" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+
+    await waitFor(() => {
+      expect(saveConfigProfile).toHaveBeenCalledTimes(1);
+    });
+
+    const [, payload] = saveConfigProfile.mock.calls[0] as [string, Record<string, unknown>];
+    expect(payload.target_kind).toBe("android");
   });
 
   it("parses raw YAML edits back into the structured form and requires save before publish", async () => {
@@ -372,6 +401,62 @@ describe("ConfigEditorView", () => {
 
     expect(screen.getByLabelText("原始 YAML")).toBeTruthy();
     expect(screen.queryByLabelText("监听地址")).toBeNull();
+  });
+
+  it("imports a YAML document into advanced mode and exports the current YAML document", async () => {
+    const createObjectURL = vi.fn().mockReturnValue("blob:config-yaml");
+    const revokeObjectURL = vi.fn();
+    const anchorClick = vi.fn();
+
+    vi.stubGlobal("URL", {
+      createObjectURL,
+      revokeObjectURL,
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(anchorClick);
+
+    renderView();
+
+    fireEvent.click(screen.getByRole("button", { name: "高级 YAML 编辑器" }));
+
+    const importedYaml = [
+      "server:",
+      '  listen: ":10001"',
+      '  instance_id: "worker-imported"',
+      "  storage:",
+      '    root_dir: "/data/gomtm"',
+      "supabase:",
+      '  url: "https://imported.supabase.co"',
+      '  anon_key: "imported-anon"',
+      '  service_role_key: "imported-service"',
+      "cloudflare:",
+      '  cloudflare_api_token: "imported-token"',
+      '  cloudflare_account_id: "imported-account"',
+      '  cloudflare_zone_id: "imported-zone"',
+      '  tunnel_domain: "imported.example.com"',
+      "mtmai:",
+      "  hermes_gateway:",
+      "    enable: false",
+      "",
+    ].join("\n");
+    const importedFile = new File([importedYaml], "imported-worker.yaml", { type: "application/x-yaml" });
+
+    fireEvent.change(screen.getByLabelText("导入 YAML 文件"), {
+      target: { files: [importedFile] },
+    });
+
+    await waitFor(() => {
+      expect((screen.getByLabelText("原始 YAML") as HTMLTextAreaElement).value).toBe(importedYaml);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "导出 YAML" }));
+
+    await waitFor(async () => {
+      expect(createObjectURL).toHaveBeenCalledTimes(1);
+      const [blob] = createObjectURL.mock.calls[0] as [Blob];
+      expect(await blob.text()).toBe(importedYaml);
+      expect(anchorClick).toHaveBeenCalledTimes(1);
+      expect(revokeObjectURL).toHaveBeenCalledWith("blob:config-yaml");
+    });
   });
 
   it("mints and copies the startup command", async () => {
