@@ -22,10 +22,7 @@ function isYamlRecord(value: unknown): value is YamlRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-export function ensureVmessWrapperSecret(
-  configYaml: string,
-  randomSource: () => Uint8Array = () => randomBytes(32),
-): string {
+function parseYamlRecord(configYaml: string): YamlRecord | null {
   let document: unknown;
   try {
     document = YAML.parse(configYaml);
@@ -34,32 +31,91 @@ export function ensureVmessWrapperSecret(
   }
 
   if (!isYamlRecord(document)) {
-    return configYaml;
+    return null;
   }
 
+  return document;
+}
+
+function resolveVmessWrapperRecord(document: YamlRecord) {
   const mproxy = document.mproxy;
   if (!isYamlRecord(mproxy)) {
-    return configYaml;
+    return null;
   }
 
   const entries = mproxy.entries;
   if (!isYamlRecord(entries)) {
-    return configYaml;
+    return null;
   }
 
   const vmess = entries.vmess;
   if (!isYamlRecord(vmess) || vmess.enable !== true) {
+    return null;
+  }
+
+  return vmess;
+}
+
+function readConcreteWrapperSecret(document: YamlRecord) {
+  const vmess = resolveVmessWrapperRecord(document);
+  if (!vmess || typeof vmess.wrapper_secret !== "string") {
+    return null;
+  }
+
+  const secret = vmess.wrapper_secret.trim();
+  if (!secret) {
+    return null;
+  }
+  if (envPlaceholderPattern.test(secret)) {
+    throw new VmessWrapperSecretPlaceholderError();
+  }
+
+  return secret;
+}
+
+export function ensureVmessWrapperSecret(
+  configYaml: string,
+  randomSource: () => Uint8Array = () => randomBytes(32),
+): string {
+  const document = parseYamlRecord(configYaml);
+  if (!document) {
     return configYaml;
   }
 
-  if (typeof vmess.wrapper_secret === "string" && vmess.wrapper_secret.trim() !== "") {
-    if (envPlaceholderPattern.test(vmess.wrapper_secret.trim())) {
-      throw new VmessWrapperSecretPlaceholderError();
-    }
+  const vmess = resolveVmessWrapperRecord(document);
+  if (!vmess) {
+    return configYaml;
+  }
 
+  if (readConcreteWrapperSecret(document)) {
     return configYaml;
   }
 
   vmess.wrapper_secret = Buffer.from(randomSource()).toString("base64");
   return YAML.stringify(document);
+}
+
+export function preserveStoredVmessWrapperSecret(configYaml: string, storedConfigYaml: string) {
+  const nextDocument = parseYamlRecord(configYaml);
+  if (!nextDocument) {
+    return configYaml;
+  }
+
+  const nextVmess = resolveVmessWrapperRecord(nextDocument);
+  if (!nextVmess) {
+    return configYaml;
+  }
+
+  const storedDocument = parseYamlRecord(storedConfigYaml);
+  if (!storedDocument) {
+    return configYaml;
+  }
+
+  const storedSecret = readConcreteWrapperSecret(storedDocument);
+  if (!storedSecret) {
+    return configYaml;
+  }
+
+  nextVmess.wrapper_secret = storedSecret;
+  return YAML.stringify(nextDocument);
 }

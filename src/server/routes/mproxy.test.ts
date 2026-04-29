@@ -88,7 +88,6 @@ describe("mproxy vmess control-plane routes", () => {
                 "      transport: ws",
                 `      wrapper_secret: ${Buffer.alloc(32, 1).toString("base64")}`,
               ].join("\n"),
-              version: 7,
             },
           ],
           error: null,
@@ -104,7 +103,6 @@ describe("mproxy vmess control-plane routes", () => {
           JSON.stringify({
             active: true,
             config_profile_name: "custom1",
-            config_profile_version: "7",
             enabled: true,
             status: "listening",
             vmess_wrapper: { enabled: true, path: "/api/mproxy/wsproxy", status: "ready" },
@@ -137,7 +135,7 @@ describe("mproxy vmess control-plane routes", () => {
     });
   });
 
-  it("rejects wrapper output when selected server runtime version differs from the published config version", async () => {
+  it("rejects wrapper output when the selected server has no current runtime config", async () => {
     mocks.getUser.mockResolvedValue({
       data: { user: { id: "owner-1" } },
       error: null,
@@ -170,19 +168,7 @@ describe("mproxy vmess control-plane routes", () => {
 
       if (name === "gomtm_runtime_config_get") {
         return {
-          data: [
-            {
-              config_yaml: [
-                "mproxy:",
-                "  entries:",
-                "    vmess:",
-                "      enable: true",
-                "      transport: ws",
-                `      wrapper_secret: ${Buffer.alloc(32, 1).toString("base64")}`,
-              ].join("\n"),
-              version: 8,
-            },
-          ],
+          data: null,
           error: null,
         };
       }
@@ -196,7 +182,6 @@ describe("mproxy vmess control-plane routes", () => {
           JSON.stringify({
             active: true,
             config_profile_name: "custom1",
-            config_profile_version: "7",
             enabled: true,
             status: "listening",
             vmess_wrapper: { enabled: true, path: "/api/mproxy/wsproxy", status: "ready" },
@@ -215,9 +200,9 @@ describe("mproxy vmess control-plane routes", () => {
       `http://localhost/mproxy/extracts/${extractId}/vmess/profile?server_origin=${encodeURIComponent("https://gomtm.example:8443")}`,
     );
 
-    expect(response.status).toBe(409);
+    expect(response.status).toBe(404);
     await expect(response.json()).resolves.toEqual({
-      error: "selected gomtm server runtime config version does not match published config",
+      error: "runtime config not found",
     });
   });
 

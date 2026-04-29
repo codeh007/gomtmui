@@ -34,7 +34,7 @@ export default function MProxyPage() {
       <DashContent className="flex flex-col gap-6 overflow-auto p-4 md:p-6">
         <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
           <p>提取记录现在同时暴露运行模式和入口策略，VMess 输出则表示进入当前选中的 gomtm server wrapper。</p>
-          <p className="mt-1">选择 <code>mitm</code> 后，客户端在使用 HTTPS 前需要先导入根证书；VMess profile/subscription 会跟随当前 gomtm server 与其已发布 runtime config。</p>
+			<p className="mt-1">选择 <code>mitm</code> 后，客户端在使用 HTTPS 前需要先导入根证书；VMess profile/subscription 会跟随当前 gomtm server 与其当前运行配置。</p>
           <p className="mt-1">当前 gomtm server：<code>{selectedServerOrigin || "未配置"}</code></p>
         </div>
         <ErrorBoundary name="MitmCaCard">

@@ -67,19 +67,6 @@ export async function saveConfigProfile(name: string, payload: GomtmConfigProfil
   return GomtmConfigProfileSchema.parse(await response.json());
 }
 
-export async function publishConfigProfile(name: string) {
-  const response = await fetch(`/api/cf/gomtm/config-profiles/${encodeURIComponent(name)}/publish`, {
-    method: "POST",
-    credentials: "include",
-  });
-
-  if (!response.ok) {
-    await readApiError(response);
-  }
-
-  return GomtmConfigProfileSchema.parse(await response.json());
-}
-
 export async function fetchStartupCommand(name: string) {
   const response = await fetch(`/api/cf/gomtm/config-profiles/${encodeURIComponent(name)}/command`, {
     method: "POST",

@@ -9,9 +9,7 @@ import { ConfigEditorView } from "./config-editor-view";
 
 const saveConfigProfile = vi.fn();
 const createConfigProfile = vi.fn();
-const publishConfigProfile = vi.fn();
 const fetchStartupCommand = vi.fn();
-const fetchConfigProfile = vi.fn();
 const toastSuccess = vi.fn();
 const toastError = vi.fn();
 const replaceMock = vi.fn();
@@ -19,9 +17,7 @@ const replaceMock = vi.fn();
 vi.mock("@/lib/gomtm-configs/api", () => ({
   saveConfigProfile: (...args: unknown[]) => saveConfigProfile(...args),
   createConfigProfile: (...args: unknown[]) => createConfigProfile(...args),
-  publishConfigProfile: (...args: unknown[]) => publishConfigProfile(...args),
   fetchStartupCommand: (...args: unknown[]) => fetchStartupCommand(...args),
-  fetchConfigProfile: (...args: unknown[]) => fetchConfigProfile(...args),
 }));
 
 vi.mock("sonner", () => ({
@@ -65,34 +61,10 @@ vi.mock("mtxuilib/ui/badge", () => ({
   Badge: ({ children }: { children: ReactNode }) => <span>{children}</span>,
 }));
 
-vi.mock("mtxuilib/ui/select", () => ({
-  Select: ({ children, value, onValueChange }: { children: ReactNode; value?: string; onValueChange?: (value: string) => void }) => (
-    <div data-select-value={value} data-on-value-change={Boolean(onValueChange)}>
-      {children}
-    </div>
-  ),
-  SelectContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  SelectItem: ({ children, value }: { children: ReactNode; value: string }) => <option value={value}>{children}</option>,
-  SelectTrigger: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  SelectValue: ({ placeholder }: { placeholder?: string }) => <span>{placeholder}</span>,
-}));
-
-vi.mock("mtxuilib/ui/tabs", () => ({
-  Tabs: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  TabsList: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  TabsTrigger: ({ children, value, onClick }: { children: ReactNode; value: string; onClick?: () => void }) => (
-    <button type="button" data-value={value} onClick={onClick}>
-      {children}
-    </button>
-  ),
-  TabsContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-}));
-
 describe("ConfigEditorView", () => {
   const initialProfile = {
     name: "custom1",
     description: "demo profile",
-    target_kind: "generic" as const,
     config_yaml: [
       "server:",
       '  listen: ":7777"',
@@ -113,36 +85,10 @@ describe("ConfigEditorView", () => {
       "    enable: true",
       "",
     ].join("\n"),
-    config_json: {
-      server: {
-        listen: ":7777",
-        instance_id: "worker-1",
-        storage: { root_dir: "/var/lib/gomtm" },
-      },
-      supabase: {
-        url: "https://example.supabase.co",
-        anon_key: "anon-key",
-        service_role_key: "service-role-key",
-      },
-      cloudflare: {
-        cloudflare_api_token: "cf-token",
-        cloudflare_account_id: "cf-account",
-        cloudflare_zone_id: "cf-zone",
-        tunnel_domain: "worker.example.com",
-      },
-      mtmai: {
-        hermes_gateway: {
-          enable: true,
-        },
-      },
-    },
-    status: "draft",
-    current_version: 2,
-    published_version: 1,
     updated_at: "2026-04-27T10:00:00Z",
   };
 
-  function renderView(profileOverrides?: Partial<typeof initialProfile>) {
+  function renderView(profileOverrides?: Partial<typeof initialProfile>, isNew = false) {
     const queryClient = new QueryClient({
       defaultOptions: {
         queries: { retry: false },
@@ -152,7 +98,7 @@ describe("ConfigEditorView", () => {
 
     return render(
       <QueryClientProvider client={queryClient}>
-        <ConfigEditorView initialProfile={{ ...initialProfile, ...profileOverrides }} />
+        <ConfigEditorView initialProfile={{ ...initialProfile, ...profileOverrides }} isNew={isNew} />
       </QueryClientProvider>,
     );
   }
@@ -161,29 +107,25 @@ describe("ConfigEditorView", () => {
     cleanup();
     saveConfigProfile.mockReset();
     createConfigProfile.mockReset();
-    publishConfigProfile.mockReset();
     fetchStartupCommand.mockReset();
-    fetchConfigProfile.mockReset();
     toastSuccess.mockReset();
     toastError.mockReset();
     replaceMock.mockReset();
     vi.restoreAllMocks();
   });
 
-  it("keeps structured form as the top-level mode and opens YAML through the advanced editor entry", async () => {
+  it("keeps structured form as the top-level mode without publish or lifecycle badges", async () => {
     renderView();
 
     expect(screen.getByLabelText("配置名称")).toBeTruthy();
-    expect(screen.queryByLabelText("目标类型")).toBeNull();
     expect((screen.getByLabelText("监听地址") as HTMLInputElement).value).toBe(":7777");
     expect((screen.getByLabelText("Supabase URL") as HTMLInputElement).value).toBe("https://example.supabase.co");
     expect((screen.getByLabelText("启用 Hermes Gateway") as HTMLInputElement).checked).toBe(true);
     expect(screen.queryByLabelText("原始 YAML")).toBeNull();
-    expect(screen.queryByRole("button", { name: "YAML" })).toBeNull();
-    expect(screen.queryByText("status: draft")).toBeNull();
-    expect(screen.getByText("草稿中")).toBeTruthy();
-    expect(screen.getByText("草稿 v2")).toBeTruthy();
-    expect(screen.getByText("已发布 v1")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "发布" })).toBeNull();
+    expect(screen.queryByText("草稿中")).toBeNull();
+    expect(screen.queryByText("已发布 v1")).toBeNull();
+    expect(screen.getByRole("button", { name: "复制启动命令" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "高级 YAML 编辑器" }));
 
@@ -191,15 +133,9 @@ describe("ConfigEditorView", () => {
     expect(screen.getByRole("button", { name: "导入 YAML" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "导出 YAML" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "返回表单" })).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "返回表单" }));
-
-    await waitFor(() => {
-      expect((screen.getByLabelText("监听地址") as HTMLInputElement).value).toBe(":7777");
-    });
   });
 
-  it("syncs structured field edits into YAML mode and save payload", async () => {
+  it("syncs structured field edits into YAML mode and save payload without target kind", async () => {
     saveConfigProfile.mockResolvedValue({ ...initialProfile, description: "updated profile" });
 
     renderView();
@@ -232,84 +168,13 @@ describe("ConfigEditorView", () => {
     const [, payload] = saveConfigProfile.mock.calls[0] as [string, Record<string, unknown>];
     expect(payload.name).toBe("custom1");
     expect(payload.description).toBe("updated profile");
-    expect(payload.target_kind).toBe("generic");
     expect(payload.config_yaml).toEqual(expect.stringContaining('listen: ":8899"'));
     expect(payload.config_yaml).toEqual(expect.stringContaining('url: "https://prod.supabase.co"'));
     expect(payload.config_yaml).toEqual(expect.stringContaining("enable: false"));
-    expect(payload).not.toHaveProperty("config_json");
+    expect(payload).not.toHaveProperty("target_kind");
   });
 
-  it("keeps the stored target kind when saving without exposing it in the visible form", async () => {
-    saveConfigProfile.mockResolvedValue({ ...initialProfile, target_kind: "android" });
-
-    renderView({
-      target_kind: "android",
-    });
-
-    expect(screen.queryByLabelText("目标类型")).toBeNull();
-
-    fireEvent.change(screen.getByLabelText("描述"), {
-      target: { value: "android profile" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "保存" }));
-
-    await waitFor(() => {
-      expect(saveConfigProfile).toHaveBeenCalledTimes(1);
-    });
-
-    const [, payload] = saveConfigProfile.mock.calls[0] as [string, Record<string, unknown>];
-    expect(payload.target_kind).toBe("android");
-  });
-
-  it("parses raw YAML edits back into the structured form and requires save before publish", async () => {
-    saveConfigProfile.mockResolvedValue({
-      ...initialProfile,
-      config_yaml: [
-        "server:",
-        '  listen: ":9900"',
-        '  instance_id: "worker-2"',
-        "  storage:",
-        '    root_dir: "/srv/gomtm"',
-        "supabase:",
-        '  url: "https://staging.supabase.co"',
-        '  anon_key: "staging-anon"',
-        '  service_role_key: "staging-service"',
-        "cloudflare:",
-        '  cloudflare_api_token: "next-token"',
-        '  cloudflare_account_id: "next-account"',
-        '  cloudflare_zone_id: "next-zone"',
-        '  tunnel_domain: "next.example.com"',
-        "mtmai:",
-        "  hermes_gateway:",
-        "    enable: false",
-        "",
-      ].join("\n"),
-      config_json: {
-        server: {
-          listen: ":9900",
-          instance_id: "worker-2",
-          storage: { root_dir: "/srv/gomtm" },
-        },
-        supabase: {
-          url: "https://staging.supabase.co",
-          anon_key: "staging-anon",
-          service_role_key: "staging-service",
-        },
-        cloudflare: {
-          cloudflare_api_token: "next-token",
-          cloudflare_account_id: "next-account",
-          cloudflare_zone_id: "next-zone",
-          tunnel_domain: "next.example.com",
-        },
-        mtmai: {
-          hermes_gateway: {
-            enable: false,
-          },
-        },
-      },
-    });
-    publishConfigProfile.mockResolvedValue({ ...initialProfile, published_version: 2, status: "published" });
-
+  it("parses raw YAML edits back into the structured form", async () => {
     renderView();
 
     fireEvent.click(screen.getByRole("button", { name: "高级 YAML 编辑器" }));
@@ -347,40 +212,6 @@ describe("ConfigEditorView", () => {
     expect((screen.getByLabelText("存储目录") as HTMLInputElement).value).toBe("/srv/gomtm");
     expect((screen.getByLabelText("Supabase URL") as HTMLInputElement).value).toBe("https://staging.supabase.co");
     expect((screen.getByLabelText("启用 Hermes Gateway") as HTMLInputElement).checked).toBe(false);
-
-    expect(screen.getByText("请先保存当前修改后再发布")).toBeTruthy();
-    expect((screen.getByRole("button", { name: "发布" }) as HTMLButtonElement).hasAttribute("disabled")).toBe(true);
-
-    fireEvent.click(screen.getByRole("button", { name: "保存" }));
-
-    await waitFor(() => {
-      expect(saveConfigProfile).toHaveBeenCalledTimes(1);
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "发布" }));
-
-    await waitFor(() => {
-      expect(publishConfigProfile).toHaveBeenCalledWith("custom1");
-    });
-  });
-
-  it("disables publish while there are unsaved changes and tells the user to save first", async () => {
-    renderView();
-
-    expect((screen.getByRole("button", { name: "发布" }) as HTMLButtonElement).disabled).toBe(false);
-
-    fireEvent.change(screen.getByLabelText("监听地址"), {
-      target: { value: ":9911" },
-    });
-
-    await waitFor(() => {
-      expect((screen.getByRole("button", { name: "发布" }) as HTMLButtonElement).hasAttribute("disabled")).toBe(true);
-    });
-
-    expect(screen.getByText("请先保存当前修改后再发布")).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "发布" }));
-    expect(publishConfigProfile).not.toHaveBeenCalled();
   });
 
   it("keeps YAML mode active and shows an error when the top-level YAML is not an object", async () => {
@@ -459,7 +290,7 @@ describe("ConfigEditorView", () => {
     });
   });
 
-  it("mints and copies the startup command", async () => {
+  it("mints and copies the startup command for any saved existing profile", async () => {
     fetchStartupCommand.mockResolvedValue({
       command: 'gomtm server --config="https://example.com/api/cf/gomtm/runtime-configs/custom1?sig=abc" --bootstrap-credential="gbr_demo" --device-name="$(hostname)"',
     });
@@ -471,12 +302,12 @@ describe("ConfigEditorView", () => {
       },
     });
 
-    renderView({
-      status: "published",
-      published_version: 2,
-    });
+    renderView();
 
-    fireEvent.click(screen.getByRole("button", { name: "复制启动命令" }));
+    const copyButton = screen.getByRole("button", { name: "复制启动命令" }) as HTMLButtonElement;
+    expect(copyButton.disabled).toBe(false);
+
+    fireEvent.click(copyButton);
 
     await waitFor(() => {
       expect(fetchStartupCommand).toHaveBeenCalledWith("custom1");
@@ -484,16 +315,6 @@ describe("ConfigEditorView", () => {
         'gomtm server --config="https://example.com/api/cf/gomtm/runtime-configs/custom1?sig=abc" --bootstrap-credential="gbr_demo" --device-name="$(hostname)"',
       );
     });
-  });
-
-  it("disables startup-command copy for draft existing profiles", async () => {
-    renderView();
-
-    const copyButton = screen.getByRole("button", { name: "复制启动命令" }) as HTMLButtonElement;
-    expect(copyButton.disabled).toBe(true);
-
-    fireEvent.click(copyButton);
-    expect(fetchStartupCommand).not.toHaveBeenCalled();
   });
 
   it("keeps name read-only for existing profiles and saves back to the original profile path", async () => {
@@ -517,71 +338,37 @@ describe("ConfigEditorView", () => {
     expect(saveName).toBe("custom1");
   });
 
-  it("disables publish and startup-command actions for unsaved new profiles", async () => {
-    const queryClient = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false },
-        mutations: { retry: false },
+  it("disables startup-command copy for unsaved new profiles", async () => {
+    renderView(
+      {
+        name: "new-config",
+        updated_at: null,
       },
-    });
-
-    render(
-      <QueryClientProvider client={queryClient}>
-        <ConfigEditorView
-          initialProfile={{
-            ...initialProfile,
-            name: "new-config",
-            status: "draft",
-            current_version: null,
-            published_version: null,
-            updated_at: null,
-          }}
-          isNew
-        />
-      </QueryClientProvider>,
+      true,
     );
 
-    expect((screen.getByRole("button", { name: "发布" }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole("button", { name: "复制启动命令" }) as HTMLButtonElement).disabled).toBe(true);
+    const copyButton = screen.getByRole("button", { name: "复制启动命令" }) as HTMLButtonElement;
+    expect(copyButton.disabled).toBe(true);
 
-    fireEvent.click(screen.getByRole("button", { name: "发布" }));
-    fireEvent.click(screen.getByRole("button", { name: "复制启动命令" }));
+    fireEvent.click(copyButton);
 
-    expect(publishConfigProfile).not.toHaveBeenCalled();
     expect(fetchStartupCommand).not.toHaveBeenCalled();
+    expect(screen.getByText("请先保存当前配置后再复制启动命令")).toBeTruthy();
   });
 
   it("surfaces backend create conflicts without doing a client-side preflight lookup", async () => {
     createConfigProfile.mockRejectedValue(new Error('409: {"error":"conflict"}'));
 
-    const queryClient = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false },
-        mutations: { retry: false },
+    renderView(
+      {
+        name: "new-config",
+        updated_at: null,
       },
-    });
-
-    render(
-      <QueryClientProvider client={queryClient}>
-        <ConfigEditorView
-          initialProfile={{
-            ...initialProfile,
-            name: "new-config",
-            status: "draft",
-            current_version: null,
-            published_version: null,
-            updated_at: null,
-          }}
-          isNew
-        />
-      </QueryClientProvider>,
+      true,
     );
 
-    const nameInput = screen.getByLabelText("配置名称") as HTMLInputElement;
-    expect(nameInput.disabled).toBe(false);
-
-    fireEvent.change(nameInput, {
-      target: { value: "existing-profile" },
+    fireEvent.change(screen.getByLabelText("配置名称"), {
+      target: { value: "new-config" },
     });
     fireEvent.click(screen.getByRole("button", { name: "保存" }));
 
@@ -589,8 +376,6 @@ describe("ConfigEditorView", () => {
       expect(createConfigProfile).toHaveBeenCalledTimes(1);
     });
 
-    expect(fetchConfigProfile).not.toHaveBeenCalled();
-    expect(saveConfigProfile).not.toHaveBeenCalled();
-    expect(screen.getByText("配置名称已存在，请更换名称后再保存")).toBeTruthy();
+    expect(toastError).toHaveBeenCalledWith("配置名称已存在，请更换名称后再保存");
   });
 });

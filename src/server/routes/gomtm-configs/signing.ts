@@ -6,11 +6,10 @@ type RuntimeConfigSigningInput = {
   basePath: string;
   expiresAt: number;
   secret: string;
-  version?: string | null;
 };
 
 function buildRuntimeConfigSignaturePayload(input: Omit<RuntimeConfigSigningInput, "secret">) {
-  return `${input.basePath}:${input.version ?? ""}:${input.expiresAt}`;
+  return `${input.basePath}:${input.expiresAt}`;
 }
 
 export function signRuntimeConfigPath(input: RuntimeConfigSigningInput) {
@@ -25,7 +24,6 @@ export function verifyRuntimeConfigSignature(input: {
   signature: string;
   secret: string;
   now: number;
-  version?: string | null;
 }) {
   if (!input.signature || input.now > input.expiresAt) {
     return false;
@@ -35,7 +33,6 @@ export function verifyRuntimeConfigSignature(input: {
     basePath: input.basePath,
     expiresAt: input.expiresAt,
     secret: input.secret,
-    version: input.version,
   }).signature;
 
   const expectedBytes = Buffer.from(expected, "utf8");

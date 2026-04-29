@@ -3,8 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Copy, Loader2, Rocket, Save } from "lucide-react";
-import { Badge } from "mtxuilib/ui/badge";
+import { Copy, Loader2, Save } from "lucide-react";
 import { Button } from "mtxuilib/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "mtxuilib/ui/card";
 import { Input } from "mtxuilib/ui/input";
@@ -26,7 +25,7 @@ import {
   type GomtmConfigProfile,
   type GomtmConfigProfileUpsert,
 } from "./config-schema";
-import { createConfigProfile, fetchStartupCommand, publishConfigProfile, saveConfigProfile } from "@/lib/gomtm-configs/api";
+import { createConfigProfile, fetchStartupCommand, saveConfigProfile } from "@/lib/gomtm-configs/api";
 
 const CONFIG_PROFILES_QUERY_KEY = ["gomtm-config-profiles"] as const;
 
@@ -52,24 +51,6 @@ type ConfigEditorFormValues = {
   cloudflare_tunnel_domain: string;
   hermes_gateway_enable: boolean;
 };
-
-function hasSameFormValues(left: ConfigEditorFormValues, right: ConfigEditorFormValues) {
-  return (
-    left.name === right.name &&
-    left.description === right.description &&
-    left.server_listen === right.server_listen &&
-    left.server_instance_id === right.server_instance_id &&
-    left.server_storage_root_dir === right.server_storage_root_dir &&
-    left.supabase_url === right.supabase_url &&
-    left.supabase_anon_key === right.supabase_anon_key &&
-    left.supabase_service_role_key === right.supabase_service_role_key &&
-    left.cloudflare_api_token === right.cloudflare_api_token &&
-    left.cloudflare_account_id === right.cloudflare_account_id &&
-    left.cloudflare_zone_id === right.cloudflare_zone_id &&
-    left.cloudflare_tunnel_domain === right.cloudflare_tunnel_domain &&
-    left.hermes_gateway_enable === right.hermes_gateway_enable
-  );
-}
 
 function getFormValues(profile: GomtmConfigProfile, document: GomtmConfigDocument): ConfigEditorFormValues {
   return {
@@ -120,7 +101,6 @@ function getDocumentFromFormValues(values: ConfigEditorFormValues) {
 function buildStructuredPayload(
   values: ConfigEditorFormValues,
   baseConfigSource: Record<string, unknown>,
-  targetKind: GomtmConfigProfile["target_kind"],
 ): GomtmConfigProfileUpsert {
   const nextDocument = getDocumentFromFormValues(values);
   const nextConfigSource = overlayGomtmConfigDocument(baseConfigSource, nextDocument);
@@ -128,40 +108,18 @@ function buildStructuredPayload(
   return {
     name: values.name,
     description: values.description,
-    target_kind: targetKind,
     config_yaml: stringifyGomtmConfigSource(nextConfigSource),
   };
 }
 
-function buildYamlPayload(values: ConfigEditorFormValues, rawYaml: string, targetKind: GomtmConfigProfile["target_kind"]): GomtmConfigProfileUpsert {
+function buildYamlPayload(values: ConfigEditorFormValues, rawYaml: string): GomtmConfigProfileUpsert {
   const parsedSource = parseGomtmConfigYaml(rawYaml);
 
   return {
     name: values.name,
     description: values.description,
-    target_kind: targetKind,
     config_yaml: stringifyGomtmConfigSource(parsedSource),
   };
-}
-
-function getLifecycleBadgeLabel(status: string | null | undefined) {
-  if (status === "published") {
-    return "已发布";
-  }
-
-  if (status === "draft") {
-    return "草稿中";
-  }
-
-  return status || "未保存";
-}
-
-function getDraftVersionLabel(version: number | null | undefined) {
-  return version != null ? `草稿 v${version}` : "草稿未保存";
-}
-
-function getPublishedVersionLabel(version: number | null | undefined) {
-  return version != null ? `已发布 v${version}` : "尚未发布";
 }
 
 function createEditorState(profile: GomtmConfigProfile) {
@@ -175,8 +133,8 @@ function createEditorState(profile: GomtmConfigProfile) {
   };
 }
 
-function hasUnsavedNewProfile(profile: Pick<GomtmConfigProfile, "current_version" | "published_version" | "updated_at">, isNew: boolean) {
-  return isNew && profile.current_version == null && profile.published_version == null && profile.updated_at == null;
+function hasUnsavedNewProfile(profile: Pick<GomtmConfigProfile, "updated_at">, isNew: boolean) {
+  return isNew && profile.updated_at == null;
 }
 
 function getSaveErrorMessage(error: unknown) {
@@ -213,8 +171,8 @@ export function ConfigEditorView({ initialProfile, isNew = false }: ConfigEditor
       try {
         const payload =
           mode === "yaml"
-            ? buildYamlPayload(value, rawConfigYamlRef.current, profile.target_kind)
-            : buildStructuredPayload(value, rawConfigSource, profile.target_kind);
+            ? buildYamlPayload(value, rawConfigYamlRef.current)
+            : buildStructuredPayload(value, rawConfigSource);
 
         setRawConfigSource(parseGomtmConfigYaml(payload.config_yaml));
         updateRawConfigYaml(payload.config_yaml);
@@ -261,19 +219,6 @@ export function ConfigEditorView({ initialProfile, isNew = false }: ConfigEditor
     },
   });
 
-  const publishMutation = useMutation({
-    mutationFn: () => publishConfigProfile(profile.name),
-    onSuccess: async (nextProfile) => {
-      setProfile(nextProfile);
-      toast.success("配置已发布");
-      await queryClient.invalidateQueries({ queryKey: CONFIG_PROFILES_QUERY_KEY });
-      await queryClient.invalidateQueries({ queryKey: ["gomtm-config-profile", profile.name] });
-    },
-    onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "发布失败");
-    },
-  });
-
   const startupCommandMutation = useMutation({
     mutationFn: () => fetchStartupCommand(profile.name),
     onSuccess: async ({ command }) => {
@@ -285,18 +230,6 @@ export function ConfigEditorView({ initialProfile, isNew = false }: ConfigEditor
     },
   });
 
-  const metadataBadges = useMemo(
-    () => [
-      { label: getLifecycleBadgeLabel(profile.status) },
-      { label: getDraftVersionLabel(profile.current_version) },
-      { label: getPublishedVersionLabel(profile.published_version) },
-    ],
-    [profile.current_version, profile.published_version, profile.status],
-  );
-  const canCopyStartupCommand = profile.status === "published";
-
-  const savedState = createEditorState(profile);
-
   const handleModeChange = (nextMode: EditorMode) => {
     if (nextMode === mode) {
       return;
@@ -304,7 +237,7 @@ export function ConfigEditorView({ initialProfile, isNew = false }: ConfigEditor
 
     if (nextMode === "yaml") {
       try {
-        const payload = buildStructuredPayload(form.state.values, rawConfigSource, profile.target_kind);
+        const payload = buildStructuredPayload(form.state.values, rawConfigSource);
         setRawConfigSource(parseGomtmConfigYaml(payload.config_yaml));
         updateRawConfigYaml(payload.config_yaml);
         setYamlError(null);
@@ -371,14 +304,7 @@ export function ConfigEditorView({ initialProfile, isNew = false }: ConfigEditor
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="space-y-2">
             <CardTitle className="text-xl">{profile.name}</CardTitle>
-            <CardDescription>编辑 gomtm worker 配置，默认使用结构化表单，必要时再切换到高级 YAML。</CardDescription>
-            <div className="flex flex-wrap gap-2">
-              {metadataBadges.map((badge) => (
-                <Badge key={badge.label} variant="secondary">
-                  {badge.label}
-                </Badge>
-              ))}
-            </div>
+            <CardDescription>编辑 gomtm worker 当前配置；保存后，后续新启动实例会读取最新远程配置。</CardDescription>
           </div>
           {mode === "form" ? (
             <Button type="button" variant="outline" onClick={() => handleModeChange("yaml")}>
@@ -596,7 +522,7 @@ export function ConfigEditorView({ initialProfile, isNew = false }: ConfigEditor
           <form.Subscribe
             selector={(state) => state.values}
             children={(values) => {
-              const hasUnsavedChanges = !hasSameFormValues(values, savedState.formValues) || rawConfigYaml !== savedState.rawYaml;
+              void values;
 
               return (
                 <>
@@ -604,29 +530,18 @@ export function ConfigEditorView({ initialProfile, isNew = false }: ConfigEditor
                     <Button
                       type="button"
                       variant="outline"
-                      disabled={startupCommandMutation.isPending || isUnsavedNewProfile || !canCopyStartupCommand}
+                      disabled={startupCommandMutation.isPending || isUnsavedNewProfile}
                       onClick={() => startupCommandMutation.mutate()}
                     >
                       {startupCommandMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Copy className="mr-2 h-4 w-4" />}
                       复制启动命令
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={publishMutation.isPending || saveMutation.isPending || hasUnsavedChanges || isUnsavedNewProfile}
-                      onClick={() => publishMutation.mutate()}
-                    >
-                      {publishMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Rocket className="mr-2 h-4 w-4" />}
-                      发布
                     </Button>
                     <Button type="submit" disabled={saveMutation.isPending}>
                       {saveMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                       保存
                     </Button>
                   </div>
-                  {isUnsavedNewProfile ? <div className="text-sm text-muted-foreground">请先保存当前配置后再发布或复制启动命令</div> : null}
-                  {!isUnsavedNewProfile && !canCopyStartupCommand ? <div className="text-sm text-muted-foreground">请先发布当前配置后再复制启动命令</div> : null}
-                  {!isUnsavedNewProfile && hasUnsavedChanges ? <div className="text-sm text-muted-foreground">请先保存当前修改后再发布</div> : null}
+                  {isUnsavedNewProfile ? <div className="text-sm text-muted-foreground">请先保存当前配置后再复制启动命令</div> : null}
                 </>
               );
             }}

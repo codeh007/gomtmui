@@ -1,14 +1,13 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Edit3, Loader2, Plus, Rocket } from "lucide-react";
-import { Badge } from "mtxuilib/ui/badge";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Copy, Edit3, Loader2, Plus } from "lucide-react";
 import { Button } from "mtxuilib/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "mtxuilib/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "mtxuilib/ui/table";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { fetchConfigProfiles, fetchStartupCommand, publishConfigProfile } from "@/lib/gomtm-configs/api";
+import { fetchConfigProfiles, fetchStartupCommand } from "@/lib/gomtm-configs/api";
 
 const CONFIG_PROFILES_QUERY_KEY = ["gomtm-config-profiles"] as const;
 
@@ -20,42 +19,14 @@ function formatTimestamp(value: string | null | undefined) {
   return new Date(value).toLocaleString();
 }
 
-function getLifecycleLabel(item: {
-  current_version: number | null;
-  published_version: number | null;
-  status: string | null | undefined;
-}) {
-  if (item.status === "published") {
-    return item.published_version != null ? `已发布 v${item.published_version}` : "已发布";
-  }
-
-  if (item.status === "draft") {
-    return item.current_version != null ? `草稿 v${item.current_version}` : "草稿";
-  }
-
-  return item.status || "-";
-}
-
 export function ConfigListView() {
   const router = useRouter();
-  const queryClient = useQueryClient();
 
   const profilesQuery = useQuery({
     queryKey: CONFIG_PROFILES_QUERY_KEY,
     queryFn: fetchConfigProfiles,
   });
   const items = profilesQuery.data?.items ?? [];
-
-  const publishMutation = useMutation({
-    mutationFn: publishConfigProfile,
-    onSuccess: async () => {
-      toast.success("配置已发布");
-      await queryClient.invalidateQueries({ queryKey: CONFIG_PROFILES_QUERY_KEY });
-    },
-    onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "发布失败");
-    },
-  });
 
   const startupCommandMutation = useMutation({
     mutationFn: fetchStartupCommand,
@@ -71,12 +42,12 @@ export function ConfigListView() {
   return (
     <Card>
       <CardHeader>
-          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-            <div className="space-y-1">
-              <CardTitle>配置 Profiles</CardTitle>
-              <CardDescription>管理 draft / published gomtm worker 配置，并为 Linux runtime 复制受管启动命令。</CardDescription>
-            </div>
-          <Button type="button" onClick={() => router.push("/dash/gomtm/configs/new") }>
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div className="space-y-1">
+            <CardTitle>配置 Profiles</CardTitle>
+            <CardDescription>管理 gomtm worker 当前配置，并为 Linux runtime 复制受管启动命令。</CardDescription>
+          </div>
+          <Button type="button" onClick={() => router.push("/dash/gomtm/configs/new")}>
             <Plus className="mr-2 h-4 w-4" />
             新建配置
           </Button>
@@ -100,15 +71,12 @@ export function ConfigListView() {
               <TableHeader>
                 <TableRow>
                   <TableHead>名称</TableHead>
-                  <TableHead>状态</TableHead>
                   <TableHead>更新时间</TableHead>
                   <TableHead className="text-right">操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {items.map((item) => {
-                  const canCopyStartupCommand = item.status === "published";
-                  const publishPending = publishMutation.isPending && publishMutation.variables === item.name;
                   const copyPending = startupCommandMutation.isPending && startupCommandMutation.variables === item.name;
                   const metadata = item.description?.trim() ?? "";
 
@@ -117,9 +85,6 @@ export function ConfigListView() {
                       <TableCell>
                         <div className="font-medium">{item.name}</div>
                         {metadata ? <div className="text-xs text-muted-foreground">{metadata}</div> : null}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={item.status === "published" ? "default" : "secondary"}>{getLifecycleLabel(item)}</Badge>
                       </TableCell>
                       <TableCell className="text-muted-foreground">{formatTimestamp(item.updated_at)}</TableCell>
                       <TableCell className="text-right">
@@ -132,15 +97,11 @@ export function ConfigListView() {
                             type="button"
                             variant="outline"
                             size="sm"
-                            disabled={copyPending || !canCopyStartupCommand}
+                            disabled={copyPending}
                             onClick={() => startupCommandMutation.mutate(item.name)}
                           >
                             {copyPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Copy className="mr-2 h-4 w-4" />}
                             复制启动命令
-                          </Button>
-                          <Button type="button" size="sm" disabled={publishPending} onClick={() => publishMutation.mutate(item.name)}>
-                            {publishPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Rocket className="mr-2 h-4 w-4" />}
-                            发布
                           </Button>
                         </div>
                       </TableCell>

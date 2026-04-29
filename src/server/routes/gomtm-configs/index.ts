@@ -14,6 +14,7 @@ import { buildManagedLinuxStartupCommand } from "./command";
 import {
   ensureVmessWrapperSecret,
   InvalidConfigYamlError,
+  preserveStoredVmessWrapperSecret,
   VmessWrapperSecretPlaceholderError,
 } from "./vmess-wrapper-secret";
 
@@ -29,7 +30,6 @@ const runtimeConfigHeaders = {
 
 const upsertProfileSchema = z.object({
   description: z.string().optional().default(""),
-  target_kind: z.string().optional().default("generic"),
   config_yaml: z.string().min(1, "config_yaml is required"),
 });
 
@@ -46,23 +46,16 @@ type RpcErrorLike = {
 
 type GomtmConfigProfileRecord = {
   config_yaml?: string | null;
-  current_version?: number | null;
   description?: string | null;
+  id?: string | null;
   name?: string;
-  published_version?: number | null;
-  status?: string | null;
-  target_kind?: string | null;
-  updated_at?: string | null;
-};
-
-type GomtmConfigVersionRecord = {
   created_at?: string | null;
-  version?: number | null;
+  updated_at?: string | null;
 };
 
 type GomtmRuntimeConfigRecord = {
   config_yaml?: string | null;
-  version?: number | null;
+  name?: string | null;
 };
 
 type DeviceBootstrapCredentialRecord = {
@@ -139,25 +132,37 @@ gomtmConfigsRoute.post("/config-profiles", zValidator("json", createProfileSchem
     return trustedResponse;
   }
 
-  const auth = await getAuthenticatedSupabase(c);
-  if (auth.response) {
-    return auth.response;
-  }
+	const auth = await getAuthenticatedSupabase(c);
+	if (auth.response) {
+		return auth.response;
+	}
 
-  const body = c.req.valid("json");
-  let nextConfigYaml: string;
-  try {
-    nextConfigYaml = ensureVmessWrapperSecret(body.config_yaml);
-  } catch (error) {
-    if (error instanceof InvalidConfigYamlError || error instanceof VmessWrapperSecretPlaceholderError) {
-      return c.json({ error: error.message }, 400);
-    }
-    throw error;
-  }
-  const { data, error } = await auth.supabase.rpc<GomtmConfigProfileRecord[] | GomtmConfigProfileRecord | null>("gomtm_config_profile_create", {
-    p_name: body.name,
-    p_description: body.description,
-    p_target_kind: body.target_kind,
+	const body = c.req.valid("json");
+	let nextConfigYaml: string;
+	try {
+		nextConfigYaml = ensureVmessWrapperSecret(body.config_yaml);
+	} catch (error) {
+		if (error instanceof InvalidConfigYamlError || error instanceof VmessWrapperSecretPlaceholderError) {
+			return c.json({ error: error.message }, 400);
+		}
+		throw error;
+	}
+	const existingProfile = await auth.supabase.rpc<GomtmConfigProfileRecord[] | GomtmConfigProfileRecord | null>("gomtm_config_profile_get", {
+		p_name: body.name,
+	});
+	if (existingProfile.error) {
+		return createControlPlaneRpcErrorResponse(c, existingProfile.error, "failed to create config profile");
+	}
+	const existing = normalizeSingletonRpcRow(existingProfile.data);
+	if (existing.multiple) {
+		return c.json({ error: "failed to create config profile" }, 500);
+	}
+	if (existing.record) {
+		return c.json({ error: "conflict" }, 409);
+	}
+	const { data, error } = await auth.supabase.rpc<GomtmConfigProfileRecord[] | GomtmConfigProfileRecord | null>("gomtm_config_profile_upsert", {
+		p_name: body.name,
+		p_description: body.description,
     p_config_yaml: nextConfigYaml,
   });
   if (error) {
@@ -195,10 +200,25 @@ gomtmConfigsRoute.put("/config-profiles/:name", zValidator("json", upsertProfile
     }
     throw error;
   }
+  const currentProfile = await auth.supabase.rpc<GomtmConfigProfileRecord[] | GomtmConfigProfileRecord | null>("gomtm_config_profile_get", {
+    p_name: c.req.param("name"),
+  });
+  if (currentProfile.error) {
+    return createControlPlaneRpcErrorResponse(c, currentProfile.error, "failed to save config profile");
+  }
+  const existingProfile = normalizeSingletonRpcRow(currentProfile.data);
+  if (existingProfile.multiple) {
+    return c.json({ error: "failed to save config profile" }, 500);
+  }
+  if (!existingProfile.record) {
+    return c.json({ error: "not found" }, 404);
+  }
+  if (typeof existingProfile.record.config_yaml === "string") {
+    nextConfigYaml = preserveStoredVmessWrapperSecret(nextConfigYaml, existingProfile.record.config_yaml);
+  }
   const { data, error } = await auth.supabase.rpc<GomtmConfigProfileRecord[] | GomtmConfigProfileRecord | null>("gomtm_config_profile_upsert", {
     p_name: c.req.param("name"),
     p_description: body.description,
-    p_target_kind: body.target_kind,
     p_config_yaml: nextConfigYaml,
   });
   if (error) {
@@ -213,55 +233,6 @@ gomtmConfigsRoute.put("/config-profiles/:name", zValidator("json", upsertProfile
   }
 
   return c.json(profile.record);
-});
-
-gomtmConfigsRoute.post("/config-profiles/:name/publish", async (c) => {
-  const trustedResponse = requireTrustedControlPlaneRequest(c);
-  if (trustedResponse) {
-    return trustedResponse;
-  }
-
-  const auth = await getAuthenticatedSupabase(c);
-  if (auth.response) {
-    return auth.response;
-  }
-
-  const { data, error } = await auth.supabase.rpc<GomtmConfigProfileRecord[] | GomtmConfigProfileRecord | null>("gomtm_config_profile_publish", {
-    p_name: c.req.param("name"),
-  });
-  if (error) {
-    return createControlPlaneRpcErrorResponse(c, error, "failed to publish config profile");
-  }
-  const profile = normalizeSingletonRpcRow(data);
-  if (profile.multiple) {
-    return c.json({ error: "failed to publish config profile" }, 500);
-  }
-  if (!profile.record) {
-    return c.json({ error: "not found" }, 404);
-  }
-
-  return c.json(profile.record);
-});
-
-gomtmConfigsRoute.get("/config-profiles/:name/versions", async (c) => {
-  const trustedResponse = requireTrustedControlPlaneRequest(c);
-  if (trustedResponse) {
-    return trustedResponse;
-  }
-
-  const auth = await getAuthenticatedSupabase(c);
-  if (auth.response) {
-    return auth.response;
-  }
-
-  const { data, error } = await auth.supabase.rpc<GomtmConfigVersionRecord[]>("gomtm_config_profile_versions", {
-    p_name: c.req.param("name"),
-  });
-  if (error) {
-    return createControlPlaneRpcErrorResponse(c, error, "failed to load config profile versions");
-  }
-
-  return c.json({ items: data ?? [] });
 });
 
 gomtmConfigsRoute.post("/config-profiles/:name/runtime-url", async (c) => {
@@ -281,7 +252,7 @@ gomtmConfigsRoute.post("/config-profiles/:name/runtime-url", async (c) => {
   }
 
   const profileName = c.req.param("name");
-  const runtimeConfig = await getPublishedRuntimeConfig(auth.supabase, profileName);
+  const runtimeConfig = await getCurrentRuntimeConfig(auth.supabase, profileName);
   if (runtimeConfig.error) {
     return createControlPlaneRpcErrorResponse(c, runtimeConfig.error, "failed to issue runtime URL");
   }
@@ -293,7 +264,7 @@ gomtmConfigsRoute.post("/config-profiles/:name/runtime-url", async (c) => {
   }
 
   return c.json({
-    runtime_url: buildSignedRuntimeConfigUrl(c, profileName, secret, runtimeConfig.record.version),
+    runtime_url: buildSignedRuntimeConfigUrl(c, profileName, secret),
   });
 });
 
@@ -314,7 +285,7 @@ gomtmConfigsRoute.post("/config-profiles/:name/command", async (c) => {
   }
 
   const profileName = c.req.param("name");
-  const runtimeConfig = await getPublishedRuntimeConfig(auth.supabase, profileName);
+  const runtimeConfig = await getCurrentRuntimeConfig(auth.supabase, profileName);
   if (runtimeConfig.error) {
     return createControlPlaneRpcErrorResponse(c, runtimeConfig.error, "failed to issue startup command");
   }
@@ -347,7 +318,7 @@ gomtmConfigsRoute.post("/config-profiles/:name/command", async (c) => {
 
   return c.json({
     command: buildManagedLinuxStartupCommand({
-      configUrl: buildSignedRuntimeConfigUrl(c, profileName, secret, runtimeConfig.record.version),
+      configUrl: buildSignedRuntimeConfigUrl(c, profileName, secret),
       bootstrapCredential: bootstrapCredential.record.credential,
       deviceNameExpression: DEFAULT_DEVICE_NAME_EXPRESSION,
     }),
@@ -362,7 +333,6 @@ gomtmConfigsRoute.get("/runtime-configs/:name", async (c) => {
 
   const expiresAt = Number(c.req.query("expires") ?? "0");
   const signature = c.req.query("sig") ?? "";
-  const version = c.req.query("version");
   const basePath = new URL(c.req.url).pathname;
 
   if (
@@ -372,7 +342,6 @@ gomtmConfigsRoute.get("/runtime-configs/:name", async (c) => {
       expiresAt,
       signature,
       secret,
-      version,
       now: Math.floor(Date.now() / 1000),
     })
   ) {
@@ -388,9 +357,6 @@ gomtmConfigsRoute.get("/runtime-configs/:name", async (c) => {
   }
   const runtimeConfig = Array.isArray(data) ? (data[0] ?? null) : data;
   if (!runtimeConfig) {
-    return c.text("not found", 404);
-  }
-  if (version && String(runtimeConfig.version ?? "") !== version) {
     return c.text("not found", 404);
   }
   if (typeof runtimeConfig.config_yaml !== "string") {
@@ -511,7 +477,7 @@ function createRuntimeConfigErrorResponse(c: Context<AppContext>, error: RpcErro
   return c.text("runtime config unavailable", 500);
 }
 
-async function getPublishedRuntimeConfig(supabase: GomtmConfigSupabase, profileName: string) {
+async function getCurrentRuntimeConfig(supabase: GomtmConfigSupabase, profileName: string) {
   const { data, error } = await supabase.rpc<GomtmRuntimeConfigRecord[] | GomtmRuntimeConfigRecord | null>("gomtm_runtime_config_get", {
     p_name: profileName,
   });
@@ -530,21 +496,16 @@ async function getPublishedRuntimeConfig(supabase: GomtmConfigSupabase, profileN
   return { error: null, multiple: false, record: runtimeConfig.record };
 }
 
-function buildSignedRuntimeConfigUrl(c: Context<AppContext>, profileName: string, secret: string, version?: number | null) {
+function buildSignedRuntimeConfigUrl(c: Context<AppContext>, profileName: string, secret: string) {
   const runtimePath = `${ApiPrefix}/gomtm/runtime-configs/${encodeURIComponent(profileName)}`;
-  const normalizedVersion = typeof version === "number" && Number.isFinite(version) ? String(version) : null;
   const expiresAt = Math.floor(Date.now() / 1000) + RUNTIME_URL_TTL_SECONDS;
   const signed = signRuntimeConfigPath({
     basePath: runtimePath,
     expiresAt,
     secret,
-    version: normalizedVersion,
   });
 
   const runtimeUrl = new URL(runtimePath, c.req.url);
-  if (normalizedVersion) {
-    runtimeUrl.searchParams.set("version", normalizedVersion);
-  }
   runtimeUrl.searchParams.set("expires", String(signed.expiresAt));
   runtimeUrl.searchParams.set("sig", signed.signature);
 

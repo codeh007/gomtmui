@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import YAML from "yaml";
-import { ensureVmessWrapperSecret, VmessWrapperSecretPlaceholderError } from "./vmess-wrapper-secret";
+import { ensureVmessWrapperSecret, preserveStoredVmessWrapperSecret, VmessWrapperSecretPlaceholderError } from "./vmess-wrapper-secret";
 
 describe("ensureVmessWrapperSecret", () => {
   it("injects wrapper_secret when vmess is enabled and the field is missing", () => {
@@ -80,5 +80,40 @@ describe("ensureVmessWrapperSecret", () => {
         ].join("\n"),
       ),
     ).toThrow(VmessWrapperSecretPlaceholderError);
+  });
+
+  it("preserves the stored wrapper_secret when an existing profile is edited", () => {
+    const updated = preserveStoredVmessWrapperSecret(
+      [
+        "mproxy:",
+        "  entries:",
+        "    vmess:",
+        "      enable: true",
+        "      transport: ws",
+        "      wrapper_secret: NEW_VALUE",
+        "",
+      ].join("\n"),
+      [
+        "mproxy:",
+        "  entries:",
+        "    vmess:",
+        "      enable: true",
+        "      transport: ws",
+        "      wrapper_secret: KEEP_ME",
+        "",
+      ].join("\n"),
+    );
+
+    const parsed = YAML.parse(updated) as {
+      mproxy?: {
+        entries?: {
+          vmess?: {
+            wrapper_secret?: string;
+          };
+        };
+      };
+    };
+
+    expect(parsed.mproxy?.entries?.vmess?.wrapper_secret).toBe("KEEP_ME");
   });
 });

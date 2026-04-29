@@ -1,10 +1,6 @@
 import { parse, stringify } from "yaml";
 import { z } from "zod";
 
-export const gomtmConfigTargetKinds = ["generic", "linux", "android"] as const;
-
-export const GomtmConfigTargetKindSchema = z.enum(gomtmConfigTargetKinds);
-
 export const GomtmConfigDocumentSchema = z.object({
   server: z.object({
     listen: z.string(),
@@ -34,28 +30,19 @@ export const GomtmConfigDocumentSchema = z.object({
 export const GomtmConfigProfileSchema = z.object({
   name: z.string().min(1),
   description: z.string().default(""),
-  target_kind: GomtmConfigTargetKindSchema.default("generic"),
   config_yaml: z.string().min(1),
-  status: z.string().optional().default("draft"),
-  current_version: z.number().nullable().optional().default(null),
-  published_version: z.number().nullable().optional().default(null),
   updated_at: z.string().nullable().optional().default(null),
 });
 
 export const GomtmConfigProfileUpsertSchema = GomtmConfigProfileSchema.pick({
   name: true,
   description: true,
-  target_kind: true,
   config_yaml: true,
 });
 
 export const GomtmConfigProfileSummarySchema = GomtmConfigProfileSchema.pick({
   name: true,
   description: true,
-  target_kind: true,
-  status: true,
-  current_version: true,
-  published_version: true,
   updated_at: true,
 });
 
@@ -71,7 +58,6 @@ export const GomtmStartupCommandResponseSchema = z.object({
   command: z.string().min(1),
 });
 
-export type GomtmConfigTargetKind = z.infer<typeof GomtmConfigTargetKindSchema>;
 export type GomtmConfigDocument = z.infer<typeof GomtmConfigDocumentSchema>;
 export type GomtmConfigProfile = z.infer<typeof GomtmConfigProfileSchema>;
 export type GomtmConfigProfileUpsert = z.infer<typeof GomtmConfigProfileUpsertSchema>;
@@ -155,11 +141,7 @@ export function createDefaultGomtmConfigProfile(name = ""): GomtmConfigProfile {
   return {
     name,
     description: "",
-    target_kind: "generic",
     config_yaml: "kind: worker\nname: " + (name || "custom1") + "\n",
-    status: "draft",
-    current_version: null,
-    published_version: null,
     updated_at: null,
   };
 }

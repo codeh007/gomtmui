@@ -43,7 +43,6 @@ describe("gomtm config control-plane routes", () => {
     const signed = signRuntimeConfigPath({
       basePath: "/api/cf/gomtm/runtime-configs/custom1",
       expiresAt: 1_900_000_000,
-      version: "2",
       secret: "test-secret",
     });
 
@@ -53,27 +52,24 @@ describe("gomtm config control-plane routes", () => {
         expiresAt: signed.expiresAt,
         signature: signed.signature,
         secret: "test-secret",
-        version: "2",
         now: signed.expiresAt - 1,
       }),
     ).toBe(true);
   });
 
-  it("rejects a runtime config signature when the signed version is tampered with", () => {
+  it("rejects a runtime config signature when the signed path is tampered with", () => {
     const signed = signRuntimeConfigPath({
       basePath: "/api/cf/gomtm/runtime-configs/custom1",
       expiresAt: 1_900_000_000,
-      version: "2",
       secret: "test-secret",
     });
 
     expect(
       verifyRuntimeConfigSignature({
-        basePath: "/api/cf/gomtm/runtime-configs/custom1",
+        basePath: "/api/cf/gomtm/runtime-configs/custom2",
         expiresAt: signed.expiresAt,
         signature: signed.signature,
         secret: "test-secret",
-        version: "3",
         now: signed.expiresAt - 1,
       }),
     ).toBe(false);
@@ -86,7 +82,6 @@ describe("gomtm config control-plane routes", () => {
         expiresAt: 100,
         signature: "bad",
         secret: "test-secret",
-        version: null,
         now: 101,
       }),
     ).toBe(false);
@@ -94,7 +89,7 @@ describe("gomtm config control-plane routes", () => {
 
   it("lists gomtm config profiles from the control-plane API", async () => {
     rpc.mockResolvedValueOnce({
-      data: [{ name: "custom1" }],
+      data: [{ name: "custom1", description: "Demo profile", updated_at: "2026-04-29T03:00:00Z" }],
       error: null,
     });
 
@@ -103,7 +98,9 @@ describe("gomtm config control-plane routes", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ items: [{ name: "custom1" }] });
+    expect(await response.json()).toEqual({
+      items: [{ name: "custom1", description: "Demo profile", updated_at: "2026-04-29T03:00:00Z" }],
+    });
     expect(rpc).toHaveBeenCalledWith("gomtm_config_profile_list_cursor", {
       p_limit: 200,
       p_offset: 0,
@@ -111,11 +108,6 @@ describe("gomtm config control-plane routes", () => {
   });
 
   it("rejects cross-site control-plane reads even when cookie auth exists", async () => {
-    rpc.mockResolvedValueOnce({
-      data: [{ name: "custom1" }],
-      error: null,
-    });
-
     const response = await app.request("http://example.com/api/cf/gomtm/config-profiles", {
       headers: {
         origin: "http://evil.example",
@@ -144,7 +136,7 @@ describe("gomtm config control-plane routes", () => {
 
   it("loads a singleton config profile from an array-shaped RPC response", async () => {
     rpc.mockResolvedValueOnce({
-      data: [{ name: "custom1", status: "published" }],
+      data: [{ name: "custom1", description: "Demo profile", config_yaml: "kind: worker\nname: custom1\n" }],
       error: null,
     });
 
@@ -153,12 +145,20 @@ describe("gomtm config control-plane routes", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ name: "custom1", status: "published" });
+    expect(await response.json()).toEqual({
+      name: "custom1",
+      description: "Demo profile",
+      config_yaml: "kind: worker\nname: custom1\n",
+    });
   });
 
-  it("creates a singleton config profile through the create-only RPC", async () => {
+  it("creates a singleton config profile through the current-document upsert RPC", async () => {
     rpc.mockResolvedValueOnce({
-      data: [{ name: "custom1", status: "draft", current_version: 0 }],
+      data: [],
+      error: null,
+    });
+    rpc.mockResolvedValueOnce({
+      data: [{ name: "custom1", description: "desc", config_yaml: "server:\n  listen: :8383\n" }],
       error: null,
     });
 
@@ -171,24 +171,33 @@ describe("gomtm config control-plane routes", () => {
       body: JSON.stringify({
         name: "custom1",
         description: "desc",
-        target_kind: "linux",
         config_yaml: "server:\n  listen: :8383\n",
       }),
     });
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ name: "custom1", status: "draft", current_version: 0 });
-    expect(rpc).toHaveBeenCalledWith("gomtm_config_profile_create", {
+    expect(await response.json()).toEqual({
+      name: "custom1",
+      description: "desc",
+      config_yaml: "server:\n  listen: :8383\n",
+    });
+    expect(rpc).toHaveBeenNthCalledWith(1, "gomtm_config_profile_get", {
+      p_name: "custom1",
+    });
+    expect(rpc).toHaveBeenNthCalledWith(2, "gomtm_config_profile_upsert", {
       p_name: "custom1",
       p_description: "desc",
-      p_target_kind: "linux",
       p_config_yaml: "server:\n  listen: :8383\n",
     });
   });
 
   it("injects vmess wrapper_secret before creating a config profile", async () => {
     rpc.mockResolvedValueOnce({
-      data: [{ name: "custom1", status: "draft", current_version: 0 }],
+      data: [],
+      error: null,
+    });
+    rpc.mockResolvedValueOnce({
+      data: [{ name: "custom1", description: "desc", config_yaml: "kind: worker\nname: custom1\n" }],
       error: null,
     });
 
@@ -201,7 +210,6 @@ describe("gomtm config control-plane routes", () => {
       body: JSON.stringify({
         name: "custom1",
         description: "desc",
-        target_kind: "linux",
         config_yaml: [
           "mproxy:",
           "  runtime:",
@@ -216,8 +224,9 @@ describe("gomtm config control-plane routes", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(rpc).toHaveBeenCalledWith(
-      "gomtm_config_profile_create",
+    expect(rpc).toHaveBeenNthCalledWith(
+      2,
+      "gomtm_config_profile_upsert",
       expect.objectContaining({
         p_name: "custom1",
         p_config_yaml: expect.stringContaining("wrapper_secret:"),
@@ -235,7 +244,6 @@ describe("gomtm config control-plane routes", () => {
       body: JSON.stringify({
         name: "custom1",
         description: "desc",
-        target_kind: "linux",
         config_yaml: "mproxy:\n  entries:\n    vmess: [\n",
       }),
     });
@@ -245,10 +253,10 @@ describe("gomtm config control-plane routes", () => {
     expect(rpc).not.toHaveBeenCalled();
   });
 
-  it("returns 409 when the create-only RPC reports a name conflict", async () => {
+  it("returns 409 when creating a profile whose name already exists", async () => {
     rpc.mockResolvedValueOnce({
-      data: null,
-      error: { code: "23505", message: "Config profile already exists" },
+      data: [{ name: "custom1", description: "existing", config_yaml: "kind: worker\nname: custom1\n" }],
+      error: null,
     });
 
     const response = await app.request("http://example.com/api/cf/gomtm/config-profiles", {
@@ -260,13 +268,13 @@ describe("gomtm config control-plane routes", () => {
       body: JSON.stringify({
         name: "custom1",
         description: "desc",
-        target_kind: "linux",
         config_yaml: "server:\n  listen: :8383\n",
       }),
     });
 
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({ error: "conflict" });
+    expect(rpc).toHaveBeenCalledTimes(1);
   });
 
   it("returns 404 when singleton config profile RPC returns an empty array", async () => {
@@ -299,7 +307,11 @@ describe("gomtm config control-plane routes", () => {
 
   it("saves a singleton config profile from an array-shaped RPC response", async () => {
     rpc.mockResolvedValueOnce({
-      data: [{ name: "custom1", status: "draft", current_version: 2 }],
+      data: [{ name: "custom1", description: "desc", config_yaml: "server:\n  listen: :7373\n" }],
+      error: null,
+    });
+    rpc.mockResolvedValueOnce({
+      data: [{ name: "custom1", description: "desc", config_yaml: "server:\n  listen: :8383\n" }],
       error: null,
     });
 
@@ -311,36 +323,31 @@ describe("gomtm config control-plane routes", () => {
       },
       body: JSON.stringify({
         description: "desc",
-        target_kind: "linux",
         config_yaml: "server:\n  listen: :8383\n",
       }),
     });
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ name: "custom1", status: "draft", current_version: 2 });
-    expect(rpc).toHaveBeenCalledWith("gomtm_config_profile_upsert", {
+    expect(await response.json()).toEqual({
+      name: "custom1",
+      description: "desc",
+      config_yaml: "server:\n  listen: :8383\n",
+    });
+    expect(rpc).toHaveBeenNthCalledWith(1, "gomtm_config_profile_get", {
+      p_name: "custom1",
+    });
+    expect(rpc).toHaveBeenNthCalledWith(2, "gomtm_config_profile_upsert", {
       p_name: "custom1",
       p_description: "desc",
-      p_target_kind: "linux",
       p_config_yaml: "server:\n  listen: :8383\n",
     });
   });
 
-  it("preserves an existing vmess wrapper_secret when saving a config profile", async () => {
+  it("preserves the stored vmess wrapper_secret when saving an existing config profile", async () => {
     rpc.mockResolvedValueOnce({
-      data: [{ name: "custom1", status: "draft", current_version: 2 }],
-      error: null,
-    });
-
-    const response = await app.request("http://example.com/api/cf/gomtm/config-profiles/custom1", {
-      method: "PUT",
-      headers: {
-        ...trustedDashboardHeaders,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
+      data: [{
+        name: "custom1",
         description: "desc",
-        target_kind: "linux",
         config_yaml: [
           "mproxy:",
           "  runtime:",
@@ -352,14 +359,40 @@ describe("gomtm config control-plane routes", () => {
           "      wrapper_secret: KEEP_ME",
           "",
         ].join("\n"),
+      }],
+      error: null,
+    });
+    rpc.mockResolvedValueOnce({
+      data: [{ name: "custom1", description: "desc", config_yaml: "server:\n  listen: :8383\n" }],
+      error: null,
+    });
+
+    const response = await app.request("http://example.com/api/cf/gomtm/config-profiles/custom1", {
+      method: "PUT",
+      headers: {
+        ...trustedDashboardHeaders,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        description: "desc",
+        config_yaml: [
+          "mproxy:",
+          "  runtime:",
+          "    enable: true",
+          "  entries:",
+          "    vmess:",
+          "      enable: true",
+          "      transport: ws",
+          "      wrapper_secret: DIFFERENT_SECRET",
+          "",
+        ].join("\n"),
       }),
     });
 
     expect(response.status).toBe(200);
-    expect(rpc).toHaveBeenCalledWith("gomtm_config_profile_upsert", {
+    expect(rpc).toHaveBeenNthCalledWith(2, "gomtm_config_profile_upsert", {
       p_name: "custom1",
       p_description: "desc",
-      p_target_kind: "linux",
       p_config_yaml: expect.stringContaining("wrapper_secret: KEEP_ME"),
     });
   });
@@ -373,7 +406,6 @@ describe("gomtm config control-plane routes", () => {
       },
       body: JSON.stringify({
         description: "desc",
-        target_kind: "linux",
         config_yaml: "mproxy:\n  entries:\n    vmess: [\n",
       }),
     });
@@ -392,7 +424,6 @@ describe("gomtm config control-plane routes", () => {
       },
       body: JSON.stringify({
         description: "desc",
-        target_kind: "linux",
         config_yaml: [
           "mproxy:",
           "  runtime:",
@@ -416,6 +447,10 @@ describe("gomtm config control-plane routes", () => {
 
   it("returns a stable 500 when singleton upsert RPC returns an empty array", async () => {
     rpc.mockResolvedValueOnce({
+      data: [{ name: "custom1", description: "desc", config_yaml: "server:\n  listen: :7373\n" }],
+      error: null,
+    });
+    rpc.mockResolvedValueOnce({
       data: [],
       error: null,
     });
@@ -428,7 +463,6 @@ describe("gomtm config control-plane routes", () => {
       },
       body: JSON.stringify({
         description: "desc",
-        target_kind: "linux",
         config_yaml: "server:\n  listen: :8383\n",
       }),
     });
@@ -437,39 +471,18 @@ describe("gomtm config control-plane routes", () => {
     expect(await response.json()).toEqual({ error: "failed to save config profile" });
   });
 
-  it("publishes a singleton config profile from an array-shaped RPC response", async () => {
-    rpc.mockResolvedValueOnce({
-      data: [{ name: "custom1", status: "published", published_version: 2 }],
-      error: null,
-    });
-
-    const response = await app.request("http://example.com/api/cf/gomtm/config-profiles/custom1/publish", {
-      method: "POST",
-      headers: trustedDashboardHeaders,
-    });
-
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ name: "custom1", status: "published", published_version: 2 });
-  });
-
-  it("returns 404 when singleton publish RPC returns an empty array", async () => {
-    rpc.mockResolvedValueOnce({
-      data: [],
-      error: null,
-    });
-
+  it("does not expose a publish route contract anymore", async () => {
     const response = await app.request("http://example.com/api/cf/gomtm/config-profiles/custom1/publish", {
       method: "POST",
       headers: trustedDashboardHeaders,
     });
 
     expect(response.status).toBe(404);
-    expect(await response.json()).toEqual({ error: "not found" });
   });
 
-  it("issues a signed runtime delivery URL with the published runtime version", async () => {
+  it("issues a signed runtime delivery URL without version semantics", async () => {
     rpc.mockResolvedValueOnce({
-      data: [{ config_yaml: "kind: worker\nname: custom1\n", version: 2 }],
+      data: [{ name: "custom1", config_yaml: "kind: worker\nname: custom1\n" }],
       error: null,
     });
 
@@ -484,7 +497,7 @@ describe("gomtm config control-plane routes", () => {
     const runtimeUrl = new URL(body.runtime_url);
 
     expect(runtimeUrl.pathname).toBe("/api/cf/gomtm/runtime-configs/custom1");
-    expect(runtimeUrl.searchParams.get("version")).toBe("2");
+    expect(runtimeUrl.searchParams.get("version")).toBeNull();
 
     const expiresAt = Number(runtimeUrl.searchParams.get("expires"));
     const signature = runtimeUrl.searchParams.get("sig") ?? "";
@@ -495,7 +508,6 @@ describe("gomtm config control-plane routes", () => {
         expiresAt,
         signature,
         secret: "test-secret",
-        version: runtimeUrl.searchParams.get("version"),
         now: expiresAt - 1,
       }),
     ).toBe(true);
@@ -504,9 +516,9 @@ describe("gomtm config control-plane routes", () => {
     });
   });
 
-  it("issues a managed startup command with a signed config URL and bootstrap credential", async () => {
+  it("issues a managed startup command for any saved profile without publish gating", async () => {
     rpc.mockResolvedValueOnce({
-      data: [{ config_yaml: "kind: worker\nname: custom1\n", version: 2 }],
+      data: [{ name: "custom1", config_yaml: "kind: worker\nname: custom1\n" }],
       error: null,
     });
     rpc.mockResolvedValueOnce({
@@ -522,7 +534,7 @@ describe("gomtm config control-plane routes", () => {
     expect(response.status).toBe(200);
 
     const body = (await response.json()) as { command: string };
-    expect(body.command).toContain('gomtm server');
+    expect(body.command).toContain("gomtm server");
     expect(body.command).toContain('--bootstrap-credential="gbr_demo"');
     expect(body.command).toContain('--device-name="$(hostname)"');
 
@@ -534,14 +546,13 @@ describe("gomtm config control-plane routes", () => {
     const signature = runtimeUrl.searchParams.get("sig") ?? "";
 
     expect(runtimeUrl.pathname).toBe("/api/cf/gomtm/runtime-configs/custom1");
-    expect(runtimeUrl.searchParams.get("version")).toBe("2");
+    expect(runtimeUrl.searchParams.get("version")).toBeNull();
     expect(
       verifyRuntimeConfigSignature({
         basePath: runtimeUrl.pathname,
         expiresAt,
         signature,
         secret: "test-secret",
-        version: runtimeUrl.searchParams.get("version"),
         now: expiresAt - 1,
       }),
     ).toBe(true);
@@ -555,7 +566,7 @@ describe("gomtm config control-plane routes", () => {
     });
   });
 
-  it("returns 404 instead of issuing a bootstrap credential when no published runtime config exists", async () => {
+  it("returns 404 instead of issuing a bootstrap credential when no saved runtime config exists", async () => {
     rpc.mockResolvedValueOnce({
       data: null,
       error: null,
@@ -608,7 +619,7 @@ describe("gomtm config control-plane routes", () => {
     expect(await response.text()).toBe("forbidden");
   });
 
-  it("returns a stable 500 when runtime-url published-runtime lookup fails", async () => {
+  it("returns a stable 500 when runtime-url current-config lookup fails", async () => {
     rpc.mockResolvedValueOnce({
       data: null,
       error: { code: "XX000", message: "database exploded: secret details" },
@@ -623,11 +634,11 @@ describe("gomtm config control-plane routes", () => {
     expect(await response.json()).toEqual({ error: "failed to issue runtime URL" });
   });
 
-  it("returns a stable 500 when runtime-url published-runtime lookup returns multiple rows", async () => {
+  it("returns a stable 500 when runtime-url current-config lookup returns multiple rows", async () => {
     rpc.mockResolvedValueOnce({
       data: [
-        { config_yaml: "kind: worker\nname: custom1\n", version: 2 },
-        { config_yaml: "kind: worker\nname: custom1\n", version: 3 },
+        { config_yaml: "kind: worker\nname: custom1\n" },
+        { config_yaml: "kind: worker\nname: custom1\n" },
       ],
       error: null,
     });
@@ -641,7 +652,7 @@ describe("gomtm config control-plane routes", () => {
     expect(await response.json()).toEqual({ error: "failed to issue runtime URL" });
   });
 
-  it("returns 404 when runtime-url published-runtime lookup finds no record", async () => {
+  it("returns 404 when runtime-url current-config lookup finds no record", async () => {
     rpc.mockResolvedValueOnce({
       data: null,
       error: null,
@@ -656,27 +667,10 @@ describe("gomtm config control-plane routes", () => {
     expect(await response.json()).toEqual({ error: "not found" });
   });
 
-  it("rejects runtime config delivery when the signed version query param is tampered", async () => {
-    const signed = signRuntimeConfigPath({
-      basePath: "/api/cf/gomtm/runtime-configs/custom1",
-      expiresAt: 1_900_000_000,
-      version: "2",
-      secret: "test-secret",
-    });
-
-    const response = await app.request(
-      `http://example.com/api/cf/gomtm/runtime-configs/custom1?version=3&expires=${signed.expiresAt}&sig=${signed.signature}`,
-    );
-
-    expect(response.status).toBe(403);
-    expect(await response.text()).toBe("forbidden");
-  });
-
-  it("returns 404 when a signed versioned runtime URL resolves to a different published version", async () => {
+  it("delivers runtime config YAML even if an irrelevant version query param is appended", async () => {
     rpc.mockResolvedValueOnce({
       data: {
         config_yaml: "kind: worker\nname: custom1\n",
-        version: 3,
       },
       error: null,
     });
@@ -684,16 +678,15 @@ describe("gomtm config control-plane routes", () => {
     const signed = signRuntimeConfigPath({
       basePath: "/api/cf/gomtm/runtime-configs/custom1",
       expiresAt: 1_900_000_000,
-      version: "2",
       secret: "test-secret",
     });
 
     const response = await app.request(
-      `http://example.com/api/cf/gomtm/runtime-configs/custom1?version=2&expires=${signed.expiresAt}&sig=${signed.signature}`,
+      `http://example.com/api/cf/gomtm/runtime-configs/custom1?version=999&expires=${signed.expiresAt}&sig=${signed.signature}`,
     );
 
-    expect(response.status).toBe(404);
-    expect(await response.text()).toBe("not found");
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("kind: worker\nname: custom1\n");
   });
 
   it("delivers runtime config YAML with no-store when the signature is valid", async () => {
@@ -707,7 +700,6 @@ describe("gomtm config control-plane routes", () => {
     const signed = signRuntimeConfigPath({
       basePath: "/api/cf/gomtm/runtime-configs/custom1",
       expiresAt: 1_900_000_000,
-      version: null,
       secret: "test-secret",
     });
 
@@ -729,7 +721,6 @@ describe("gomtm config control-plane routes", () => {
       data: [
         {
           config_yaml: "kind: worker\nname: custom1\n",
-          version: 1,
         },
       ],
       error: null,
@@ -738,7 +729,6 @@ describe("gomtm config control-plane routes", () => {
     const signed = signRuntimeConfigPath({
       basePath: "/api/cf/gomtm/runtime-configs/custom1",
       expiresAt: 1_900_000_000,
-      version: null,
       secret: "test-secret",
     });
 
@@ -759,7 +749,6 @@ describe("gomtm config control-plane routes", () => {
     const signed = signRuntimeConfigPath({
       basePath: "/api/cf/gomtm/runtime-configs/custom1",
       expiresAt: 1_900_000_000,
-      version: null,
       secret: "test-secret",
     });
 

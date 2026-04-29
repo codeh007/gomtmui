@@ -8,7 +8,6 @@ import { ConfigListView } from "./config-list-view";
 
 const fetchConfigProfiles = vi.fn();
 const fetchStartupCommand = vi.fn();
-const publishConfigProfile = vi.fn();
 const toastSuccess = vi.fn();
 const toastError = vi.fn();
 const pushMock = vi.fn();
@@ -16,7 +15,6 @@ const pushMock = vi.fn();
 vi.mock("@/lib/gomtm-configs/api", () => ({
   fetchConfigProfiles: (...args: unknown[]) => fetchConfigProfiles(...args),
   fetchStartupCommand: (...args: unknown[]) => fetchStartupCommand(...args),
-  publishConfigProfile: (...args: unknown[]) => publishConfigProfile(...args),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -42,10 +40,6 @@ vi.mock("mtxuilib/ui/card", () => ({
   CardTitle: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   CardDescription: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   CardContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-}));
-
-vi.mock("mtxuilib/ui/badge", () => ({
-  Badge: ({ children }: { children: ReactNode }) => <span>{children}</span>,
 }));
 
 vi.mock("mtxuilib/ui/table", () => ({
@@ -77,23 +71,18 @@ describe("ConfigListView", () => {
     cleanup();
     fetchConfigProfiles.mockReset();
     fetchStartupCommand.mockReset();
-    publishConfigProfile.mockReset();
     toastSuccess.mockReset();
     toastError.mockReset();
     pushMock.mockReset();
     vi.restoreAllMocks();
   });
 
-  it("shows lifecycle-focused columns and copies the startup command", async () => {
+  it("shows only current-config columns and copies the startup command", async () => {
     fetchConfigProfiles.mockResolvedValue({
       items: [
         {
           name: "custom1",
           description: "Demo profile",
-          target_kind: "linux",
-          status: "published",
-          current_version: 3,
-          published_version: 2,
           updated_at: "2026-04-29T03:00:00Z",
         },
       ],
@@ -113,11 +102,9 @@ describe("ConfigListView", () => {
 
     await screen.findByText("custom1");
 
-    expect(screen.queryByRole("columnheader", { name: "目标" })).toBeNull();
-    expect(screen.queryByRole("columnheader", { name: "Published" })).toBeNull();
+    expect(screen.queryByRole("columnheader", { name: "状态" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "发布" })).toBeNull();
     expect(screen.getByText("Demo profile")).toBeTruthy();
-    expect(screen.queryByText("Demo profile · linux")).toBeNull();
-    expect(screen.queryByText("linux")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "复制启动命令" }));
 
@@ -129,29 +116,31 @@ describe("ConfigListView", () => {
     });
   });
 
-  it("disables startup-command copy for draft profiles", async () => {
+  it("keeps startup-command copy available for any saved profile", async () => {
     fetchConfigProfiles.mockResolvedValue({
       items: [
         {
-          name: "draft-config",
-          description: "Draft profile",
-          target_kind: "linux",
-          status: "draft",
-          current_version: 3,
-          published_version: null,
+          name: "saved-config",
+          description: "Saved profile",
           updated_at: "2026-04-29T03:00:00Z",
         },
       ],
     });
+    fetchStartupCommand.mockResolvedValue({
+      command: 'gomtm server --config="https://example.com/api/cf/gomtm/runtime-configs/saved-config?sig=abc" --bootstrap-credential="gbr_demo" --device-name="$(hostname)"',
+    });
 
     renderView();
 
-    await screen.findByText("draft-config");
+    await screen.findByText("saved-config");
 
     const copyButton = screen.getByRole("button", { name: "复制启动命令" }) as HTMLButtonElement;
-    expect(copyButton.disabled).toBe(true);
+    expect(copyButton.disabled).toBe(false);
 
     fireEvent.click(copyButton);
-    expect(fetchStartupCommand).not.toHaveBeenCalled();
+
+    await waitFor(() => {
+      expect(fetchStartupCommand.mock.calls[0]?.[0]).toBe("saved-config");
+    });
   });
 });

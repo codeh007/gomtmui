@@ -63,7 +63,6 @@ type CAInitRpcClient = {
 
 type RuntimeConfigRecord = {
   config_yaml?: string | null;
-  version?: number | null;
 };
 
 type RuntimeConfigRpcClient = {
@@ -92,7 +91,6 @@ type ResolvedVmessExtract = {
 
 const selectedServerRuntimeSchema = z.object({
   config_profile_name: z.string().min(1),
-  config_profile_version: z.coerce.string().min(1),
   vmess_wrapper: z.object({
     enabled: z.boolean(),
     path: z.string().optional(),
@@ -414,21 +412,17 @@ async function resolveVmessWrapperProfile(c: Context<AppContext>, resolved: Reso
   }
 
   const configClient = getSupabase(c) as unknown as RuntimeConfigRpcClient;
-  const runtimeConfig = await configClient.rpc("gomtm_runtime_config_get", {
-    p_name: serverRuntime.config_profile_name,
-  });
+	const runtimeConfig = await configClient.rpc("gomtm_runtime_config_get", {
+		p_name: serverRuntime.config_profile_name,
+	});
   if (runtimeConfig.error) {
     return jsonNoStore({ error: runtimeConfig.error.message }, 502);
   }
 
-  const configYaml = normalizeSingletonRpcRow(runtimeConfig.data)?.config_yaml?.trim() ?? "";
-  const runtimeConfigVersion = normalizeSingletonRpcRow(runtimeConfig.data)?.version;
-  if (!configYaml) {
-    return jsonNoStore({ error: "published runtime config not found" }, 404);
-  }
-  if (String(runtimeConfigVersion ?? "") !== serverRuntime.config_profile_version) {
-    return jsonNoStore({ error: "selected gomtm server runtime config version does not match published config" }, 409);
-  }
+	const configYaml = normalizeSingletonRpcRow(runtimeConfig.data)?.config_yaml?.trim() ?? "";
+	if (!configYaml) {
+		return jsonNoStore({ error: "runtime config not found" }, 404);
+	}
 
   let secretB64: string;
   try {
