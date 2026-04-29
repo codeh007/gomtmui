@@ -1,46 +1,50 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  buildDeviceStateItems,
-  buildDeviceStateRecord,
-  canStartAndroidHostDeviceService,
-  canStopAndroidHostDeviceService,
-  formatManagedRuntimePlatform,
-  resolveAndroidHostRuntimeDevice,
-  waitForPolledValue,
+	buildPresenceBadge,
+	canStartAndroidHostDeviceService,
+	canStopAndroidHostDeviceService,
+	DEVICE_ONLINE_TIMEOUT_MS,
+	formatManagedRuntimePlatform,
+	isDeviceOnline,
+	resolveAndroidHostRuntimeDevice,
+	waitForPolledValue,
 } from "./device-state";
 
 afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("buildDeviceStateItems", () => {
-  it("returns canonical activation, presence, and runtime items", () => {
-    expect(
-      buildDeviceStateItems({
-        activationStatus: "activating",
-        presenceStatus: "online",
-        runtimeStatus: "ready",
-      }),
-    ).toEqual([
-      { label: "激活", value: "activating", variant: "secondary" },
-      { label: "在线", value: "online", variant: "default" },
-      { label: "运行时", value: "ready", variant: "default" },
-    ]);
-  });
+describe("isDeviceOnline", () => {
+	it("returns true when last_seen_at is inside the timeout window", () => {
+		const now = Date.parse("2026-04-29T10:01:00Z");
+		expect(isDeviceOnline("2026-04-29T10:00:30Z", now, DEVICE_ONLINE_TIMEOUT_MS)).toBe(true);
+	});
 
-  it("keeps linux runtime rows on the canonical activation, presence, and runtime surface", () => {
-    expect(
-      buildDeviceStateRecord({
-        activationStatus: "active",
-        presenceStatus: "online",
-        runtimeStatus: "ready",
-      }),
-    ).toEqual({
-      activation: { label: "激活", value: "active", variant: "default" },
-      presence: { label: "在线", value: "online", variant: "default" },
-      runtime: { label: "运行时", value: "ready", variant: "default" },
-    });
-  });
+	it("returns false when last_seen_at is missing or expired", () => {
+		const now = Date.parse("2026-04-29T10:05:00Z");
+		expect(isDeviceOnline(null, now, DEVICE_ONLINE_TIMEOUT_MS)).toBe(false);
+		expect(isDeviceOnline("2026-04-29T10:00:00Z", now, DEVICE_ONLINE_TIMEOUT_MS)).toBe(false);
+	});
+});
+
+describe("buildPresenceBadge", () => {
+	it("returns 在线 for a fresh heartbeat", () => {
+		const now = Date.parse("2026-04-29T10:01:00Z");
+		expect(buildPresenceBadge("2026-04-29T10:00:30Z", now, DEVICE_ONLINE_TIMEOUT_MS)).toEqual({
+			label: "在线",
+			value: "online",
+			variant: "default",
+		});
+	});
+
+	it("returns 离线 when heartbeat is missing or expired", () => {
+		const now = Date.parse("2026-04-29T10:05:00Z");
+		expect(buildPresenceBadge(null, now, DEVICE_ONLINE_TIMEOUT_MS)).toEqual({
+			label: "离线",
+			value: "offline",
+			variant: "destructive",
+		});
+	});
 });
 
 describe("formatManagedRuntimePlatform", () => {
@@ -115,28 +119,24 @@ describe("canStopAndroidHostDeviceService", () => {
 describe("resolveAndroidHostRuntimeDevice", () => {
   it("matches the exact hostKind/packageName pair", () => {
     expect(
-      resolveAndroidHostRuntimeDevice(
-        [
-          {
-            id: "device-1",
-            activationStatus: "inactive",
-            presenceStatus: "offline",
-            runtimeStatus: "stopped",
-            lastSeenAt: null,
-            lastError: null,
-            hostKind: "android-host",
-            packageName: "com.gomtm.one",
-          },
-          {
-            id: "device-2",
-            activationStatus: "inactive",
-            presenceStatus: "offline",
-            runtimeStatus: "stopped",
-            lastSeenAt: null,
-            lastError: null,
-            hostKind: "android-host",
-            packageName: "com.gomtm.two",
-          },
+		resolveAndroidHostRuntimeDevice(
+			[
+				{
+					id: "device-1",
+					lastSeenAt: null,
+					lastError: null,
+					archivedAt: null,
+					hostKind: "android-host",
+					packageName: "com.gomtm.one",
+				},
+				{
+					id: "device-2",
+					lastSeenAt: null,
+					lastError: null,
+					archivedAt: null,
+					hostKind: "android-host",
+					packageName: "com.gomtm.two",
+				},
         ],
         {
           hostKind: "android-host",
@@ -148,18 +148,16 @@ describe("resolveAndroidHostRuntimeDevice", () => {
 
   it("returns null when packageName does not match", () => {
     expect(
-      resolveAndroidHostRuntimeDevice(
-        [
-          {
-            id: "device-1",
-            activationStatus: "inactive",
-            presenceStatus: "offline",
-            runtimeStatus: "stopped",
-            lastSeenAt: null,
-            lastError: null,
-            hostKind: "android-host",
-            packageName: "com.gomtm.one",
-          },
+		resolveAndroidHostRuntimeDevice(
+			[
+				{
+					id: "device-1",
+					lastSeenAt: null,
+					lastError: null,
+					archivedAt: null,
+					hostKind: "android-host",
+					packageName: "com.gomtm.one",
+				},
         ],
         {
           hostKind: "android-host",

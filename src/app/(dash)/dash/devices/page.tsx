@@ -3,176 +3,168 @@ import { Card, CardContent, CardHeader, CardTitle } from "mtxuilib/ui/card";
 import { ScrollArea } from "mtxuilib/ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "mtxuilib/ui/table";
 import { DashContent, DashHeaders } from "@/components/dash-layout";
-import { createClient } from "@/lib/supabase/server";
 import { AndroidHostActivationCard } from "@/components/devices/android-host-activation-card";
-import { buildDeviceStateRecord, formatManagedRuntimePlatform, type AndroidHostRuntimeDevice } from "@/components/devices/device-state";
+import { buildPresenceBadge, formatManagedRuntimePlatform, type AndroidHostRuntimeDevice } from "@/components/devices/device-state";
+import { createClient } from "@/lib/supabase/server";
+import { archiveDeviceAction } from "./actions";
 
 interface DeviceRow {
-  id: string;
-  created_at: string;
-  updated_at: string;
-  name: string;
-  platform: string;
-  owner_user_id: string;
-  last_seen_at: string | null;
-  tags: string[];
-  activation_status: string;
-  presence_status: string;
-  runtime_status: string;
-  last_error: string | null;
-  metadata: Record<string, unknown> | null;
+	id: string;
+	name: string;
+	platform: string;
+	last_seen_at: string | null;
+	archived_at: string | null;
+	tags: string[];
+	last_error: string | null;
+	metadata: Record<string, unknown> | null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function formatTime(value: string | null) {
-  if (!value) {
-    return "-";
-  }
+	if (!value) {
+		return "-";
+	}
 
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
+	const date = new Date(value);
+	if (Number.isNaN(date.getTime())) {
+		return value;
+	}
 
-  return new Intl.DateTimeFormat("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
+	return new Intl.DateTimeFormat("zh-CN", {
+		year: "numeric",
+		month: "2-digit",
+		day: "2-digit",
+		hour: "2-digit",
+		minute: "2-digit",
+	}).format(date);
 }
 
 export default async function DevicesPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
+	const supabase = await createClient();
+	const {
+		data: { user },
+		error: authError,
+	} = await supabase.auth.getUser();
 
-  if (authError) {
-    throw authError;
-  }
+	if (authError) {
+		throw authError;
+	}
 
-  if (!user) {
-    throw new Error("未登录，无法读取设备列表");
-  }
+	if (!user) {
+		throw new Error("未登录，无法读取设备列表");
+	}
 
-  const { data: devices, error } = await supabase.rpc("device_list_cursor", {
-    p_limit: 100,
-  });
+	const { data: devices, error } = await supabase.rpc("device_list_cursor", {
+		p_limit: 100,
+	});
 
-  if (error) {
-    throw error;
-  }
+	if (error) {
+		throw error;
+	}
 
-  const rows = (devices ?? []) as DeviceRow[];
-  const androidHostDevices: AndroidHostRuntimeDevice[] = rows.flatMap((device) => {
-    if (device.platform !== "android" || !isRecord(device.metadata) || device.metadata.hostKind !== "android-host") {
-      return [];
-    }
-    return [
-      {
-        id: device.id,
-        activationStatus: device.activation_status,
-        presenceStatus: device.presence_status,
-        runtimeStatus: device.runtime_status,
-        lastSeenAt: device.last_seen_at,
-        lastError: device.last_error,
-        hostKind: typeof device.metadata.hostKind === "string" ? device.metadata.hostKind : null,
-        packageName: typeof device.metadata.packageName === "string" ? device.metadata.packageName : null,
-      },
-    ];
-  });
+	const rows = (devices ?? []) as DeviceRow[];
+	const androidHostDevices: AndroidHostRuntimeDevice[] = rows.flatMap((device) => {
+		if (device.platform !== "android" || !isRecord(device.metadata) || device.metadata.hostKind !== "android-host") {
+			return [];
+		}
 
-  return (
-    <>
-      <DashHeaders>
-        <div className="flex flex-col gap-1">
-          <h1 className="text-lg font-semibold">设备</h1>
-          <p className="text-sm text-muted-foreground">这里统一展示 Linux 与 Android 受管运行时。配置负责启动运行时，devices 负责证明运行时在线。</p>
-        </div>
-      </DashHeaders>
-      <DashContent className="flex-1 overflow-auto">
-        <div className="space-y-6">
-          <AndroidHostActivationCard devices={androidHostDevices} />
-          <Card>
-            <CardHeader>
-              <CardTitle>受管运行时</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {rows.length === 0 ? (
-                <div className="rounded-md border border-dashed p-8 text-sm text-muted-foreground">暂无受管运行时。配置负责启动运行时，devices 负责证明运行时是否在线。</div>
-              ) : (
-                <ScrollArea className="w-full rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>名称</TableHead>
-                        <TableHead>平台</TableHead>
-                        <TableHead>激活</TableHead>
-                        <TableHead>在线</TableHead>
-                        <TableHead>运行时</TableHead>
-                        <TableHead>标签</TableHead>
-                        <TableHead>最近心跳</TableHead>
-                        <TableHead>错误</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {rows.map((device) => {
-                        const state = buildDeviceStateRecord({
-                          activationStatus: device.activation_status,
-                          presenceStatus: device.presence_status,
-                          runtimeStatus: device.runtime_status,
-                        });
+		return [
+			{
+				id: device.id,
+				lastSeenAt: device.last_seen_at,
+				lastError: device.last_error,
+				archivedAt: device.archived_at,
+				hostKind: typeof device.metadata.hostKind === "string" ? device.metadata.hostKind : null,
+				packageName: typeof device.metadata.packageName === "string" ? device.metadata.packageName : null,
+			},
+		];
+	});
 
-                        return <TableRow key={device.id}>
-                          <TableCell>
-                            <div className="flex flex-col gap-1">
-                              <span className="font-medium">{device.name}</span>
-                              <span className="font-mono text-xs text-muted-foreground">{device.id}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell>{formatManagedRuntimePlatform(device.platform)}</TableCell>
-                          <TableCell>
-                            <Badge variant={state.activation.variant}>{state.activation.value}</Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={state.presence.variant}>{state.presence.value}</Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={state.runtime.variant}>{state.runtime.value}</Badge>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-wrap gap-1">
-                              {device.tags.length > 0 ? (
-                                device.tags.map((tag) => (
-                                  <Badge key={tag} variant="outline">
-                                    {tag}
-                                  </Badge>
-                                ))
-                              ) : (
-                                <span className="text-xs text-muted-foreground">-</span>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell>{formatTime(device.last_seen_at)}</TableCell>
-                          <TableCell className="max-w-[200px] truncate text-xs text-muted-foreground">
-                            {device.last_error ?? "-"}
-                          </TableCell>
-                        </TableRow>;
-                      })}
-                    </TableBody>
-                  </Table>
-                </ScrollArea>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      </DashContent>
-    </>
-  );
+	return (
+		<>
+			<DashHeaders>
+				<div className="flex flex-col gap-1">
+					<h1 className="text-lg font-semibold">设备</h1>
+					<p className="text-sm text-muted-foreground">这里统一展示 Linux 与 Android 受管运行时。配置负责启动运行时，devices 负责证明运行时在线。</p>
+				</div>
+			</DashHeaders>
+			<DashContent className="flex-1 overflow-auto">
+				<div className="space-y-6">
+					<AndroidHostActivationCard devices={androidHostDevices} />
+					<Card>
+						<CardHeader>
+							<CardTitle>受管运行时</CardTitle>
+						</CardHeader>
+						<CardContent>
+							{rows.length === 0 ? (
+								<div className="rounded-md border border-dashed p-8 text-sm text-muted-foreground">暂无受管运行时。配置负责启动运行时，devices 负责证明运行时是否在线。</div>
+							) : (
+								<ScrollArea className="w-full rounded-md border">
+									<Table>
+										<TableHeader>
+											<TableRow>
+												<TableHead>名称</TableHead>
+												<TableHead>平台</TableHead>
+												<TableHead>在线</TableHead>
+												<TableHead>标签</TableHead>
+												<TableHead>最近心跳</TableHead>
+												<TableHead>错误</TableHead>
+												<TableHead>操作</TableHead>
+											</TableRow>
+										</TableHeader>
+										<TableBody>
+											{rows.map((device) => {
+												const presence = buildPresenceBadge(device.last_seen_at);
+												const archiveAction = archiveDeviceAction.bind(null, { deviceId: device.id });
+
+												return (
+													<TableRow key={device.id}>
+														<TableCell>
+															<div className="flex flex-col gap-1">
+																<span className="font-medium">{device.name}</span>
+																<span className="font-mono text-xs text-muted-foreground">{device.id}</span>
+															</div>
+														</TableCell>
+														<TableCell>{formatManagedRuntimePlatform(device.platform)}</TableCell>
+														<TableCell>
+															<Badge variant={presence.variant}>{presence.label}</Badge>
+														</TableCell>
+														<TableCell>
+															<div className="flex flex-wrap gap-1">
+																{device.tags.length > 0 ? (
+																	device.tags.map((tag) => (
+																		<Badge key={tag} variant="outline">
+																			{tag}
+																		</Badge>
+																	))
+																) : (
+																	<span className="text-xs text-muted-foreground">-</span>
+																)}
+															</div>
+														</TableCell>
+														<TableCell>{formatTime(device.last_seen_at)}</TableCell>
+														<TableCell className="max-w-[200px] truncate text-xs text-muted-foreground">{device.last_error ?? "-"}</TableCell>
+														<TableCell>
+															<form action={archiveAction}>
+																<button className="text-xs text-muted-foreground underline underline-offset-4" type="submit">
+																	归档设备
+																</button>
+															</form>
+														</TableCell>
+													</TableRow>
+												);
+											})}
+										</TableBody>
+									</Table>
+								</ScrollArea>
+							)}
+						</CardContent>
+					</Card>
+				</div>
+			</DashContent>
+		</>
+	);
 }

@@ -15,8 +15,12 @@ export interface ActivateAndroidHostDeviceInput {
 }
 
 export interface StopAndroidHostDeviceInput {
-  deviceId: string;
-  lastError?: string | null;
+	deviceId: string;
+	lastError?: string | null;
+}
+
+export interface ArchiveDeviceInput {
+	deviceId: string;
 }
 
 async function requireCurrentUser() {
@@ -75,19 +79,32 @@ export async function bindAndroidHostDeviceAction(input: BindAndroidHostDeviceIn
 export async function activateAndroidHostDeviceAction(input: ActivateAndroidHostDeviceInput) {
   const { supabase } = await requireCurrentUser();
 
-  const { data, error } = await supabase.rpc("device_mark_runtime_started", {
-    p_device_id: input.deviceId,
-    p_runtime_status: "booting",
-    p_presence_status: "offline",
-    p_last_error: null,
-  });
+	const { data, error } = await supabase.rpc("device_mark_runtime_started", {
+		p_device_id: input.deviceId,
+		p_last_error: null,
+	});
 
   if (error) {
     throw error;
   }
 
-  revalidatePath("/dash/devices");
-  return data;
+	revalidatePath("/dash/devices");
+	return data;
+}
+
+export async function archiveDeviceAction(input: ArchiveDeviceInput) {
+	const { supabase } = await requireCurrentUser();
+
+	const { data, error } = await supabase.rpc("device_archive", {
+		p_device_id: input.deviceId,
+	});
+
+	if (error) {
+		throw error;
+	}
+
+	revalidatePath("/dash/devices");
+	return data;
 }
 
 export async function stopAndroidHostDeviceAction(input: StopAndroidHostDeviceInput) {

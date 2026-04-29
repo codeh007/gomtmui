@@ -64,39 +64,29 @@ describe("DevicesPage", () => {
       error: null,
     });
     mockRpc.mockResolvedValue({
-      data: [
-        {
-          id: "linux-1",
-          created_at: "2026-04-28T00:00:00Z",
-          updated_at: "2026-04-28T00:00:00Z",
-          name: "CI Linux",
-          platform: "linux",
-          owner_user_id: "user-1",
-          last_seen_at: "2026-04-28T00:00:00Z",
-          tags: ["managed"],
-          activation_status: "active",
-          presence_status: "online",
-          runtime_status: "ready",
-          last_error: null,
-          metadata: {
-            hostKind: "linux-host",
+		data: [
+			{
+				id: "linux-1",
+				name: "CI Linux",
+				platform: "linux",
+				last_seen_at: new Date().toISOString(),
+				archived_at: null,
+				tags: ["managed"],
+				last_error: null,
+				metadata: {
+					hostKind: "linux-host",
           },
         },
-        {
-          id: "android-1",
-          created_at: "2026-04-28T00:00:00Z",
-          updated_at: "2026-04-28T00:00:00Z",
-          name: "Pixel Host",
-          platform: "android",
-          owner_user_id: "user-1",
-          last_seen_at: null,
-          tags: ["android-host"],
-          activation_status: "inactive",
-          presence_status: "offline",
-          runtime_status: "stopped",
-          last_error: null,
-          metadata: {
-            hostKind: "android-host",
+			{
+				id: "android-1",
+				name: "Pixel Host",
+				platform: "android",
+				last_seen_at: null,
+				archived_at: null,
+				tags: ["android-host"],
+				last_error: null,
+				metadata: {
+					hostKind: "android-host",
             packageName: "com.gomtm.host",
           },
         },
@@ -110,16 +100,17 @@ describe("DevicesPage", () => {
     vi.clearAllMocks();
   });
 
-  it("presents linux and android as the same managed runtime surface", async () => {
-    await renderPage();
+	it("presents linux and android as the same managed runtime surface", async () => {
+		await renderPage();
 
     expect(screen.getByText("这里统一展示 Linux 与 Android 受管运行时。配置负责启动运行时，devices 负责证明运行时在线。")).toBeTruthy();
     expect(screen.getByText("受管运行时")).toBeTruthy();
     expect(screen.getByText("Linux")).toBeTruthy();
     expect(screen.getByText("Android")).toBeTruthy();
 
-    expect(screen.getAllByTestId("badge-default").map((node) => node.textContent)).toEqual(
-      expect.arrayContaining(["active", "online", "ready"]),
-    );
-  });
+		expect(screen.getAllByText("在线").length).toBeGreaterThan(0);
+		expect(screen.getByText("离线")).toBeTruthy();
+		expect(screen.queryByText("激活")).toBeNull();
+		expect(screen.queryByText("运行时")).toBeNull();
+	});
 });
