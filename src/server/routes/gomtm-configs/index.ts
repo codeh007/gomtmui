@@ -257,8 +257,20 @@ gomtmConfigsRoute.post("/config-profiles/:name/runtime-url", async (c) => {
     return c.json({ error: "missing signing secret" }, 500);
   }
 
+  const profileName = c.req.param("name");
+  const runtimeConfig = await getPublishedRuntimeConfig(auth.supabase, profileName);
+  if (runtimeConfig.error) {
+    return createControlPlaneRpcErrorResponse(c, runtimeConfig.error, "failed to issue runtime URL");
+  }
+  if (runtimeConfig.multiple) {
+    return c.json({ error: "failed to issue runtime URL" }, 500);
+  }
+  if (!runtimeConfig.record) {
+    return c.json({ error: "not found" }, 404);
+  }
+
   return c.json({
-    runtime_url: buildSignedRuntimeConfigUrl(c, c.req.param("name"), secret),
+    runtime_url: buildSignedRuntimeConfigUrl(c, profileName, secret, runtimeConfig.record.version),
   });
 });
 
@@ -295,7 +307,7 @@ gomtmConfigsRoute.post("/config-profiles/:name/command", async (c) => {
     {
       p_profile_name: profileName,
       p_target_platform: MANAGED_LINUX_TARGET_PLATFORM,
-      p_device_name: DEFAULT_DEVICE_NAME_EXPRESSION,
+      p_device_name: "",
     },
   );
   if (error) {
@@ -312,7 +324,7 @@ gomtmConfigsRoute.post("/config-profiles/:name/command", async (c) => {
 
   return c.json({
     command: buildManagedLinuxStartupCommand({
-      configUrl: buildSignedRuntimeConfigUrl(c, profileName, secret),
+      configUrl: buildSignedRuntimeConfigUrl(c, profileName, secret, runtimeConfig.record.version),
       bootstrapCredential: bootstrapCredential.record.credential,
       deviceNameExpression: DEFAULT_DEVICE_NAME_EXPRESSION,
     }),
@@ -327,6 +339,7 @@ gomtmConfigsRoute.get("/runtime-configs/:name", async (c) => {
 
   const expiresAt = Number(c.req.query("expires") ?? "0");
   const signature = c.req.query("sig") ?? "";
+  const version = c.req.query("version");
   const basePath = new URL(c.req.url).pathname;
 
   if (
@@ -336,6 +349,7 @@ gomtmConfigsRoute.get("/runtime-configs/:name", async (c) => {
       expiresAt,
       signature,
       secret,
+      version,
       now: Math.floor(Date.now() / 1000),
     })
   ) {
@@ -351,6 +365,9 @@ gomtmConfigsRoute.get("/runtime-configs/:name", async (c) => {
   }
   const runtimeConfig = Array.isArray(data) ? (data[0] ?? null) : data;
   if (!runtimeConfig) {
+    return c.text("not found", 404);
+  }
+  if (version && String(runtimeConfig.version ?? "") !== version) {
     return c.text("not found", 404);
   }
   if (typeof runtimeConfig.config_yaml !== "string") {
@@ -490,16 +507,25 @@ async function getPublishedRuntimeConfig(supabase: GomtmConfigSupabase, profileN
   return { error: null, multiple: false, record: runtimeConfig.record };
 }
 
-function buildSignedRuntimeConfigUrl(c: Context<AppContext>, profileName: string, secret: string) {
+function buildSignedRuntimeConfigUrl(c: Context<AppContext>, profileName: string, secret: string, version?: number | null) {
   const runtimePath = `${ApiPrefix}/gomtm/runtime-configs/${encodeURIComponent(profileName)}`;
+  const normalizedVersion = typeof version === "number" && Number.isFinite(version) ? String(version) : null;
   const expiresAt = Math.floor(Date.now() / 1000) + RUNTIME_URL_TTL_SECONDS;
   const signed = signRuntimeConfigPath({
     basePath: runtimePath,
     expiresAt,
     secret,
+    version: normalizedVersion,
   });
 
-  return new URL(`${runtimePath}?expires=${signed.expiresAt}&sig=${signed.signature}`, c.req.url).toString();
+  const runtimeUrl = new URL(runtimePath, c.req.url);
+  if (normalizedVersion) {
+    runtimeUrl.searchParams.set("version", normalizedVersion);
+  }
+  runtimeUrl.searchParams.set("expires", String(signed.expiresAt));
+  runtimeUrl.searchParams.set("sig", signed.signature);
+
+  return runtimeUrl.toString();
 }
 
 function getRuntimeConfigSigningSecret(c: Context<AppContext>) {

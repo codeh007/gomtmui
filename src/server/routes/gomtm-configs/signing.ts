@@ -2,8 +2,19 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 export const GOMTM_RUNTIME_CONFIG_SIGNING_SECRET_ENV = "GOMTM_RUNTIME_CONFIG_SIGNING_SECRET";
 
-export function signRuntimeConfigPath(input: { basePath: string; expiresAt: number; secret: string }) {
-  const payload = `${input.basePath}:${input.expiresAt}`;
+type RuntimeConfigSigningInput = {
+  basePath: string;
+  expiresAt: number;
+  secret: string;
+  version?: string | null;
+};
+
+function buildRuntimeConfigSignaturePayload(input: Omit<RuntimeConfigSigningInput, "secret">) {
+  return `${input.basePath}:${input.version ?? ""}:${input.expiresAt}`;
+}
+
+export function signRuntimeConfigPath(input: RuntimeConfigSigningInput) {
+  const payload = buildRuntimeConfigSignaturePayload(input);
   const signature = createHmac("sha256", input.secret).update(payload).digest("hex");
   return { expiresAt: input.expiresAt, signature };
 }
@@ -14,6 +25,7 @@ export function verifyRuntimeConfigSignature(input: {
   signature: string;
   secret: string;
   now: number;
+  version?: string | null;
 }) {
   if (!input.signature || input.now > input.expiresAt) {
     return false;
@@ -23,6 +35,7 @@ export function verifyRuntimeConfigSignature(input: {
     basePath: input.basePath,
     expiresAt: input.expiresAt,
     secret: input.secret,
+    version: input.version,
   }).signature;
 
   const expectedBytes = Buffer.from(expected, "utf8");

@@ -43,6 +43,7 @@ describe("gomtm config control-plane routes", () => {
     const signed = signRuntimeConfigPath({
       basePath: "/api/cf/gomtm/runtime-configs/custom1",
       expiresAt: 1_900_000_000,
+      version: "2",
       secret: "test-secret",
     });
 
@@ -52,9 +53,30 @@ describe("gomtm config control-plane routes", () => {
         expiresAt: signed.expiresAt,
         signature: signed.signature,
         secret: "test-secret",
+        version: "2",
         now: signed.expiresAt - 1,
       }),
     ).toBe(true);
+  });
+
+  it("rejects a runtime config signature when the signed version is tampered with", () => {
+    const signed = signRuntimeConfigPath({
+      basePath: "/api/cf/gomtm/runtime-configs/custom1",
+      expiresAt: 1_900_000_000,
+      version: "2",
+      secret: "test-secret",
+    });
+
+    expect(
+      verifyRuntimeConfigSignature({
+        basePath: "/api/cf/gomtm/runtime-configs/custom1",
+        expiresAt: signed.expiresAt,
+        signature: signed.signature,
+        secret: "test-secret",
+        version: "3",
+        now: signed.expiresAt - 1,
+      }),
+    ).toBe(false);
   });
 
   it("rejects an expired runtime config signature", () => {
@@ -64,6 +86,7 @@ describe("gomtm config control-plane routes", () => {
         expiresAt: 100,
         signature: "bad",
         secret: "test-secret",
+        version: null,
         now: 101,
       }),
     ).toBe(false);
@@ -297,7 +320,12 @@ describe("gomtm config control-plane routes", () => {
     expect(await response.json()).toEqual({ error: "not found" });
   });
 
-  it("issues a signed runtime delivery URL", async () => {
+  it("issues a signed runtime delivery URL with the published runtime version", async () => {
+    rpc.mockResolvedValueOnce({
+      data: [{ config_yaml: "kind: worker\nname: custom1\n", version: 2 }],
+      error: null,
+    });
+
     const response = await app.request("http://example.com/api/cf/gomtm/config-profiles/custom1/runtime-url", {
       method: "POST",
       headers: trustedDashboardHeaders,
@@ -309,6 +337,7 @@ describe("gomtm config control-plane routes", () => {
     const runtimeUrl = new URL(body.runtime_url);
 
     expect(runtimeUrl.pathname).toBe("/api/cf/gomtm/runtime-configs/custom1");
+    expect(runtimeUrl.searchParams.get("version")).toBe("2");
 
     const expiresAt = Number(runtimeUrl.searchParams.get("expires"));
     const signature = runtimeUrl.searchParams.get("sig") ?? "";
@@ -319,9 +348,13 @@ describe("gomtm config control-plane routes", () => {
         expiresAt,
         signature,
         secret: "test-secret",
+        version: runtimeUrl.searchParams.get("version"),
         now: expiresAt - 1,
       }),
     ).toBe(true);
+    expect(rpc).toHaveBeenCalledWith("gomtm_runtime_config_get", {
+      p_name: "custom1",
+    });
   });
 
   it("issues a managed startup command with a signed config URL and bootstrap credential", async () => {
@@ -354,12 +387,14 @@ describe("gomtm config control-plane routes", () => {
     const signature = runtimeUrl.searchParams.get("sig") ?? "";
 
     expect(runtimeUrl.pathname).toBe("/api/cf/gomtm/runtime-configs/custom1");
+    expect(runtimeUrl.searchParams.get("version")).toBe("2");
     expect(
       verifyRuntimeConfigSignature({
         basePath: runtimeUrl.pathname,
         expiresAt,
         signature,
         secret: "test-secret",
+        version: runtimeUrl.searchParams.get("version"),
         now: expiresAt - 1,
       }),
     ).toBe(true);
@@ -369,7 +404,7 @@ describe("gomtm config control-plane routes", () => {
     expect(rpc).toHaveBeenNthCalledWith(2, "device_bootstrap_credential_issue", {
       p_profile_name: "custom1",
       p_target_platform: "linux",
-      p_device_name: "$(hostname)",
+      p_device_name: "",
     });
   });
 
@@ -426,6 +461,94 @@ describe("gomtm config control-plane routes", () => {
     expect(await response.text()).toBe("forbidden");
   });
 
+  it("returns a stable 500 when runtime-url published-runtime lookup fails", async () => {
+    rpc.mockResolvedValueOnce({
+      data: null,
+      error: { code: "XX000", message: "database exploded: secret details" },
+    });
+
+    const response = await app.request("http://example.com/api/cf/gomtm/config-profiles/custom1/runtime-url", {
+      method: "POST",
+      headers: trustedDashboardHeaders,
+    });
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: "failed to issue runtime URL" });
+  });
+
+  it("returns a stable 500 when runtime-url published-runtime lookup returns multiple rows", async () => {
+    rpc.mockResolvedValueOnce({
+      data: [
+        { config_yaml: "kind: worker\nname: custom1\n", version: 2 },
+        { config_yaml: "kind: worker\nname: custom1\n", version: 3 },
+      ],
+      error: null,
+    });
+
+    const response = await app.request("http://example.com/api/cf/gomtm/config-profiles/custom1/runtime-url", {
+      method: "POST",
+      headers: trustedDashboardHeaders,
+    });
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: "failed to issue runtime URL" });
+  });
+
+  it("returns 404 when runtime-url published-runtime lookup finds no record", async () => {
+    rpc.mockResolvedValueOnce({
+      data: null,
+      error: null,
+    });
+
+    const response = await app.request("http://example.com/api/cf/gomtm/config-profiles/custom1/runtime-url", {
+      method: "POST",
+      headers: trustedDashboardHeaders,
+    });
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: "not found" });
+  });
+
+  it("rejects runtime config delivery when the signed version query param is tampered", async () => {
+    const signed = signRuntimeConfigPath({
+      basePath: "/api/cf/gomtm/runtime-configs/custom1",
+      expiresAt: 1_900_000_000,
+      version: "2",
+      secret: "test-secret",
+    });
+
+    const response = await app.request(
+      `http://example.com/api/cf/gomtm/runtime-configs/custom1?version=3&expires=${signed.expiresAt}&sig=${signed.signature}`,
+    );
+
+    expect(response.status).toBe(403);
+    expect(await response.text()).toBe("forbidden");
+  });
+
+  it("returns 404 when a signed versioned runtime URL resolves to a different published version", async () => {
+    rpc.mockResolvedValueOnce({
+      data: {
+        config_yaml: "kind: worker\nname: custom1\n",
+        version: 3,
+      },
+      error: null,
+    });
+
+    const signed = signRuntimeConfigPath({
+      basePath: "/api/cf/gomtm/runtime-configs/custom1",
+      expiresAt: 1_900_000_000,
+      version: "2",
+      secret: "test-secret",
+    });
+
+    const response = await app.request(
+      `http://example.com/api/cf/gomtm/runtime-configs/custom1?version=2&expires=${signed.expiresAt}&sig=${signed.signature}`,
+    );
+
+    expect(response.status).toBe(404);
+    expect(await response.text()).toBe("not found");
+  });
+
   it("delivers runtime config YAML with no-store when the signature is valid", async () => {
     rpc.mockResolvedValueOnce({
       data: {
@@ -437,6 +560,7 @@ describe("gomtm config control-plane routes", () => {
     const signed = signRuntimeConfigPath({
       basePath: "/api/cf/gomtm/runtime-configs/custom1",
       expiresAt: 1_900_000_000,
+      version: null,
       secret: "test-secret",
     });
 
@@ -467,6 +591,7 @@ describe("gomtm config control-plane routes", () => {
     const signed = signRuntimeConfigPath({
       basePath: "/api/cf/gomtm/runtime-configs/custom1",
       expiresAt: 1_900_000_000,
+      version: null,
       secret: "test-secret",
     });
 
@@ -487,6 +612,7 @@ describe("gomtm config control-plane routes", () => {
     const signed = signRuntimeConfigPath({
       basePath: "/api/cf/gomtm/runtime-configs/custom1",
       expiresAt: 1_900_000_000,
+      version: null,
       secret: "test-secret",
     });
 
