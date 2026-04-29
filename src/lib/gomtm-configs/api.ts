@@ -2,7 +2,7 @@ import {
   GomtmConfigProfileListResponseSchema,
   GomtmConfigProfileSchema,
   GomtmConfigProfileUpsertSchema,
-  GomtmRuntimeUrlResponseSchema,
+  GomtmStartupCommandResponseSchema,
   type GomtmConfigProfileUpsert,
 } from "@/components/gomtm-configs/config-schema";
 
@@ -80,8 +80,8 @@ export async function publishConfigProfile(name: string) {
   return GomtmConfigProfileSchema.parse(await response.json());
 }
 
-export async function fetchRuntimeConfigUrl(name: string) {
-  const response = await fetch(`/api/cf/gomtm/config-profiles/${encodeURIComponent(name)}/runtime-url`, {
+export async function fetchStartupCommand(name: string) {
+  const response = await fetch(`/api/cf/gomtm/config-profiles/${encodeURIComponent(name)}/command`, {
     method: "POST",
     credentials: "include",
   });
@@ -90,5 +90,5 @@ export async function fetchRuntimeConfigUrl(name: string) {
     await readApiError(response);
   }
 
-  return GomtmRuntimeUrlResponseSchema.parse(await response.json());
+  return GomtmStartupCommandResponseSchema.parse(await response.json());
 }

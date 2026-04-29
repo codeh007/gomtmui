@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildDeviceStateItems, canStartAndroidHostDeviceService, canStopAndroidHostDeviceService, resolveAndroidHostRuntimeDevice, waitForPolledValue } from "./device-state";
+import {
+  buildDeviceStateItems,
+  buildDeviceStateRecord,
+  canStartAndroidHostDeviceService,
+  canStopAndroidHostDeviceService,
+  formatManagedRuntimePlatform,
+  resolveAndroidHostRuntimeDevice,
+  waitForPolledValue,
+} from "./device-state";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -18,6 +26,31 @@ describe("buildDeviceStateItems", () => {
       { label: "在线", value: "online", variant: "default" },
       { label: "运行时", value: "ready", variant: "default" },
     ]);
+  });
+
+  it("keeps linux runtime rows on the canonical activation, presence, and runtime surface", () => {
+    expect(
+      buildDeviceStateRecord({
+        activationStatus: "active",
+        presenceStatus: "online",
+        runtimeStatus: "ready",
+      }),
+    ).toEqual({
+      activation: { label: "激活", value: "active", variant: "default" },
+      presence: { label: "在线", value: "online", variant: "default" },
+      runtime: { label: "运行时", value: "ready", variant: "default" },
+    });
+  });
+});
+
+describe("formatManagedRuntimePlatform", () => {
+  it("formats linux and android as the shared managed runtime platforms", () => {
+    expect(formatManagedRuntimePlatform("linux")).toBe("Linux");
+    expect(formatManagedRuntimePlatform(" android ")).toBe("Android");
+  });
+
+  it("falls back to normalized lowercase text for unknown platforms", () => {
+    expect(formatManagedRuntimePlatform("Darwin")).toBe("darwin");
   });
 });
 

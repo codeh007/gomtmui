@@ -17,7 +17,7 @@ export default function GomtmConfigDetailPage({ params }: { params: { name: stri
       <DashHeaders>
         <div className="flex flex-col">
           <h1 className="text-lg font-semibold">配置详情</h1>
-          <p className="text-xs text-muted-foreground">编辑 `{profileName}` 的 draft / published runtime 配置</p>
+          <p className="text-xs text-muted-foreground">编辑 `{profileName}` 的 draft / published 配置，默认使用结构化表单，YAML 仅保留给高级模式</p>
         </div>
       </DashHeaders>
       <DashContent className="flex flex-col gap-6 overflow-auto p-4 md:p-6">

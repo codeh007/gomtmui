@@ -10,10 +10,13 @@ import {
   signRuntimeConfigPath,
   verifyRuntimeConfigSignature,
 } from "./signing";
+import { buildManagedLinuxStartupCommand } from "./command";
 
 export const gomtmConfigsRoute = new Hono<AppContext>();
 
 const RUNTIME_URL_TTL_SECONDS = 60 * 60;
+const MANAGED_LINUX_TARGET_PLATFORM = "linux";
+const DEFAULT_DEVICE_NAME_EXPRESSION = "$(hostname)";
 const runtimeConfigHeaders = {
   "cache-control": "no-store",
   "content-type": "text/yaml; charset=utf-8",
@@ -55,6 +58,11 @@ type GomtmConfigVersionRecord = {
 type GomtmRuntimeConfigRecord = {
   config_yaml?: string | null;
   version?: number | null;
+};
+
+type DeviceBootstrapCredentialRecord = {
+  credential?: string | null;
+  expires_at?: string | null;
 };
 
 type GomtmConfigSupabase = {
@@ -249,16 +257,65 @@ gomtmConfigsRoute.post("/config-profiles/:name/runtime-url", async (c) => {
     return c.json({ error: "missing signing secret" }, 500);
   }
 
-  const runtimePath = `${ApiPrefix}/gomtm/runtime-configs/${encodeURIComponent(c.req.param("name"))}`;
-  const expiresAt = Math.floor(Date.now() / 1000) + RUNTIME_URL_TTL_SECONDS;
-  const signed = signRuntimeConfigPath({
-    basePath: runtimePath,
-    expiresAt,
-    secret,
+  return c.json({
+    runtime_url: buildSignedRuntimeConfigUrl(c, c.req.param("name"), secret),
   });
+});
+
+gomtmConfigsRoute.post("/config-profiles/:name/command", async (c) => {
+  const trustedResponse = requireTrustedControlPlaneRequest(c);
+  if (trustedResponse) {
+    return trustedResponse;
+  }
+
+  const auth = await getAuthenticatedSupabase(c);
+  if (auth.response) {
+    return auth.response;
+  }
+
+  const secret = getRuntimeConfigSigningSecret(c);
+  if (!secret) {
+    return c.json({ error: "missing signing secret" }, 500);
+  }
+
+  const profileName = c.req.param("name");
+  const runtimeConfig = await getPublishedRuntimeConfig(auth.supabase, profileName);
+  if (runtimeConfig.error) {
+    return createControlPlaneRpcErrorResponse(c, runtimeConfig.error, "failed to issue startup command");
+  }
+  if (runtimeConfig.multiple) {
+    return c.json({ error: "failed to issue startup command" }, 500);
+  }
+  if (!runtimeConfig.record) {
+    return c.json({ error: "not found" }, 404);
+  }
+
+  const { data, error } = await auth.supabase.rpc<DeviceBootstrapCredentialRecord[] | DeviceBootstrapCredentialRecord | null>(
+    "device_bootstrap_credential_issue",
+    {
+      p_profile_name: profileName,
+      p_target_platform: MANAGED_LINUX_TARGET_PLATFORM,
+      p_device_name: DEFAULT_DEVICE_NAME_EXPRESSION,
+    },
+  );
+  if (error) {
+    return createControlPlaneRpcErrorResponse(c, error, "failed to issue startup command");
+  }
+
+  const bootstrapCredential = normalizeSingletonRpcRow(data);
+  if (bootstrapCredential.multiple) {
+    return c.json({ error: "failed to issue startup command" }, 500);
+  }
+  if (!bootstrapCredential.record?.credential) {
+    return c.json({ error: "failed to issue startup command" }, 500);
+  }
 
   return c.json({
-    runtime_url: new URL(`${runtimePath}?expires=${signed.expiresAt}&sig=${signed.signature}`, c.req.url).toString(),
+    command: buildManagedLinuxStartupCommand({
+      configUrl: buildSignedRuntimeConfigUrl(c, profileName, secret),
+      bootstrapCredential: bootstrapCredential.record.credential,
+      deviceNameExpression: DEFAULT_DEVICE_NAME_EXPRESSION,
+    }),
   });
 });
 
@@ -412,6 +469,37 @@ function createRuntimeConfigErrorResponse(c: Context<AppContext>, error: RpcErro
   }
 
   return c.text("runtime config unavailable", 500);
+}
+
+async function getPublishedRuntimeConfig(supabase: GomtmConfigSupabase, profileName: string) {
+  const { data, error } = await supabase.rpc<GomtmRuntimeConfigRecord[] | GomtmRuntimeConfigRecord | null>("gomtm_runtime_config_get", {
+    p_name: profileName,
+  });
+  if (error) {
+    return { error, multiple: false, record: null as GomtmRuntimeConfigRecord | null };
+  }
+
+  const runtimeConfig = normalizeSingletonRpcRow(data);
+  if (runtimeConfig.multiple) {
+    return { error: null, multiple: true, record: null as GomtmRuntimeConfigRecord | null };
+  }
+  if (!runtimeConfig.record || typeof runtimeConfig.record.config_yaml !== "string") {
+    return { error: null, multiple: false, record: null as GomtmRuntimeConfigRecord | null };
+  }
+
+  return { error: null, multiple: false, record: runtimeConfig.record };
+}
+
+function buildSignedRuntimeConfigUrl(c: Context<AppContext>, profileName: string, secret: string) {
+  const runtimePath = `${ApiPrefix}/gomtm/runtime-configs/${encodeURIComponent(profileName)}`;
+  const expiresAt = Math.floor(Date.now() / 1000) + RUNTIME_URL_TTL_SECONDS;
+  const signed = signRuntimeConfigPath({
+    basePath: runtimePath,
+    expiresAt,
+    secret,
+  });
+
+  return new URL(`${runtimePath}?expires=${signed.expiresAt}&sig=${signed.signature}`, c.req.url).toString();
 }
 
 function getRuntimeConfigSigningSecret(c: Context<AppContext>) {

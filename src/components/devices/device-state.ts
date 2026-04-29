@@ -12,6 +12,12 @@ export interface DeviceStateItem {
   variant: DeviceBadgeVariant;
 }
 
+export interface DeviceStateRecord {
+  activation: DeviceStateItem;
+  presence: DeviceStateItem;
+  runtime: DeviceStateItem;
+}
+
 export interface AndroidHostStartStateInput {
   activationSurfaceCanStart: boolean;
   boundDeviceId: string | null;
@@ -105,6 +111,27 @@ export function buildDeviceStateItems(input: DeviceStateItemsInput): DeviceState
     { label: "在线", value: presenceStatus, variant: presenceVariant(presenceStatus) },
     { label: "运行时", value: runtimeStatus, variant: runtimeVariant(runtimeStatus) },
   ];
+}
+
+export function buildDeviceStateRecord(input: DeviceStateItemsInput): DeviceStateRecord {
+  const [activation, presence, runtime] = buildDeviceStateItems(input);
+  return {
+    activation,
+    presence,
+    runtime,
+  };
+}
+
+export function formatManagedRuntimePlatform(platform: string | null | undefined) {
+  const value = normalizeStatus(platform, "unknown").toLowerCase();
+  switch (value) {
+    case "android":
+      return "Android";
+    case "linux":
+      return "Linux";
+    default:
+      return value;
+  }
 }
 
 export function canStartAndroidHostDeviceService(input: AndroidHostStartStateInput) {

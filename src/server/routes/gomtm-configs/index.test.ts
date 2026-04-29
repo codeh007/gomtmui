@@ -324,6 +324,74 @@ describe("gomtm config control-plane routes", () => {
     ).toBe(true);
   });
 
+  it("issues a managed startup command with a signed config URL and bootstrap credential", async () => {
+    rpc.mockResolvedValueOnce({
+      data: [{ config_yaml: "kind: worker\nname: custom1\n", version: 2 }],
+      error: null,
+    });
+    rpc.mockResolvedValueOnce({
+      data: [{ credential: "gbr_demo", expires_at: "2026-04-29T03:30:00Z" }],
+      error: null,
+    });
+
+    const response = await app.request("http://example.com/api/cf/gomtm/config-profiles/custom1/command", {
+      method: "POST",
+      headers: trustedDashboardHeaders,
+    });
+
+    expect(response.status).toBe(200);
+
+    const body = (await response.json()) as { command: string };
+    expect(body.command).toContain('gomtm server');
+    expect(body.command).toContain('--bootstrap-credential="gbr_demo"');
+    expect(body.command).toContain('--device-name="$(hostname)"');
+
+    const configMatch = body.command.match(/--config="([^"]+)"/);
+    expect(configMatch?.[1]).toBeTruthy();
+
+    const runtimeUrl = new URL(configMatch?.[1] ?? "http://invalid.example");
+    const expiresAt = Number(runtimeUrl.searchParams.get("expires"));
+    const signature = runtimeUrl.searchParams.get("sig") ?? "";
+
+    expect(runtimeUrl.pathname).toBe("/api/cf/gomtm/runtime-configs/custom1");
+    expect(
+      verifyRuntimeConfigSignature({
+        basePath: runtimeUrl.pathname,
+        expiresAt,
+        signature,
+        secret: "test-secret",
+        now: expiresAt - 1,
+      }),
+    ).toBe(true);
+    expect(rpc).toHaveBeenNthCalledWith(1, "gomtm_runtime_config_get", {
+      p_name: "custom1",
+    });
+    expect(rpc).toHaveBeenNthCalledWith(2, "device_bootstrap_credential_issue", {
+      p_profile_name: "custom1",
+      p_target_platform: "linux",
+      p_device_name: "$(hostname)",
+    });
+  });
+
+  it("returns 404 instead of issuing a bootstrap credential when no published runtime config exists", async () => {
+    rpc.mockResolvedValueOnce({
+      data: null,
+      error: null,
+    });
+
+    const response = await app.request("http://example.com/api/cf/gomtm/config-profiles/custom1/command", {
+      method: "POST",
+      headers: trustedDashboardHeaders,
+    });
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: "not found" });
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith("gomtm_runtime_config_get", {
+      p_name: "custom1",
+    });
+  });
+
   it("rejects cross-site runtime-url minting even when cookie auth exists", async () => {
     const response = await app.request("http://example.com/api/cf/gomtm/config-profiles/custom1/runtime-url", {
       method: "POST",
@@ -335,6 +403,20 @@ describe("gomtm config control-plane routes", () => {
 
     expect(response.status).toBe(403);
     expect(await response.json()).toEqual({ error: "forbidden" });
+  });
+
+  it("rejects cross-site startup-command minting even when cookie auth exists", async () => {
+    const response = await app.request("http://example.com/api/cf/gomtm/config-profiles/custom1/command", {
+      method: "POST",
+      headers: {
+        origin: "http://evil.example",
+        "sec-fetch-site": "cross-site",
+      },
+    });
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: "forbidden" });
+    expect(rpc).not.toHaveBeenCalled();
   });
 
   it("rejects unsigned runtime config delivery", async () => {

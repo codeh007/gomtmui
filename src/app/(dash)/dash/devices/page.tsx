@@ -5,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "m
 import { DashContent, DashHeaders } from "@/components/dash-layout";
 import { createClient } from "@/lib/supabase/server";
 import { AndroidHostActivationCard } from "@/components/devices/android-host-activation-card";
-import type { AndroidHostRuntimeDevice } from "@/components/devices/device-state";
+import { buildDeviceStateRecord, formatManagedRuntimePlatform, type AndroidHostRuntimeDevice } from "@/components/devices/device-state";
 
 interface DeviceRow {
   id: string;
@@ -44,53 +44,6 @@ function formatTime(value: string | null) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
-}
-
-function presenceVariant(s: string): "default" | "secondary" | "destructive" | "outline" {
-  switch (s) {
-    case "online":
-      return "default";
-    case "stale":
-      return "secondary";
-    case "offline":
-      return "destructive";
-    default:
-      return "outline";
-  }
-}
-
-function activationLabel(s: string) {
-  switch (s) {
-    case "inactive":
-      return "未激活";
-    case "activating":
-      return "激活中";
-    case "active":
-      return "已激活";
-    case "disabled":
-      return "已禁用";
-    default:
-      return s;
-  }
-}
-
-function runtimeLabel(s: string) {
-  switch (s) {
-    case "stopped":
-      return "已停止";
-    case "booting":
-      return "启动中";
-    case "ready":
-      return "就绪";
-    case "busy":
-      return "忙碌";
-    case "degraded":
-      return "退化";
-    case "error":
-      return "错误";
-    default:
-      return s;
-  }
 }
 
 export default async function DevicesPage() {
@@ -140,7 +93,7 @@ export default async function DevicesPage() {
       <DashHeaders>
         <div className="flex flex-col gap-1">
           <h1 className="text-lg font-semibold">设备</h1>
-          <p className="text-sm text-muted-foreground">当前仅展示属于你的受管设备。数据库通过 RLS 保证用户只能看到自己的设备。</p>
+          <p className="text-sm text-muted-foreground">这里统一展示 Linux 与 Android 受管运行时。配置负责启动运行时，devices 负责证明运行时在线。</p>
         </div>
       </DashHeaders>
       <DashContent className="flex-1 overflow-auto">
@@ -148,11 +101,11 @@ export default async function DevicesPage() {
           <AndroidHostActivationCard devices={androidHostDevices} />
           <Card>
             <CardHeader>
-              <CardTitle>我的设备</CardTitle>
+              <CardTitle>受管运行时</CardTitle>
             </CardHeader>
             <CardContent>
               {rows.length === 0 ? (
-                <div className="rounded-md border border-dashed p-8 text-sm text-muted-foreground">暂无设备。第一阶段仅提供列表视图，后续再补设备注册、详情和任务关联。</div>
+                <div className="rounded-md border border-dashed p-8 text-sm text-muted-foreground">暂无受管运行时。配置负责启动运行时，devices 负责证明运行时是否在线。</div>
               ) : (
                 <ScrollArea className="w-full rounded-md border">
                   <Table>
@@ -169,25 +122,29 @@ export default async function DevicesPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {rows.map((device) => (
-                        <TableRow key={device.id}>
+                      {rows.map((device) => {
+                        const state = buildDeviceStateRecord({
+                          activationStatus: device.activation_status,
+                          presenceStatus: device.presence_status,
+                          runtimeStatus: device.runtime_status,
+                        });
+
+                        return <TableRow key={device.id}>
                           <TableCell>
                             <div className="flex flex-col gap-1">
                               <span className="font-medium">{device.name}</span>
                               <span className="font-mono text-xs text-muted-foreground">{device.id}</span>
                             </div>
                           </TableCell>
-                          <TableCell className="uppercase">{device.platform}</TableCell>
+                          <TableCell>{formatManagedRuntimePlatform(device.platform)}</TableCell>
                           <TableCell>
-                            <Badge variant="outline">{activationLabel(device.activation_status)}</Badge>
+                            <Badge variant={state.activation.variant}>{state.activation.value}</Badge>
                           </TableCell>
                           <TableCell>
-                            <Badge variant={presenceVariant(device.presence_status)}>{device.presence_status}</Badge>
+                            <Badge variant={state.presence.variant}>{state.presence.value}</Badge>
                           </TableCell>
                           <TableCell>
-                            <Badge variant={device.runtime_status === "error" ? "destructive" : "secondary"}>
-                              {runtimeLabel(device.runtime_status)}
-                            </Badge>
+                            <Badge variant={state.runtime.variant}>{state.runtime.value}</Badge>
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-wrap gap-1">
@@ -206,8 +163,8 @@ export default async function DevicesPage() {
                           <TableCell className="max-w-[200px] truncate text-xs text-muted-foreground">
                             {device.last_error ?? "-"}
                           </TableCell>
-                        </TableRow>
-                      ))}
+                        </TableRow>;
+                      })}
                     </TableBody>
                   </Table>
                 </ScrollArea>

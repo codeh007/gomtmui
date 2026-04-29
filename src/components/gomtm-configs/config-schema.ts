@@ -67,6 +67,10 @@ export const GomtmRuntimeUrlResponseSchema = z.object({
   runtime_url: z.string().url(),
 });
 
+export const GomtmStartupCommandResponseSchema = z.object({
+  command: z.string().min(1),
+});
+
 export type GomtmConfigTargetKind = z.infer<typeof GomtmConfigTargetKindSchema>;
 export type GomtmConfigDocument = z.infer<typeof GomtmConfigDocumentSchema>;
 export type GomtmConfigProfile = z.infer<typeof GomtmConfigProfileSchema>;

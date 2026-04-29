@@ -9,7 +9,7 @@ export default function GomtmConfigsPage() {
       <DashHeaders>
         <div className="flex flex-col">
           <h1 className="text-lg font-semibold">GOMTM 配置</h1>
-          <p className="text-xs text-muted-foreground">管理可发布的 gomtm worker profiles 与 runtime URL</p>
+          <p className="text-xs text-muted-foreground">管理可发布的 gomtm worker profiles，并生成 Linux 受管启动命令</p>
         </div>
       </DashHeaders>
       <DashContent className="flex flex-col gap-6 overflow-auto p-4 md:p-6">

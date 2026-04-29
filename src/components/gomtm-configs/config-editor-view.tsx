@@ -29,7 +29,7 @@ import {
   type GomtmConfigProfileUpsert,
   type GomtmConfigTargetKind,
 } from "./config-schema";
-import { createConfigProfile, fetchRuntimeConfigUrl, publishConfigProfile, saveConfigProfile } from "@/lib/gomtm-configs/api";
+import { createConfigProfile, fetchStartupCommand, publishConfigProfile, saveConfigProfile } from "@/lib/gomtm-configs/api";
 
 const CONFIG_PROFILES_QUERY_KEY = ["gomtm-config-profiles"] as const;
 
@@ -252,14 +252,14 @@ export function ConfigEditorView({ initialProfile, isNew = false }: ConfigEditor
     },
   });
 
-  const runtimeUrlMutation = useMutation({
-    mutationFn: () => fetchRuntimeConfigUrl(profile.name),
-    onSuccess: async ({ runtime_url }) => {
-      await navigator.clipboard.writeText(runtime_url);
-      toast.success("Runtime URL 已复制");
+  const startupCommandMutation = useMutation({
+    mutationFn: () => fetchStartupCommand(profile.name),
+    onSuccess: async ({ command }) => {
+      await navigator.clipboard.writeText(command);
+      toast.success("启动命令已复制");
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "复制 Runtime URL 失败");
+      toast.error(error instanceof Error ? error.message : "复制启动命令失败");
     },
   });
 
@@ -271,6 +271,7 @@ export function ConfigEditorView({ initialProfile, isNew = false }: ConfigEditor
     ],
     [profile.current_version, profile.published_version, profile.status],
   );
+  const canCopyStartupCommand = profile.status === "published";
 
   const savedState = createEditorState(profile);
 
@@ -319,7 +320,7 @@ export function ConfigEditorView({ initialProfile, isNew = false }: ConfigEditor
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="space-y-2">
             <CardTitle className="text-xl">{profile.name}</CardTitle>
-            <CardDescription>编辑 gomtm worker 配置 envelope，并发布供 runtime 消费的 YAML 文档。</CardDescription>
+            <CardDescription>编辑 gomtm worker 配置，默认使用结构化表单，必要时再切换到高级 YAML。</CardDescription>
             <div className="flex flex-wrap gap-2">
               {metadataBadges.map((badge) => (
                 <Badge key={badge.label} variant="secondary">
@@ -328,14 +329,15 @@ export function ConfigEditorView({ initialProfile, isNew = false }: ConfigEditor
               ))}
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant={mode === "form" ? "default" : "outline"} onClick={() => handleModeChange("form")}>
-              表单
+          {mode === "form" ? (
+            <Button type="button" variant="outline" onClick={() => handleModeChange("yaml")}>
+              高级 YAML 编辑器
             </Button>
-            <Button type="button" variant={mode === "yaml" ? "default" : "outline"} onClick={() => handleModeChange("yaml")}>
-              YAML
+          ) : (
+            <Button type="button" variant="outline" onClick={() => handleModeChange("form")}>
+              返回表单
             </Button>
-          </div>
+          )}
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -548,9 +550,14 @@ export function ConfigEditorView({ initialProfile, isNew = false }: ConfigEditor
               return (
                 <>
                   <div className="flex flex-wrap justify-end gap-2">
-                    <Button type="button" variant="outline" disabled={runtimeUrlMutation.isPending || isUnsavedNewProfile} onClick={() => runtimeUrlMutation.mutate()}>
-                      {runtimeUrlMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Copy className="mr-2 h-4 w-4" />}
-                      复制 Runtime URL
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={startupCommandMutation.isPending || isUnsavedNewProfile || !canCopyStartupCommand}
+                      onClick={() => startupCommandMutation.mutate()}
+                    >
+                      {startupCommandMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Copy className="mr-2 h-4 w-4" />}
+                      复制启动命令
                     </Button>
                     <Button
                       type="button"
@@ -566,7 +573,8 @@ export function ConfigEditorView({ initialProfile, isNew = false }: ConfigEditor
                       保存
                     </Button>
                   </div>
-                  {isUnsavedNewProfile ? <div className="text-sm text-muted-foreground">请先保存当前配置后再发布或复制 Runtime URL</div> : null}
+                  {isUnsavedNewProfile ? <div className="text-sm text-muted-foreground">请先保存当前配置后再发布或复制启动命令</div> : null}
+                  {!isUnsavedNewProfile && !canCopyStartupCommand ? <div className="text-sm text-muted-foreground">请先发布当前配置后再复制启动命令</div> : null}
                   {!isUnsavedNewProfile && hasUnsavedChanges ? <div className="text-sm text-muted-foreground">请先保存当前修改后再发布</div> : null}
                 </>
               );

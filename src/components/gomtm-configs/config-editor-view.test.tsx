@@ -10,7 +10,7 @@ import { ConfigEditorView } from "./config-editor-view";
 const saveConfigProfile = vi.fn();
 const createConfigProfile = vi.fn();
 const publishConfigProfile = vi.fn();
-const fetchRuntimeConfigUrl = vi.fn();
+const fetchStartupCommand = vi.fn();
 const fetchConfigProfile = vi.fn();
 const toastSuccess = vi.fn();
 const toastError = vi.fn();
@@ -20,7 +20,7 @@ vi.mock("@/lib/gomtm-configs/api", () => ({
   saveConfigProfile: (...args: unknown[]) => saveConfigProfile(...args),
   createConfigProfile: (...args: unknown[]) => createConfigProfile(...args),
   publishConfigProfile: (...args: unknown[]) => publishConfigProfile(...args),
-  fetchRuntimeConfigUrl: (...args: unknown[]) => fetchRuntimeConfigUrl(...args),
+  fetchStartupCommand: (...args: unknown[]) => fetchStartupCommand(...args),
   fetchConfigProfile: (...args: unknown[]) => fetchConfigProfile(...args),
 }));
 
@@ -142,7 +142,7 @@ describe("ConfigEditorView", () => {
     updated_at: "2026-04-27T10:00:00Z",
   };
 
-  function renderView() {
+  function renderView(profileOverrides?: Partial<typeof initialProfile>) {
     const queryClient = new QueryClient({
       defaultOptions: {
         queries: { retry: false },
@@ -152,7 +152,7 @@ describe("ConfigEditorView", () => {
 
     return render(
       <QueryClientProvider client={queryClient}>
-        <ConfigEditorView initialProfile={initialProfile} />
+        <ConfigEditorView initialProfile={{ ...initialProfile, ...profileOverrides }} />
       </QueryClientProvider>,
     );
   }
@@ -162,7 +162,7 @@ describe("ConfigEditorView", () => {
     saveConfigProfile.mockReset();
     createConfigProfile.mockReset();
     publishConfigProfile.mockReset();
-    fetchRuntimeConfigUrl.mockReset();
+    fetchStartupCommand.mockReset();
     fetchConfigProfile.mockReset();
     toastSuccess.mockReset();
     toastError.mockReset();
@@ -170,7 +170,7 @@ describe("ConfigEditorView", () => {
     vi.restoreAllMocks();
   });
 
-  it("switches between form mode and YAML mode", async () => {
+  it("keeps structured form as the top-level mode and opens YAML through the advanced editor entry", async () => {
     renderView();
 
     expect(screen.getByLabelText("配置名称")).toBeTruthy();
@@ -178,12 +178,14 @@ describe("ConfigEditorView", () => {
     expect((screen.getByLabelText("Supabase URL") as HTMLInputElement).value).toBe("https://example.supabase.co");
     expect((screen.getByLabelText("启用 Hermes Gateway") as HTMLInputElement).checked).toBe(true);
     expect(screen.queryByLabelText("原始 YAML")).toBeNull();
+    expect(screen.queryByRole("button", { name: "YAML" })).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "YAML" }));
+    fireEvent.click(screen.getByRole("button", { name: "高级 YAML 编辑器" }));
 
     expect((screen.getByLabelText("原始 YAML") as HTMLTextAreaElement).value).toBe(initialProfile.config_yaml);
+    expect(screen.getByRole("button", { name: "返回表单" })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "表单" }));
+    fireEvent.click(screen.getByRole("button", { name: "返回表单" }));
 
     await waitFor(() => {
       expect((screen.getByLabelText("监听地址") as HTMLInputElement).value).toBe(":7777");
@@ -206,7 +208,7 @@ describe("ConfigEditorView", () => {
     });
     fireEvent.click(screen.getByLabelText("启用 Hermes Gateway"));
 
-    fireEvent.click(screen.getByRole("button", { name: "YAML" }));
+    fireEvent.click(screen.getByRole("button", { name: "高级 YAML 编辑器" }));
 
     await waitFor(() => {
       expect((screen.getByLabelText("原始 YAML") as HTMLTextAreaElement).value).toContain('listen: ":8899"');
@@ -281,7 +283,7 @@ describe("ConfigEditorView", () => {
 
     renderView();
 
-    fireEvent.click(screen.getByRole("button", { name: "YAML" }));
+    fireEvent.click(screen.getByRole("button", { name: "高级 YAML 编辑器" }));
     fireEvent.change(screen.getByLabelText("原始 YAML"), {
       target: {
         value: [
@@ -307,7 +309,7 @@ describe("ConfigEditorView", () => {
       },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "表单" }));
+    fireEvent.click(screen.getByRole("button", { name: "返回表单" }));
 
     await waitFor(() => {
       expect((screen.getByLabelText("监听地址") as HTMLInputElement).value).toBe(":9900");
@@ -355,14 +357,14 @@ describe("ConfigEditorView", () => {
   it("keeps YAML mode active and shows an error when the top-level YAML is not an object", async () => {
     renderView();
 
-    fireEvent.click(screen.getByRole("button", { name: "YAML" }));
+    fireEvent.click(screen.getByRole("button", { name: "高级 YAML 编辑器" }));
     fireEvent.change(screen.getByLabelText("原始 YAML"), {
       target: {
         value: ["- not", "- an", "- object", ""].join("\n"),
       },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "表单" }));
+    fireEvent.click(screen.getByRole("button", { name: "返回表单" }));
 
     await waitFor(() => {
       expect(screen.getByText("YAML 顶层必须是对象")).toBeTruthy();
@@ -372,8 +374,10 @@ describe("ConfigEditorView", () => {
     expect(screen.queryByLabelText("监听地址")).toBeNull();
   });
 
-  it("mints and copies the runtime URL", async () => {
-    fetchRuntimeConfigUrl.mockResolvedValue({ runtime_url: "https://example.com/api/cf/gomtm/runtime-configs/custom1?sig=abc" });
+  it("mints and copies the startup command", async () => {
+    fetchStartupCommand.mockResolvedValue({
+      command: 'gomtm server --config="https://example.com/api/cf/gomtm/runtime-configs/custom1?sig=abc" --bootstrap-credential="gbr_demo" --device-name="$(hostname)"',
+    });
 
     const writeText = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal("navigator", {
@@ -382,14 +386,29 @@ describe("ConfigEditorView", () => {
       },
     });
 
-    renderView();
+    renderView({
+      status: "published",
+      published_version: 2,
+    });
 
-    fireEvent.click(screen.getByRole("button", { name: "复制 Runtime URL" }));
+    fireEvent.click(screen.getByRole("button", { name: "复制启动命令" }));
 
     await waitFor(() => {
-      expect(fetchRuntimeConfigUrl).toHaveBeenCalledWith("custom1");
-      expect(writeText).toHaveBeenCalledWith("https://example.com/api/cf/gomtm/runtime-configs/custom1?sig=abc");
+      expect(fetchStartupCommand).toHaveBeenCalledWith("custom1");
+      expect(writeText).toHaveBeenCalledWith(
+        'gomtm server --config="https://example.com/api/cf/gomtm/runtime-configs/custom1?sig=abc" --bootstrap-credential="gbr_demo" --device-name="$(hostname)"',
+      );
     });
+  });
+
+  it("disables startup-command copy for draft existing profiles", async () => {
+    renderView();
+
+    const copyButton = screen.getByRole("button", { name: "复制启动命令" }) as HTMLButtonElement;
+    expect(copyButton.disabled).toBe(true);
+
+    fireEvent.click(copyButton);
+    expect(fetchStartupCommand).not.toHaveBeenCalled();
   });
 
   it("keeps name read-only for existing profiles and saves back to the original profile path", async () => {
@@ -413,7 +432,7 @@ describe("ConfigEditorView", () => {
     expect(saveName).toBe("custom1");
   });
 
-  it("disables publish and runtime URL actions for unsaved new profiles", async () => {
+  it("disables publish and startup-command actions for unsaved new profiles", async () => {
     const queryClient = new QueryClient({
       defaultOptions: {
         queries: { retry: false },
@@ -438,13 +457,13 @@ describe("ConfigEditorView", () => {
     );
 
     expect((screen.getByRole("button", { name: "发布" }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole("button", { name: "复制 Runtime URL" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "复制启动命令" }) as HTMLButtonElement).disabled).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: "发布" }));
-    fireEvent.click(screen.getByRole("button", { name: "复制 Runtime URL" }));
+    fireEvent.click(screen.getByRole("button", { name: "复制启动命令" }));
 
     expect(publishConfigProfile).not.toHaveBeenCalled();
-    expect(fetchRuntimeConfigUrl).not.toHaveBeenCalled();
+    expect(fetchStartupCommand).not.toHaveBeenCalled();
   });
 
   it("surfaces backend create conflicts without doing a client-side preflight lookup", async () => {
