@@ -19,7 +19,6 @@ const cloudflareConfigSchema = z
     account_id: z.string().min(1, "Account ID 必填"),
     api_token: z.string().min(1, "API Token 必填"),
     zone_id: z.string().optional(),
-    // Domain and Prefix are now handled by DomainConfigCard (system_config_public)
   })
   .nullable()
   .optional();
