@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, TextareaHTMLAttributes } from "react";
+import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -43,10 +43,6 @@ vi.mock("mtxuilib/ui/input", () => ({
   Input: (props: InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
 }));
 
-vi.mock("mtxuilib/ui/textarea", () => ({
-  Textarea: (props: TextareaHTMLAttributes<HTMLTextAreaElement>) => <textarea {...props} />,
-}));
-
 vi.mock("mtxuilib/ui/label", () => ({
   Label: ({ children, htmlFor }: { children: ReactNode; htmlFor?: string }) => <label htmlFor={htmlFor}>{children}</label>,
 }));
@@ -59,34 +55,35 @@ vi.mock("mtxuilib/ui/card", () => ({
   CardContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 
-vi.mock("mtxuilib/ui/badge", () => ({
-  Badge: ({ children }: { children: ReactNode }) => <span>{children}</span>,
-}));
-
 describe("ConfigEditorView", () => {
   const initialProfile = {
     name: "custom1",
     description: "demo profile",
-    config_yaml: [
-      "server:",
-      '  listen: ":7777"',
-      '  instance_id: "worker-1"',
-      "  storage:",
-      '    root_dir: "/var/lib/gomtm"',
-      "supabase:",
-      '  url: "https://example.supabase.co"',
-      '  anon_key: "anon-key"',
-      '  service_role_key: "service-role-key"',
-      "cloudflare:",
-      '  cloudflare_api_token: "cf-token"',
-      '  cloudflare_account_id: "cf-account"',
-      '  cloudflare_zone_id: "cf-zone"',
-      '  tunnel_domain: "worker.example.com"',
-      "mtmai:",
-      "  hermes_gateway:",
-      "    enable: true",
-      "",
-    ].join("\n"),
+    config_document: {
+      server: {
+        listen: ":7777",
+        instance_id: "worker-1",
+        storage: {
+          root_dir: "/var/lib/gomtm",
+        },
+      },
+      supabase: {
+        url: "https://example.supabase.co",
+        anon_key: "anon-key",
+        service_role_key: "service-role-key",
+      },
+      cloudflare: {
+        cloudflare_api_token: "cf-token",
+        cloudflare_account_id: "cf-account",
+        cloudflare_zone_id: "cf-zone",
+        tunnel_domain: "worker.example.com",
+      },
+      mtmai: {
+        hermes_gateway: {
+          enable: true,
+        },
+      },
+    },
     updated_at: "2026-04-27T10:00:00Z",
   };
 
@@ -117,50 +114,59 @@ describe("ConfigEditorView", () => {
     vi.restoreAllMocks();
   });
 
-  it("keeps structured form as the top-level mode without publish or lifecycle badges", async () => {
+  it("renders only the structured form editor", () => {
     renderView();
 
     expect(screen.getByLabelText("配置名称")).toBeTruthy();
     expect((screen.getByLabelText("监听地址") as HTMLInputElement).value).toBe(":7777");
     expect((screen.getByLabelText("Supabase URL") as HTMLInputElement).value).toBe("https://example.supabase.co");
     expect((screen.getByLabelText("启用 Hermes Gateway") as HTMLInputElement).checked).toBe(true);
-    expect(screen.queryByLabelText("原始 YAML")).toBeNull();
-    expect(screen.queryByRole("button", { name: "发布" })).toBeNull();
-    expect(screen.queryByText("草稿中")).toBeNull();
-    expect(screen.queryByText("已发布 v1")).toBeNull();
     expect(screen.getByRole("button", { name: "复制启动命令" })).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "高级 YAML 编辑器" }));
-
-    expect((screen.getByLabelText("原始 YAML") as HTMLTextAreaElement).value).toBe(initialProfile.config_yaml);
-    expect(screen.getByRole("button", { name: "导入 YAML" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "导出 YAML" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "返回表单" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "高级 YAML 编辑器" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "返回表单" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "导入 YAML" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "导出 YAML" })).toBeNull();
+    expect(screen.queryByLabelText("原始 YAML")).toBeNull();
   });
 
-  it("syncs structured field edits into YAML mode and save payload without target kind", async () => {
-    saveConfigProfile.mockResolvedValue({ ...initialProfile, description: "updated profile" });
+  it("saves config_document directly from the form", async () => {
+    saveConfigProfile.mockResolvedValue({
+      ...initialProfile,
+      description: "form mode update",
+      config_document: {
+        ...initialProfile.config_document,
+        server: {
+          ...initialProfile.config_document.server,
+          listen: ":9000",
+          instance_id: "worker-form",
+        },
+        supabase: {
+          ...initialProfile.config_document.supabase,
+          url: "https://prod.supabase.co",
+        },
+        mtmai: {
+          hermes_gateway: {
+            enable: false,
+          },
+        },
+      },
+    });
 
     renderView();
 
     fireEvent.change(screen.getByLabelText("描述"), {
-      target: { value: "updated profile" },
+      target: { value: "form mode update" },
     });
     fireEvent.change(screen.getByLabelText("监听地址"), {
-      target: { value: ":8899" },
+      target: { value: ":9000" },
+    });
+    fireEvent.change(screen.getByLabelText("实例 ID"), {
+      target: { value: "worker-form" },
     });
     fireEvent.change(screen.getByLabelText("Supabase URL"), {
       target: { value: "https://prod.supabase.co" },
     });
     fireEvent.click(screen.getByLabelText("启用 Hermes Gateway"));
-
-    fireEvent.click(screen.getByRole("button", { name: "高级 YAML 编辑器" }));
-
-    await waitFor(() => {
-      expect((screen.getByLabelText("原始 YAML") as HTMLTextAreaElement).value).toContain('listen: ":8899"');
-    });
-    expect((screen.getByLabelText("原始 YAML") as HTMLTextAreaElement).value).toContain('url: "https://prod.supabase.co"');
-    expect((screen.getByLabelText("原始 YAML") as HTMLTextAreaElement).value).toContain("enable: false");
 
     fireEvent.click(screen.getByRole("button", { name: "保存" }));
 
@@ -169,128 +175,114 @@ describe("ConfigEditorView", () => {
     });
 
     const [, payload] = saveConfigProfile.mock.calls[0] as [string, Record<string, unknown>];
-    expect(payload.name).toBe("custom1");
-    expect(payload.description).toBe("updated profile");
-    expect(payload.config_yaml).toEqual(expect.stringContaining('listen: ":8899"'));
-    expect(payload.config_yaml).toEqual(expect.stringContaining('url: "https://prod.supabase.co"'));
-    expect(payload.config_yaml).toEqual(expect.stringContaining("enable: false"));
+    expect(payload).toEqual({
+      name: "custom1",
+      description: "form mode update",
+      config_document: {
+        server: {
+          listen: ":9000",
+          instance_id: "worker-form",
+          storage: {
+            root_dir: "/var/lib/gomtm",
+          },
+        },
+        supabase: {
+          url: "https://prod.supabase.co",
+          anon_key: "anon-key",
+          service_role_key: "service-role-key",
+        },
+        cloudflare: {
+          cloudflare_api_token: "cf-token",
+          cloudflare_account_id: "cf-account",
+          cloudflare_zone_id: "cf-zone",
+          tunnel_domain: "worker.example.com",
+        },
+        mtmai: {
+          hermes_gateway: {
+            enable: false,
+          },
+        },
+      },
+    });
     expect(payload).not.toHaveProperty("target_kind");
   });
 
-  it("parses raw YAML edits back into the structured form", async () => {
-    renderView();
-
-    fireEvent.click(screen.getByRole("button", { name: "高级 YAML 编辑器" }));
-    fireEvent.change(screen.getByLabelText("原始 YAML"), {
-      target: {
-        value: [
-          "server:",
-          '  listen: ":9900"',
-          '  instance_id: "worker-2"',
-          "  storage:",
-          '    root_dir: "/srv/gomtm"',
-          "supabase:",
-          '  url: "https://staging.supabase.co"',
-          '  anon_key: "staging-anon"',
-          '  service_role_key: "staging-service"',
-          "cloudflare:",
-          '  cloudflare_api_token: "next-token"',
-          '  cloudflare_account_id: "next-account"',
-          '  cloudflare_zone_id: "next-zone"',
-          '  tunnel_domain: "next.example.com"',
-          "mtmai:",
-          "  hermes_gateway:",
-          "    enable: false",
-          "",
-        ].join("\n"),
+  it("creates a new profile from the pure form and redirects to the saved route", async () => {
+    createConfigProfile.mockResolvedValue({
+      ...initialProfile,
+      name: "saved-config",
+      description: "new profile",
+      updated_at: "2026-04-30T09:00:00Z",
+      config_document: {
+        ...initialProfile.config_document,
+        server: {
+          ...initialProfile.config_document.server,
+          listen: ":4567",
+        },
+        mtmai: {
+          hermes_gateway: {
+            enable: false,
+          },
+        },
       },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "返回表单" }));
+    renderView(
+      {
+        name: "new-config",
+        description: "",
+        updated_at: null,
+      },
+      true,
+    );
+
+    fireEvent.change(screen.getByLabelText("配置名称"), {
+      target: { value: "saved-config" },
+    });
+    fireEvent.change(screen.getByLabelText("描述"), {
+      target: { value: "new profile" },
+    });
+    fireEvent.change(screen.getByLabelText("监听地址"), {
+      target: { value: ":4567" },
+    });
+    fireEvent.click(screen.getByLabelText("启用 Hermes Gateway"));
+
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
 
     await waitFor(() => {
-      expect((screen.getByLabelText("监听地址") as HTMLInputElement).value).toBe(":9900");
+      expect(createConfigProfile).toHaveBeenCalledTimes(1);
     });
-    expect((screen.getByLabelText("实例 ID") as HTMLInputElement).value).toBe("worker-2");
-    expect((screen.getByLabelText("存储目录") as HTMLInputElement).value).toBe("/srv/gomtm");
-    expect((screen.getByLabelText("Supabase URL") as HTMLInputElement).value).toBe("https://staging.supabase.co");
-    expect((screen.getByLabelText("启用 Hermes Gateway") as HTMLInputElement).checked).toBe(false);
-  });
 
-  it("keeps YAML mode active and shows an error when the top-level YAML is not an object", async () => {
-    renderView();
-
-    fireEvent.click(screen.getByRole("button", { name: "高级 YAML 编辑器" }));
-    fireEvent.change(screen.getByLabelText("原始 YAML"), {
-      target: {
-        value: ["- not", "- an", "- object", ""].join("\n"),
+    expect(createConfigProfile).toHaveBeenCalledWith({
+      name: "saved-config",
+      description: "new profile",
+      config_document: {
+        server: {
+          listen: ":4567",
+          instance_id: "worker-1",
+          storage: {
+            root_dir: "/var/lib/gomtm",
+          },
+        },
+        supabase: {
+          url: "https://example.supabase.co",
+          anon_key: "anon-key",
+          service_role_key: "service-role-key",
+        },
+        cloudflare: {
+          cloudflare_api_token: "cf-token",
+          cloudflare_account_id: "cf-account",
+          cloudflare_zone_id: "cf-zone",
+          tunnel_domain: "worker.example.com",
+        },
+        mtmai: {
+          hermes_gateway: {
+            enable: false,
+          },
+        },
       },
     });
-
-    fireEvent.click(screen.getByRole("button", { name: "返回表单" }));
-
-    await waitFor(() => {
-      expect(screen.getByText("YAML 顶层必须是对象")).toBeTruthy();
-    });
-
-    expect(screen.getByLabelText("原始 YAML")).toBeTruthy();
-    expect(screen.queryByLabelText("监听地址")).toBeNull();
-  });
-
-  it("imports a YAML document into advanced mode and exports the current YAML document", async () => {
-    const createObjectURL = vi.fn().mockReturnValue("blob:config-yaml");
-    const revokeObjectURL = vi.fn();
-    const anchorClick = vi.fn();
-
-    vi.stubGlobal("URL", {
-      createObjectURL,
-      revokeObjectURL,
-    });
-    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(anchorClick);
-
-    renderView();
-
-    fireEvent.click(screen.getByRole("button", { name: "高级 YAML 编辑器" }));
-
-    const importedYaml = [
-      "server:",
-      '  listen: ":10001"',
-      '  instance_id: "worker-imported"',
-      "  storage:",
-      '    root_dir: "/data/gomtm"',
-      "supabase:",
-      '  url: "https://imported.supabase.co"',
-      '  anon_key: "imported-anon"',
-      '  service_role_key: "imported-service"',
-      "cloudflare:",
-      '  cloudflare_api_token: "imported-token"',
-      '  cloudflare_account_id: "imported-account"',
-      '  cloudflare_zone_id: "imported-zone"',
-      '  tunnel_domain: "imported.example.com"',
-      "mtmai:",
-      "  hermes_gateway:",
-      "    enable: false",
-      "",
-    ].join("\n");
-    const importedFile = new File([importedYaml], "imported-worker.yaml", { type: "application/x-yaml" });
-
-    fireEvent.change(screen.getByLabelText("导入 YAML 文件"), {
-      target: { files: [importedFile] },
-    });
-
-    await waitFor(() => {
-      expect((screen.getByLabelText("原始 YAML") as HTMLTextAreaElement).value).toBe(importedYaml);
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "导出 YAML" }));
-
-    await waitFor(async () => {
-      expect(createObjectURL).toHaveBeenCalledTimes(1);
-      const [blob] = createObjectURL.mock.calls[0] as [Blob];
-      expect(await blob.text()).toBe(importedYaml);
-      expect(anchorClick).toHaveBeenCalledTimes(1);
-      expect(revokeObjectURL).toHaveBeenCalledWith("blob:config-yaml");
-    });
+    expect(replaceMock).toHaveBeenCalledWith("/dash/gomtm/configs/saved-config");
   });
 
   it("mints and copies the startup command for any saved existing profile", async () => {
@@ -395,7 +387,6 @@ describe("ConfigEditorView", () => {
 
     renderView();
 
-    const modeButton = screen.getByRole("button", { name: "高级 YAML 编辑器" }) as HTMLButtonElement;
     const copyButton = screen.getByRole("button", { name: "复制启动命令" }) as HTMLButtonElement;
     const saveButton = screen.getByRole("button", { name: "保存" }) as HTMLButtonElement;
     const deleteButton = screen.getByRole("button", { name: "删除" }) as HTMLButtonElement;
@@ -403,17 +394,14 @@ describe("ConfigEditorView", () => {
     fireEvent.click(deleteButton);
 
     await waitFor(() => {
-      expect(modeButton.disabled).toBe(true);
       expect(copyButton.disabled).toBe(true);
       expect(saveButton.disabled).toBe(true);
       expect(deleteButton.disabled).toBe(true);
     });
 
-    fireEvent.click(modeButton);
     fireEvent.click(copyButton);
     fireEvent.click(saveButton);
 
-    expect(screen.queryByLabelText("原始 YAML")).toBeNull();
     expect(fetchStartupCommand).not.toHaveBeenCalled();
     expect(saveConfigProfile).not.toHaveBeenCalled();
 
@@ -436,14 +424,12 @@ describe("ConfigEditorView", () => {
 
     renderView();
 
-    const modeButton = screen.getByRole("button", { name: "高级 YAML 编辑器" }) as HTMLButtonElement;
     const copyButton = screen.getByRole("button", { name: "复制启动命令" }) as HTMLButtonElement;
     const deleteButton = screen.getByRole("button", { name: "删除" }) as HTMLButtonElement;
 
     fireEvent.click(copyButton);
 
     await waitFor(() => {
-      expect(modeButton.disabled).toBe(true);
       expect(copyButton.disabled).toBe(true);
       expect(deleteButton.disabled).toBe(true);
     });
@@ -460,43 +446,7 @@ describe("ConfigEditorView", () => {
     });
   });
 
-  it("disables delete and mode toggle while save is pending", async () => {
-    let resolveSave: ((value: typeof initialProfile) => void) | undefined;
-    saveConfigProfile.mockReturnValue(
-      new Promise<typeof initialProfile>((resolve) => {
-        resolveSave = resolve;
-      }),
-    );
-
-    renderView();
-
-    const modeButton = screen.getByRole("button", { name: "高级 YAML 编辑器" }) as HTMLButtonElement;
-    const deleteButton = screen.getByRole("button", { name: "删除" }) as HTMLButtonElement;
-
-    fireEvent.change(screen.getByLabelText("描述"), {
-      target: { value: "save pending update" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "保存" }));
-
-    await waitFor(() => {
-      expect(modeButton.disabled).toBe(true);
-      expect(deleteButton.disabled).toBe(true);
-    });
-
-    fireEvent.click(modeButton);
-    fireEvent.click(deleteButton);
-
-    expect(screen.queryByLabelText("原始 YAML")).toBeNull();
-    expect(deleteConfigProfile).not.toHaveBeenCalled();
-
-    resolveSave?.({ ...initialProfile, description: "save pending update" });
-
-    await waitFor(() => {
-      expect(toastSuccess).toHaveBeenCalledWith("配置已保存");
-    });
-  });
-
-  it("disables startup-command copy for unsaved new profiles", async () => {
+  it("disables startup-command copy for unsaved new profiles", () => {
     renderView(
       {
         name: "new-config",

@@ -1,4 +1,5 @@
 import { ApiPrefix } from "@/server/context";
+import { GomtmConfigDocumentSchema, type GomtmConfigDocument } from "@/components/gomtm-configs/config-schema";
 import { zValidator } from "@hono/zod-validator";
 import type { Context } from "hono";
 import { Hono } from "hono";
@@ -11,12 +12,6 @@ import {
   verifyRuntimeConfigSignature,
 } from "./signing";
 import { buildManagedLinuxStartupCommand } from "./command";
-import {
-  ensureVmessWrapperSecret,
-  InvalidConfigYamlError,
-  preserveStoredVmessWrapperSecret,
-  VmessWrapperSecretPlaceholderError,
-} from "./vmess-wrapper-secret";
 
 export const gomtmConfigsRoute = new Hono<AppContext>();
 
@@ -25,12 +20,12 @@ const MANAGED_LINUX_TARGET_PLATFORM = "linux";
 const DEFAULT_DEVICE_NAME_EXPRESSION = "$(hostname)";
 const runtimeConfigHeaders = {
   "cache-control": "no-store",
-  "content-type": "text/yaml; charset=utf-8",
+  "content-type": "application/json; charset=utf-8",
 };
 
 const upsertProfileSchema = z.object({
   description: z.string().optional().default(""),
-  config_yaml: z.string().min(1, "config_yaml is required"),
+  config_document: GomtmConfigDocumentSchema,
 });
 
 const createProfileSchema = upsertProfileSchema.extend({
@@ -45,7 +40,7 @@ type RpcErrorLike = {
 };
 
 type GomtmConfigProfileRecord = {
-  config_yaml?: string | null;
+  config_document?: GomtmConfigDocument | null;
   description?: string | null;
   id?: string | null;
   name?: string;
@@ -54,7 +49,7 @@ type GomtmConfigProfileRecord = {
 };
 
 type GomtmRuntimeConfigRecord = {
-  config_yaml?: string | null;
+  config_document?: GomtmConfigDocument | null;
   name?: string | null;
 };
 
@@ -138,15 +133,6 @@ gomtmConfigsRoute.post("/config-profiles", zValidator("json", createProfileSchem
 	}
 
 	const body = c.req.valid("json");
-	let nextConfigYaml: string;
-	try {
-		nextConfigYaml = ensureVmessWrapperSecret(body.config_yaml);
-	} catch (error) {
-		if (error instanceof InvalidConfigYamlError || error instanceof VmessWrapperSecretPlaceholderError) {
-			return c.json({ error: error.message }, 400);
-		}
-		throw error;
-	}
 	const existingProfile = await auth.supabase.rpc<GomtmConfigProfileRecord[] | GomtmConfigProfileRecord | null>("gomtm_config_profile_get", {
 		p_name: body.name,
 	});
@@ -163,7 +149,7 @@ gomtmConfigsRoute.post("/config-profiles", zValidator("json", createProfileSchem
 	const { data, error } = await auth.supabase.rpc<GomtmConfigProfileRecord[] | GomtmConfigProfileRecord | null>("gomtm_config_profile_upsert", {
 		p_name: body.name,
 		p_description: body.description,
-    p_config_yaml: nextConfigYaml,
+    p_config_document: body.config_document,
   });
   if (error) {
     return createControlPlaneRpcErrorResponse(c, error, "failed to create config profile");
@@ -191,15 +177,6 @@ gomtmConfigsRoute.put("/config-profiles/:name", zValidator("json", upsertProfile
   }
 
   const body = c.req.valid("json");
-  let nextConfigYaml: string;
-  try {
-    nextConfigYaml = ensureVmessWrapperSecret(body.config_yaml);
-  } catch (error) {
-    if (error instanceof InvalidConfigYamlError || error instanceof VmessWrapperSecretPlaceholderError) {
-      return c.json({ error: error.message }, 400);
-    }
-    throw error;
-  }
   const currentProfile = await auth.supabase.rpc<GomtmConfigProfileRecord[] | GomtmConfigProfileRecord | null>("gomtm_config_profile_get", {
     p_name: c.req.param("name"),
   });
@@ -213,13 +190,10 @@ gomtmConfigsRoute.put("/config-profiles/:name", zValidator("json", upsertProfile
   if (!existingProfile.record) {
     return c.json({ error: "not found" }, 404);
   }
-  if (typeof existingProfile.record.config_yaml === "string") {
-    nextConfigYaml = preserveStoredVmessWrapperSecret(nextConfigYaml, existingProfile.record.config_yaml);
-  }
   const { data, error } = await auth.supabase.rpc<GomtmConfigProfileRecord[] | GomtmConfigProfileRecord | null>("gomtm_config_profile_upsert", {
     p_name: c.req.param("name"),
     p_description: body.description,
-    p_config_yaml: nextConfigYaml,
+    p_config_document: body.config_document,
   });
   if (error) {
     return createControlPlaneRpcErrorResponse(c, error, "failed to save config profile");
@@ -390,21 +364,18 @@ gomtmConfigsRoute.get("/runtime-configs/:name", async (c) => {
   }
 
   const supabase = getGomtmConfigSupabase(c);
-  const { data, error } = await supabase.rpc<GomtmRuntimeConfigRecord[] | GomtmRuntimeConfigRecord | null>("gomtm_runtime_config_get", {
-    p_name: c.req.param("name"),
-  });
-  if (error) {
-    return createRuntimeConfigErrorResponse(c, error);
+  const runtimeConfig = await getCurrentRuntimeConfig(supabase, c.req.param("name"));
+  if (runtimeConfig.error) {
+    return createRuntimeConfigErrorResponse(c, runtimeConfig.error);
   }
-  const runtimeConfig = Array.isArray(data) ? (data[0] ?? null) : data;
-  if (!runtimeConfig) {
-    return c.text("not found", 404);
-  }
-  if (typeof runtimeConfig.config_yaml !== "string") {
+  if (runtimeConfig.multiple) {
     return c.text("runtime config unavailable", 500);
   }
+  if (!runtimeConfig.record) {
+    return c.text("not found", 404);
+  }
 
-  return new Response(runtimeConfig.config_yaml, {
+  return new Response(JSON.stringify(runtimeConfig.record.config_document), {
     status: 200,
     headers: runtimeConfigHeaders,
   });
@@ -530,7 +501,7 @@ async function getCurrentRuntimeConfig(supabase: GomtmConfigSupabase, profileNam
   if (runtimeConfig.multiple) {
     return { error: null, multiple: true, record: null as GomtmRuntimeConfigRecord | null };
   }
-  if (!runtimeConfig.record || typeof runtimeConfig.record.config_yaml !== "string") {
+  if (!runtimeConfig.record || !runtimeConfig.record.config_document) {
     return { error: null, multiple: false, record: null as GomtmRuntimeConfigRecord | null };
   }
 

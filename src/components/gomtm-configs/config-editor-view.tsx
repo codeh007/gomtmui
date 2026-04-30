@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Copy, Loader2, Save, Trash2 } from "lucide-react";
@@ -8,19 +8,12 @@ import { Button } from "mtxuilib/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "mtxuilib/ui/card";
 import { Input } from "mtxuilib/ui/input";
 import { Label } from "mtxuilib/ui/label";
-import { Textarea } from "mtxuilib/ui/textarea";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  createDefaultGomtmConfigDocument,
   createDefaultGomtmConfigProfile,
-  extractGomtmConfigDocument,
   GomtmConfigDocumentSchema,
   GomtmConfigProfileSchema,
-  overlayGomtmConfigDocument,
-  parseGomtmConfigYaml,
-  resolveGomtmConfigSource,
-  stringifyGomtmConfigSource,
   type GomtmConfigDocument,
   type GomtmConfigProfile,
   type GomtmConfigProfileUpsert,
@@ -28,8 +21,6 @@ import {
 import { createConfigProfile, deleteConfigProfile, fetchStartupCommand, saveConfigProfile } from "@/lib/gomtm-configs/api";
 
 const CONFIG_PROFILES_QUERY_KEY = ["gomtm-config-profiles"] as const;
-
-type EditorMode = "form" | "yaml";
 
 interface ConfigEditorViewProps {
   initialProfile: GomtmConfigProfile;
@@ -100,37 +91,18 @@ function getDocumentFromFormValues(values: ConfigEditorFormValues) {
 
 function buildStructuredPayload(
   values: ConfigEditorFormValues,
-  baseConfigSource: Record<string, unknown>,
 ): GomtmConfigProfileUpsert {
   const nextDocument = getDocumentFromFormValues(values);
-  const nextConfigSource = overlayGomtmConfigDocument(baseConfigSource, nextDocument);
 
   return {
     name: values.name,
     description: values.description,
-    config_yaml: stringifyGomtmConfigSource(nextConfigSource),
-  };
-}
-
-function buildYamlPayload(values: ConfigEditorFormValues, rawYaml: string): GomtmConfigProfileUpsert {
-  const parsedSource = parseGomtmConfigYaml(rawYaml);
-
-  return {
-    name: values.name,
-    description: values.description,
-    config_yaml: stringifyGomtmConfigSource(parsedSource),
+    config_document: nextDocument,
   };
 }
 
 function createEditorState(profile: GomtmConfigProfile) {
-  const configSource = resolveGomtmConfigSource(profile);
-  const configDocument = extractGomtmConfigDocument(configSource);
-
-  return {
-    configSource,
-    formValues: getFormValues(profile, configDocument),
-    rawYaml: profile.config_yaml || stringifyGomtmConfigSource(overlayGomtmConfigDocument({}, createDefaultGomtmConfigDocument())),
-  };
+  return getFormValues(profile, profile.config_document);
 }
 
 function hasUnsavedNewProfile(profile: Pick<GomtmConfigProfile, "updated_at">, isNew: boolean) {
@@ -148,42 +120,20 @@ function getSaveErrorMessage(error: unknown) {
 export function ConfigEditorView({ initialProfile, isNew = false }: ConfigEditorViewProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const yamlImportInputRef = useRef<HTMLInputElement | null>(null);
-  const [mode, setMode] = useState<EditorMode>("form");
   const [profile, setProfile] = useState(() => GomtmConfigProfileSchema.parse(initialProfile));
-  const initialEditorState = useMemo(() => createEditorState(profile), [profile]);
-  const [formDefaults, setFormDefaults] = useState(initialEditorState.formValues);
-  const [rawConfigSource, setRawConfigSource] = useState<Record<string, unknown>>(initialEditorState.configSource);
-  const [rawConfigYaml, setRawConfigYaml] = useState(initialEditorState.rawYaml);
-  const [yamlError, setYamlError] = useState<string | null>(null);
-  const rawConfigYamlRef = useRef(initialEditorState.rawYaml);
+  const [formDefaults, setFormDefaults] = useState(() => createEditorState(profile));
   const isUnsavedNewProfile = hasUnsavedNewProfile(profile, isNew);
-
-  const updateRawConfigYaml = (nextYaml: string) => {
-    rawConfigYamlRef.current = nextYaml;
-    setRawConfigYaml(nextYaml);
-    setYamlError(null);
-  };
 
   const form = useForm({
     defaultValues: formDefaults,
     onSubmit: async ({ value }) => {
       try {
-        const payload =
-          mode === "yaml"
-            ? buildYamlPayload(value, rawConfigYamlRef.current)
-            : buildStructuredPayload(value, rawConfigSource);
-
-        setRawConfigSource(parseGomtmConfigYaml(payload.config_yaml));
-        updateRawConfigYaml(payload.config_yaml);
-        setYamlError(null);
-
+        const payload = buildStructuredPayload(value);
         const nextProfile = await saveMutation.mutateAsync(payload);
         setProfile(nextProfile);
         toast.success("配置已保存");
       } catch (error) {
         const saveErrorMessage = getSaveErrorMessage(error);
-        setYamlError(saveErrorMessage);
         toast.error(saveErrorMessage);
       }
     },
@@ -195,11 +145,7 @@ export function ConfigEditorView({ initialProfile, isNew = false }: ConfigEditor
 
   useEffect(() => {
     const nextState = createEditorState(profile);
-    setFormDefaults(nextState.formValues);
-    setRawConfigSource(nextState.configSource);
-    rawConfigYamlRef.current = nextState.rawYaml;
-    setRawConfigYaml(nextState.rawYaml);
-    setYamlError(null);
+    setFormDefaults(nextState);
   }, [profile]);
 
   const saveMutation = useMutation({
@@ -213,9 +159,6 @@ export function ConfigEditorView({ initialProfile, isNew = false }: ConfigEditor
         router.replace(`/dash/gomtm/configs/${nextProfile.name}`);
       }
       return nextProfile;
-    },
-    onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "保存失败");
     },
   });
 
@@ -251,74 +194,6 @@ export function ConfigEditorView({ initialProfile, isNew = false }: ConfigEditor
     deleteMutation.mutate(profile.name);
   };
 
-  const handleModeChange = (nextMode: EditorMode) => {
-    if (nextMode === mode) {
-      return;
-    }
-
-    if (nextMode === "yaml") {
-      try {
-        const payload = buildStructuredPayload(form.state.values, rawConfigSource);
-        setRawConfigSource(parseGomtmConfigYaml(payload.config_yaml));
-        updateRawConfigYaml(payload.config_yaml);
-        setYamlError(null);
-        setMode("yaml");
-      } catch (error) {
-        toast.error(error instanceof Error ? error.message : "结构化配置同步失败");
-      }
-      return;
-    }
-
-    try {
-      const parsedSource = parseGomtmConfigYaml(rawConfigYamlRef.current);
-      const parsedDocument = extractGomtmConfigDocument(parsedSource);
-      const nextFormValues: ConfigEditorFormValues = {
-        ...getFormValues(profile, parsedDocument),
-        name: form.state.values.name,
-        description: form.state.values.description,
-      };
-
-      setRawConfigSource(parsedSource);
-      setFormDefaults(nextFormValues);
-      setYamlError(null);
-      setMode("form");
-    } catch (error) {
-      setYamlError(error instanceof Error ? error.message : "YAML 解析失败");
-      toast.error(error instanceof Error ? error.message : "YAML 解析失败");
-    }
-  };
-
-  const handleYamlImport = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-
-    if (!file) {
-      return;
-    }
-
-    try {
-      updateRawConfigYaml(await file.text());
-      setYamlError(null);
-      toast.success("YAML 已导入");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "YAML 导入失败";
-      setYamlError(message);
-      toast.error(message);
-    } finally {
-      event.target.value = "";
-    }
-  };
-
-  const handleYamlExport = () => {
-    const objectUrl = URL.createObjectURL(new Blob([rawConfigYamlRef.current], { type: "application/x-yaml;charset=utf-8" }));
-    const downloadLink = document.createElement("a");
-    downloadLink.href = objectUrl;
-    downloadLink.download = `${profile.name || "gomtm-config"}.yaml`;
-    document.body.appendChild(downloadLink);
-    downloadLink.click();
-    document.body.removeChild(downloadLink);
-    URL.revokeObjectURL(objectUrl);
-  };
-
   const deletePending = deleteMutation.isPending;
   const copyPending = startupCommandMutation.isPending;
   const headerActionsDisabled = deletePending || saveMutation.isPending || copyPending;
@@ -332,15 +207,6 @@ export function ConfigEditorView({ initialProfile, isNew = false }: ConfigEditor
             <CardDescription>编辑 gomtm worker 当前配置；保存后，后续新启动实例会读取最新远程配置。</CardDescription>
           </div>
           <div className="flex flex-wrap justify-end gap-2">
-            {mode === "form" ? (
-              <Button type="button" variant="outline" disabled={headerActionsDisabled} onClick={() => handleModeChange("yaml")}>
-                高级 YAML 编辑器
-              </Button>
-            ) : (
-              <Button type="button" variant="outline" disabled={headerActionsDisabled} onClick={() => handleModeChange("form")}>
-                返回表单
-              </Button>
-            )}
             {!isUnsavedNewProfile ? (
               <Button type="button" variant="outline" disabled={headerActionsDisabled} onClick={handleDelete}>
                 {deletePending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
@@ -385,172 +251,140 @@ export function ConfigEditorView({ initialProfile, isNew = false }: ConfigEditor
             </form.Field>
           </div>
 
-          {mode === "form" ? (
-            <div className="grid gap-6 lg:grid-cols-2">
-              <div className="space-y-4 rounded-lg border p-4">
-                <div>
-                  <h3 className="text-sm font-semibold">Server</h3>
-                  <p className="text-xs text-muted-foreground">运行时监听、实例标识与本地存储目录。</p>
-                </div>
-
-                <form.Field name="server_listen">
-                  {(field) => (
-                    <div className="space-y-2">
-                      <Label htmlFor={field.name}>监听地址</Label>
-                      <Input id={field.name} value={field.state.value} onBlur={field.handleBlur} onChange={(event) => field.handleChange(event.target.value)} />
-                    </div>
-                  )}
-                </form.Field>
-
-                <form.Field name="server_instance_id">
-                  {(field) => (
-                    <div className="space-y-2">
-                      <Label htmlFor={field.name}>实例 ID</Label>
-                      <Input id={field.name} value={field.state.value} onBlur={field.handleBlur} onChange={(event) => field.handleChange(event.target.value)} />
-                    </div>
-                  )}
-                </form.Field>
-
-                <form.Field name="server_storage_root_dir">
-                  {(field) => (
-                    <div className="space-y-2">
-                      <Label htmlFor={field.name}>存储目录</Label>
-                      <Input id={field.name} value={field.state.value} onBlur={field.handleBlur} onChange={(event) => field.handleChange(event.target.value)} />
-                    </div>
-                  )}
-                </form.Field>
+          <div className="grid gap-6 lg:grid-cols-2">
+            <div className="space-y-4 rounded-lg border p-4">
+              <div>
+                <h3 className="text-sm font-semibold">Server</h3>
+                <p className="text-xs text-muted-foreground">运行时监听、实例标识与本地存储目录。</p>
               </div>
 
-              <div className="space-y-4 rounded-lg border p-4">
-                <div>
-                  <h3 className="text-sm font-semibold">Supabase</h3>
-                  <p className="text-xs text-muted-foreground">数据库入口与匿名/服务角色密钥。</p>
-                </div>
+              <form.Field name="server_listen">
+                {(field) => (
+                  <div className="space-y-2">
+                    <Label htmlFor={field.name}>监听地址</Label>
+                    <Input id={field.name} value={field.state.value} onBlur={field.handleBlur} onChange={(event) => field.handleChange(event.target.value)} />
+                  </div>
+                )}
+              </form.Field>
 
-                <form.Field name="supabase_url">
-                  {(field) => (
-                    <div className="space-y-2">
-                      <Label htmlFor={field.name}>Supabase URL</Label>
-                      <Input id={field.name} value={field.state.value} onBlur={field.handleBlur} onChange={(event) => field.handleChange(event.target.value)} />
-                    </div>
-                  )}
-                </form.Field>
+              <form.Field name="server_instance_id">
+                {(field) => (
+                  <div className="space-y-2">
+                    <Label htmlFor={field.name}>实例 ID</Label>
+                    <Input id={field.name} value={field.state.value} onBlur={field.handleBlur} onChange={(event) => field.handleChange(event.target.value)} />
+                  </div>
+                )}
+              </form.Field>
 
-                <form.Field name="supabase_anon_key">
-                  {(field) => (
-                    <div className="space-y-2">
-                      <Label htmlFor={field.name}>Supabase Anon Key</Label>
-                      <Input type="password" id={field.name} value={field.state.value} onBlur={field.handleBlur} onChange={(event) => field.handleChange(event.target.value)} />
-                    </div>
-                  )}
-                </form.Field>
-
-                <form.Field name="supabase_service_role_key">
-                  {(field) => (
-                    <div className="space-y-2">
-                      <Label htmlFor={field.name}>Supabase Service Role Key</Label>
-                      <Input type="password" id={field.name} value={field.state.value} onBlur={field.handleBlur} onChange={(event) => field.handleChange(event.target.value)} />
-                    </div>
-                  )}
-                </form.Field>
-              </div>
-
-              <div className="space-y-4 rounded-lg border p-4">
-                <div>
-                  <h3 className="text-sm font-semibold">Cloudflare</h3>
-                  <p className="text-xs text-muted-foreground">Cloudflare Token、Account、Zone 与 Tunnel 域名。</p>
-                </div>
-
-                <form.Field name="cloudflare_api_token">
-                  {(field) => (
-                    <div className="space-y-2">
-                      <Label htmlFor={field.name}>Cloudflare API Token</Label>
-                      <Input type="password" id={field.name} value={field.state.value} onBlur={field.handleBlur} onChange={(event) => field.handleChange(event.target.value)} />
-                    </div>
-                  )}
-                </form.Field>
-
-                <form.Field name="cloudflare_account_id">
-                  {(field) => (
-                    <div className="space-y-2">
-                      <Label htmlFor={field.name}>Cloudflare Account ID</Label>
-                      <Input id={field.name} value={field.state.value} onBlur={field.handleBlur} onChange={(event) => field.handleChange(event.target.value)} />
-                    </div>
-                  )}
-                </form.Field>
-
-                <form.Field name="cloudflare_zone_id">
-                  {(field) => (
-                    <div className="space-y-2">
-                      <Label htmlFor={field.name}>Cloudflare Zone ID</Label>
-                      <Input id={field.name} value={field.state.value} onBlur={field.handleBlur} onChange={(event) => field.handleChange(event.target.value)} />
-                    </div>
-                  )}
-                </form.Field>
-
-                <form.Field name="cloudflare_tunnel_domain">
-                  {(field) => (
-                    <div className="space-y-2">
-                      <Label htmlFor={field.name}>Tunnel Domain</Label>
-                      <Input id={field.name} value={field.state.value} onBlur={field.handleBlur} onChange={(event) => field.handleChange(event.target.value)} />
-                    </div>
-                  )}
-                </form.Field>
-              </div>
-
-              <div className="space-y-4 rounded-lg border p-4">
-                <div>
-                  <h3 className="text-sm font-semibold">MTMAI</h3>
-                  <p className="text-xs text-muted-foreground">Hermes Gateway 的开关位。</p>
-                </div>
-
-                <form.Field name="hermes_gateway_enable">
-                  {(field) => (
-                    <div className="flex items-center gap-3 rounded-md border px-3 py-2">
-                      <input
-                        id={field.name}
-                        type="checkbox"
-                        checked={field.state.value}
-                        onBlur={field.handleBlur}
-                        onChange={(event) => field.handleChange(event.target.checked)}
-                      />
-                      <Label htmlFor={field.name}>启用 Hermes Gateway</Label>
-                    </div>
-                  )}
-                </form.Field>
-              </div>
+              <form.Field name="server_storage_root_dir">
+                {(field) => (
+                  <div className="space-y-2">
+                    <Label htmlFor={field.name}>存储目录</Label>
+                    <Input id={field.name} value={field.state.value} onBlur={field.handleBlur} onChange={(event) => field.handleChange(event.target.value)} />
+                  </div>
+                )}
+              </form.Field>
             </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="flex flex-wrap justify-end gap-2">
-                <input
-                  ref={yamlImportInputRef}
-                  aria-label="导入 YAML 文件"
-                  className="hidden"
-                  type="file"
-                  accept=".yaml,.yml,text/yaml,application/x-yaml"
-                  onChange={(event) => {
-                    void handleYamlImport(event);
-                  }}
-                />
-                <Button type="button" variant="outline" onClick={() => yamlImportInputRef.current?.click()}>
-                  导入 YAML
-                </Button>
-                <Button type="button" variant="outline" onClick={handleYamlExport}>
-                  导出 YAML
-                </Button>
+
+            <div className="space-y-4 rounded-lg border p-4">
+              <div>
+                <h3 className="text-sm font-semibold">Supabase</h3>
+                <p className="text-xs text-muted-foreground">数据库入口与匿名/服务角色密钥。</p>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="raw-yaml">原始 YAML</Label>
-                <Textarea
-                  id="raw-yaml"
-                  className="min-h-[420px] font-mono text-sm"
-                  value={rawConfigYaml}
-                  onChange={(event) => updateRawConfigYaml(event.target.value)}
-                />
-              </div>
+
+              <form.Field name="supabase_url">
+                {(field) => (
+                  <div className="space-y-2">
+                    <Label htmlFor={field.name}>Supabase URL</Label>
+                    <Input id={field.name} value={field.state.value} onBlur={field.handleBlur} onChange={(event) => field.handleChange(event.target.value)} />
+                  </div>
+                )}
+              </form.Field>
+
+              <form.Field name="supabase_anon_key">
+                {(field) => (
+                  <div className="space-y-2">
+                    <Label htmlFor={field.name}>Supabase Anon Key</Label>
+                    <Input type="password" id={field.name} value={field.state.value} onBlur={field.handleBlur} onChange={(event) => field.handleChange(event.target.value)} />
+                  </div>
+                )}
+              </form.Field>
+
+              <form.Field name="supabase_service_role_key">
+                {(field) => (
+                  <div className="space-y-2">
+                    <Label htmlFor={field.name}>Supabase Service Role Key</Label>
+                    <Input type="password" id={field.name} value={field.state.value} onBlur={field.handleBlur} onChange={(event) => field.handleChange(event.target.value)} />
+                  </div>
+                )}
+              </form.Field>
             </div>
-          )}
+
+            <div className="space-y-4 rounded-lg border p-4">
+              <div>
+                <h3 className="text-sm font-semibold">Cloudflare</h3>
+                <p className="text-xs text-muted-foreground">Cloudflare Token、Account、Zone 与 Tunnel 域名。</p>
+              </div>
+
+              <form.Field name="cloudflare_api_token">
+                {(field) => (
+                  <div className="space-y-2">
+                    <Label htmlFor={field.name}>Cloudflare API Token</Label>
+                    <Input type="password" id={field.name} value={field.state.value} onBlur={field.handleBlur} onChange={(event) => field.handleChange(event.target.value)} />
+                  </div>
+                )}
+              </form.Field>
+
+              <form.Field name="cloudflare_account_id">
+                {(field) => (
+                  <div className="space-y-2">
+                    <Label htmlFor={field.name}>Cloudflare Account ID</Label>
+                    <Input id={field.name} value={field.state.value} onBlur={field.handleBlur} onChange={(event) => field.handleChange(event.target.value)} />
+                  </div>
+                )}
+              </form.Field>
+
+              <form.Field name="cloudflare_zone_id">
+                {(field) => (
+                  <div className="space-y-2">
+                    <Label htmlFor={field.name}>Cloudflare Zone ID</Label>
+                    <Input id={field.name} value={field.state.value} onBlur={field.handleBlur} onChange={(event) => field.handleChange(event.target.value)} />
+                  </div>
+                )}
+              </form.Field>
+
+              <form.Field name="cloudflare_tunnel_domain">
+                {(field) => (
+                  <div className="space-y-2">
+                    <Label htmlFor={field.name}>Tunnel Domain</Label>
+                    <Input id={field.name} value={field.state.value} onBlur={field.handleBlur} onChange={(event) => field.handleChange(event.target.value)} />
+                  </div>
+                )}
+              </form.Field>
+            </div>
+
+            <div className="space-y-4 rounded-lg border p-4">
+              <div>
+                <h3 className="text-sm font-semibold">MTMAI</h3>
+                <p className="text-xs text-muted-foreground">Hermes Gateway 的开关位。</p>
+              </div>
+
+              <form.Field name="hermes_gateway_enable">
+                {(field) => (
+                  <div className="flex items-center gap-3 rounded-md border px-3 py-2">
+                    <input
+                      id={field.name}
+                      type="checkbox"
+                      checked={field.state.value}
+                      onBlur={field.handleBlur}
+                      onChange={(event) => field.handleChange(event.target.checked)}
+                    />
+                    <Label htmlFor={field.name}>启用 Hermes Gateway</Label>
+                  </div>
+                )}
+              </form.Field>
+            </div>
+          </div>
 
           <form.Subscribe
             selector={(state) => state.values}
@@ -579,7 +413,6 @@ export function ConfigEditorView({ initialProfile, isNew = false }: ConfigEditor
               );
             }}
           />
-          {yamlError ? <div className="text-sm text-destructive">{yamlError}</div> : null}
         </form>
       </CardContent>
     </Card>
@@ -588,15 +421,6 @@ export function ConfigEditorView({ initialProfile, isNew = false }: ConfigEditor
 
 export function EmptyConfigEditorView({ name }: { name: string }) {
   const defaultProfile = createDefaultGomtmConfigProfile(name);
-  const defaultSource = overlayGomtmConfigDocument({}, createDefaultGomtmConfigDocument());
 
-  return (
-    <ConfigEditorView
-      isNew
-      initialProfile={{
-        ...defaultProfile,
-        config_yaml: stringifyGomtmConfigSource(defaultSource),
-      }}
-    />
-  );
+  return <ConfigEditorView isNew initialProfile={defaultProfile} />;
 }
