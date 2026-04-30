@@ -235,6 +235,47 @@ gomtmConfigsRoute.put("/config-profiles/:name", zValidator("json", upsertProfile
   return c.json(profile.record);
 });
 
+gomtmConfigsRoute.delete("/config-profiles/:name", async (c) => {
+  const trustedResponse = requireTrustedControlPlaneRequest(c);
+  if (trustedResponse) {
+    return trustedResponse;
+  }
+
+  const auth = await getAuthenticatedSupabase(c);
+  if (auth.response) {
+    return auth.response;
+  }
+
+  const profileName = c.req.param("name");
+  const currentProfile = await auth.supabase.rpc<GomtmConfigProfileRecord[] | GomtmConfigProfileRecord | null>("gomtm_config_profile_get", {
+    p_name: profileName,
+  });
+  if (currentProfile.error) {
+    return createControlPlaneRpcErrorResponse(c, currentProfile.error, "failed to delete config profile");
+  }
+
+  const existingProfile = normalizeSingletonRpcRow(currentProfile.data);
+  if (existingProfile.multiple) {
+    return c.json({ error: "failed to delete config profile" }, 500);
+  }
+  if (!existingProfile.record) {
+    return c.json({ error: "not found" }, 404);
+  }
+
+  const { data, error } = await auth.supabase.rpc<boolean>("gomtm_config_profile_delete", {
+    p_name: profileName,
+  });
+  if (error) {
+    return createControlPlaneRpcErrorResponse(c, error, "failed to delete config profile");
+  }
+
+  if (!data) {
+    return c.json({ error: "not found" }, 404);
+  }
+
+  return c.json({ success: true });
+});
+
 gomtmConfigsRoute.post("/config-profiles/:name/runtime-url", async (c) => {
   const trustedResponse = requireTrustedControlPlaneRequest(c);
   if (trustedResponse) {

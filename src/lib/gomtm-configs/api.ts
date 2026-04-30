@@ -67,6 +67,19 @@ export async function saveConfigProfile(name: string, payload: GomtmConfigProfil
   return GomtmConfigProfileSchema.parse(await response.json());
 }
 
+export async function deleteConfigProfile(name: string) {
+  const response = await fetch(`/api/cf/gomtm/config-profiles/${encodeURIComponent(name)}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    await readApiError(response);
+  }
+
+  return (await response.json()) as { success: boolean };
+}
+
 export async function fetchStartupCommand(name: string) {
   const response = await fetch(`/api/cf/gomtm/config-profiles/${encodeURIComponent(name)}/command`, {
     method: "POST",

@@ -1,13 +1,13 @@
 "use client";
 
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { Copy, Edit3, Loader2, Plus } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Copy, Loader2, Plus, Trash2 } from "lucide-react";
 import { Button } from "mtxuilib/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "mtxuilib/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "mtxuilib/ui/table";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { fetchConfigProfiles, fetchStartupCommand } from "@/lib/gomtm-configs/api";
+import { deleteConfigProfile, fetchConfigProfiles, fetchStartupCommand } from "@/lib/gomtm-configs/api";
 
 const CONFIG_PROFILES_QUERY_KEY = ["gomtm-config-profiles"] as const;
 
@@ -21,6 +21,7 @@ function formatTimestamp(value: string | null | undefined) {
 
 export function ConfigListView() {
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   const profilesQuery = useQuery({
     queryKey: CONFIG_PROFILES_QUERY_KEY,
@@ -38,6 +39,25 @@ export function ConfigListView() {
       toast.error(error instanceof Error ? error.message : "复制启动命令失败");
     },
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteConfigProfile,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: CONFIG_PROFILES_QUERY_KEY });
+      toast.success("配置已删除");
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "删除配置失败");
+    },
+  });
+
+  const handleDelete = (name: string) => {
+    if (!window.confirm(`确定要删除配置 ${name} 吗？`)) {
+      return;
+    }
+
+    deleteMutation.mutate(name);
+  };
 
   return (
     <Card>
@@ -78,30 +98,40 @@ export function ConfigListView() {
               <TableBody>
                 {items.map((item) => {
                   const copyPending = startupCommandMutation.isPending && startupCommandMutation.variables === item.name;
+                  const deletePending = deleteMutation.isPending && deleteMutation.variables === item.name;
+                  const rowActionsDisabled = deletePending || copyPending;
                   const metadata = item.description?.trim() ?? "";
 
                   return (
                     <TableRow key={item.name}>
                       <TableCell>
-                        <div className="font-medium">{item.name}</div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="h-auto p-0 font-medium"
+                          disabled={rowActionsDisabled}
+                          onClick={() => router.push(`/dash/gomtm/configs/${item.name}`)}
+                        >
+                          {item.name}
+                        </Button>
                         {metadata ? <div className="text-xs text-muted-foreground">{metadata}</div> : null}
                       </TableCell>
                       <TableCell className="text-muted-foreground">{formatTimestamp(item.updated_at)}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          <Button type="button" variant="outline" size="sm" onClick={() => router.push(`/dash/gomtm/configs/${item.name}`)}>
-                            <Edit3 className="mr-2 h-4 w-4" />
-                            编辑
-                          </Button>
                           <Button
                             type="button"
                             variant="outline"
                             size="sm"
-                            disabled={copyPending}
+                            disabled={copyPending || rowActionsDisabled}
                             onClick={() => startupCommandMutation.mutate(item.name)}
                           >
                             {copyPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Copy className="mr-2 h-4 w-4" />}
                             复制启动命令
+                          </Button>
+                          <Button type="button" variant="outline" size="sm" disabled={rowActionsDisabled} onClick={() => handleDelete(item.name)}>
+                            {deletePending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                            删除
                           </Button>
                         </div>
                       </TableCell>

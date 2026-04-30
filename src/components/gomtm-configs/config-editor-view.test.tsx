@@ -9,6 +9,7 @@ import { ConfigEditorView } from "./config-editor-view";
 
 const saveConfigProfile = vi.fn();
 const createConfigProfile = vi.fn();
+const deleteConfigProfile = vi.fn();
 const fetchStartupCommand = vi.fn();
 const toastSuccess = vi.fn();
 const toastError = vi.fn();
@@ -17,6 +18,7 @@ const replaceMock = vi.fn();
 vi.mock("@/lib/gomtm-configs/api", () => ({
   saveConfigProfile: (...args: unknown[]) => saveConfigProfile(...args),
   createConfigProfile: (...args: unknown[]) => createConfigProfile(...args),
+  deleteConfigProfile: (...args: unknown[]) => deleteConfigProfile(...args),
   fetchStartupCommand: (...args: unknown[]) => fetchStartupCommand(...args),
 }));
 
@@ -107,6 +109,7 @@ describe("ConfigEditorView", () => {
     cleanup();
     saveConfigProfile.mockReset();
     createConfigProfile.mockReset();
+    deleteConfigProfile.mockReset();
     fetchStartupCommand.mockReset();
     toastSuccess.mockReset();
     toastError.mockReset();
@@ -336,6 +339,161 @@ describe("ConfigEditorView", () => {
 
     const [saveName] = saveConfigProfile.mock.calls[0] as [string, Record<string, unknown>];
     expect(saveName).toBe("custom1");
+  });
+
+  it("deletes a saved profile from the detail editor and redirects back to the list", async () => {
+    deleteConfigProfile.mockResolvedValue({ success: true });
+
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    renderView();
+
+    fireEvent.click(screen.getByRole("button", { name: "删除" }));
+
+    await waitFor(() => {
+      expect(confirmSpy).toHaveBeenCalledWith("确定要删除配置 custom1 吗？");
+      expect(deleteConfigProfile.mock.calls[0]?.[0]).toBe("custom1");
+      expect(toastSuccess).toHaveBeenCalledWith("配置已删除");
+      expect(replaceMock).toHaveBeenCalledWith("/dash/gomtm/configs");
+    });
+  });
+
+  it("does not delete from the detail editor when confirmation is cancelled", () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+
+    renderView();
+
+    fireEvent.click(screen.getByRole("button", { name: "删除" }));
+
+    expect(confirmSpy).toHaveBeenCalledWith("确定要删除配置 custom1 吗？");
+    expect(deleteConfigProfile).not.toHaveBeenCalled();
+  });
+
+  it("surfaces the delete error toast in the detail editor", async () => {
+    deleteConfigProfile.mockRejectedValue(new Error("后端删除失败"));
+
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    renderView();
+
+    fireEvent.click(screen.getByRole("button", { name: "删除" }));
+
+    await waitFor(() => {
+      expect(toastError).toHaveBeenCalledWith("后端删除失败");
+    });
+  });
+
+  it("disables conflicting editor actions while delete is pending", async () => {
+    let resolveDelete: ((value: { success: boolean }) => void) | undefined;
+    deleteConfigProfile.mockReturnValue(
+      new Promise<{ success: boolean }>((resolve) => {
+        resolveDelete = resolve;
+      }),
+    );
+
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    renderView();
+
+    const modeButton = screen.getByRole("button", { name: "高级 YAML 编辑器" }) as HTMLButtonElement;
+    const copyButton = screen.getByRole("button", { name: "复制启动命令" }) as HTMLButtonElement;
+    const saveButton = screen.getByRole("button", { name: "保存" }) as HTMLButtonElement;
+    const deleteButton = screen.getByRole("button", { name: "删除" }) as HTMLButtonElement;
+
+    fireEvent.click(deleteButton);
+
+    await waitFor(() => {
+      expect(modeButton.disabled).toBe(true);
+      expect(copyButton.disabled).toBe(true);
+      expect(saveButton.disabled).toBe(true);
+      expect(deleteButton.disabled).toBe(true);
+    });
+
+    fireEvent.click(modeButton);
+    fireEvent.click(copyButton);
+    fireEvent.click(saveButton);
+
+    expect(screen.queryByLabelText("原始 YAML")).toBeNull();
+    expect(fetchStartupCommand).not.toHaveBeenCalled();
+    expect(saveConfigProfile).not.toHaveBeenCalled();
+
+    resolveDelete?.({ success: true });
+
+    await waitFor(() => {
+      expect(toastSuccess).toHaveBeenCalledWith("配置已删除");
+    });
+  });
+
+  it("disables header delete while startup-command copy is pending", async () => {
+    let resolveCopy: ((value: { command: string }) => void) | undefined;
+    fetchStartupCommand.mockReturnValue(
+      new Promise<{ command: string }>((resolve) => {
+        resolveCopy = resolve;
+      }),
+    );
+
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    renderView();
+
+    const modeButton = screen.getByRole("button", { name: "高级 YAML 编辑器" }) as HTMLButtonElement;
+    const copyButton = screen.getByRole("button", { name: "复制启动命令" }) as HTMLButtonElement;
+    const deleteButton = screen.getByRole("button", { name: "删除" }) as HTMLButtonElement;
+
+    fireEvent.click(copyButton);
+
+    await waitFor(() => {
+      expect(modeButton.disabled).toBe(true);
+      expect(copyButton.disabled).toBe(true);
+      expect(deleteButton.disabled).toBe(true);
+    });
+
+    fireEvent.click(deleteButton);
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(deleteConfigProfile).not.toHaveBeenCalled();
+
+    resolveCopy?.({ command: "gomtm server --config=demo" });
+
+    await waitFor(() => {
+      expect(toastSuccess).toHaveBeenCalledWith("启动命令已复制");
+    });
+  });
+
+  it("disables delete and mode toggle while save is pending", async () => {
+    let resolveSave: ((value: typeof initialProfile) => void) | undefined;
+    saveConfigProfile.mockReturnValue(
+      new Promise<typeof initialProfile>((resolve) => {
+        resolveSave = resolve;
+      }),
+    );
+
+    renderView();
+
+    const modeButton = screen.getByRole("button", { name: "高级 YAML 编辑器" }) as HTMLButtonElement;
+    const deleteButton = screen.getByRole("button", { name: "删除" }) as HTMLButtonElement;
+
+    fireEvent.change(screen.getByLabelText("描述"), {
+      target: { value: "save pending update" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+
+    await waitFor(() => {
+      expect(modeButton.disabled).toBe(true);
+      expect(deleteButton.disabled).toBe(true);
+    });
+
+    fireEvent.click(modeButton);
+    fireEvent.click(deleteButton);
+
+    expect(screen.queryByLabelText("原始 YAML")).toBeNull();
+    expect(deleteConfigProfile).not.toHaveBeenCalled();
+
+    resolveSave?.({ ...initialProfile, description: "save pending update" });
+
+    await waitFor(() => {
+      expect(toastSuccess).toHaveBeenCalledWith("配置已保存");
+    });
   });
 
   it("disables startup-command copy for unsaved new profiles", async () => {

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Copy, Loader2, Save } from "lucide-react";
+import { Copy, Loader2, Save, Trash2 } from "lucide-react";
 import { Button } from "mtxuilib/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "mtxuilib/ui/card";
 import { Input } from "mtxuilib/ui/input";
@@ -25,7 +25,7 @@ import {
   type GomtmConfigProfile,
   type GomtmConfigProfileUpsert,
 } from "./config-schema";
-import { createConfigProfile, fetchStartupCommand, saveConfigProfile } from "@/lib/gomtm-configs/api";
+import { createConfigProfile, deleteConfigProfile, fetchStartupCommand, saveConfigProfile } from "@/lib/gomtm-configs/api";
 
 const CONFIG_PROFILES_QUERY_KEY = ["gomtm-config-profiles"] as const;
 
@@ -230,6 +230,27 @@ export function ConfigEditorView({ initialProfile, isNew = false }: ConfigEditor
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: deleteConfigProfile,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: CONFIG_PROFILES_QUERY_KEY });
+      await queryClient.invalidateQueries({ queryKey: ["gomtm-config-profile", profile.name] });
+      toast.success("配置已删除");
+      router.replace("/dash/gomtm/configs");
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "删除配置失败");
+    },
+  });
+
+  const handleDelete = () => {
+    if (!window.confirm(`确定要删除配置 ${profile.name} 吗？`)) {
+      return;
+    }
+
+    deleteMutation.mutate(profile.name);
+  };
+
   const handleModeChange = (nextMode: EditorMode) => {
     if (nextMode === mode) {
       return;
@@ -298,6 +319,10 @@ export function ConfigEditorView({ initialProfile, isNew = false }: ConfigEditor
     URL.revokeObjectURL(objectUrl);
   };
 
+  const deletePending = deleteMutation.isPending;
+  const copyPending = startupCommandMutation.isPending;
+  const headerActionsDisabled = deletePending || saveMutation.isPending || copyPending;
+
   return (
     <Card>
       <CardHeader>
@@ -306,15 +331,23 @@ export function ConfigEditorView({ initialProfile, isNew = false }: ConfigEditor
             <CardTitle className="text-xl">{profile.name}</CardTitle>
             <CardDescription>编辑 gomtm worker 当前配置；保存后，后续新启动实例会读取最新远程配置。</CardDescription>
           </div>
-          {mode === "form" ? (
-            <Button type="button" variant="outline" onClick={() => handleModeChange("yaml")}>
-              高级 YAML 编辑器
-            </Button>
-          ) : (
-            <Button type="button" variant="outline" onClick={() => handleModeChange("form")}>
-              返回表单
-            </Button>
-          )}
+          <div className="flex flex-wrap justify-end gap-2">
+            {mode === "form" ? (
+              <Button type="button" variant="outline" disabled={headerActionsDisabled} onClick={() => handleModeChange("yaml")}>
+                高级 YAML 编辑器
+              </Button>
+            ) : (
+              <Button type="button" variant="outline" disabled={headerActionsDisabled} onClick={() => handleModeChange("form")}>
+                返回表单
+              </Button>
+            )}
+            {!isUnsavedNewProfile ? (
+              <Button type="button" variant="outline" disabled={headerActionsDisabled} onClick={handleDelete}>
+                {deletePending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                删除
+              </Button>
+            ) : null}
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -530,13 +563,13 @@ export function ConfigEditorView({ initialProfile, isNew = false }: ConfigEditor
                     <Button
                       type="button"
                       variant="outline"
-                      disabled={startupCommandMutation.isPending || isUnsavedNewProfile}
+                      disabled={copyPending || deletePending || isUnsavedNewProfile}
                       onClick={() => startupCommandMutation.mutate()}
                     >
-                      {startupCommandMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Copy className="mr-2 h-4 w-4" />}
+                      {copyPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Copy className="mr-2 h-4 w-4" />}
                       复制启动命令
                     </Button>
-                    <Button type="submit" disabled={saveMutation.isPending}>
+                    <Button type="submit" disabled={saveMutation.isPending || deletePending}>
                       {saveMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                       保存
                     </Button>

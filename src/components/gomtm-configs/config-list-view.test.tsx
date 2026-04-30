@@ -8,6 +8,7 @@ import { ConfigListView } from "./config-list-view";
 
 const fetchConfigProfiles = vi.fn();
 const fetchStartupCommand = vi.fn();
+const deleteConfigProfile = vi.fn();
 const toastSuccess = vi.fn();
 const toastError = vi.fn();
 const pushMock = vi.fn();
@@ -15,6 +16,7 @@ const pushMock = vi.fn();
 vi.mock("@/lib/gomtm-configs/api", () => ({
   fetchConfigProfiles: (...args: unknown[]) => fetchConfigProfiles(...args),
   fetchStartupCommand: (...args: unknown[]) => fetchStartupCommand(...args),
+  deleteConfigProfile: (...args: unknown[]) => deleteConfigProfile(...args),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -52,6 +54,12 @@ vi.mock("mtxuilib/ui/table", () => ({
 }));
 
 describe("ConfigListView", () => {
+  const defaultItem = {
+    name: "custom1",
+    description: "Demo profile",
+    updated_at: "2026-04-29T03:00:00Z",
+  };
+
   function renderView() {
     const queryClient = new QueryClient({
       defaultOptions: {
@@ -71,6 +79,7 @@ describe("ConfigListView", () => {
     cleanup();
     fetchConfigProfiles.mockReset();
     fetchStartupCommand.mockReset();
+    deleteConfigProfile.mockReset();
     toastSuccess.mockReset();
     toastError.mockReset();
     pushMock.mockReset();
@@ -79,13 +88,7 @@ describe("ConfigListView", () => {
 
   it("shows only current-config columns and copies the startup command", async () => {
     fetchConfigProfiles.mockResolvedValue({
-      items: [
-        {
-          name: "custom1",
-          description: "Demo profile",
-          updated_at: "2026-04-29T03:00:00Z",
-        },
-      ],
+      items: [defaultItem],
     });
     fetchStartupCommand.mockResolvedValue({
       command: 'gomtm server --config="https://example.com/api/cf/gomtm/runtime-configs/custom1?sig=abc" --bootstrap-credential="gbr_demo" --device-name="$(hostname)"',
@@ -141,6 +144,165 @@ describe("ConfigListView", () => {
 
     await waitFor(() => {
       expect(fetchStartupCommand.mock.calls[0]?.[0]).toBe("saved-config");
+    });
+  });
+
+  it("navigates from the title, removes row edit, and deletes after confirmation", async () => {
+    fetchConfigProfiles.mockResolvedValue({
+      items: [defaultItem],
+    });
+    deleteConfigProfile.mockResolvedValue({ success: true });
+
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    renderView();
+
+    const titleButton = await screen.findByRole("button", { name: "custom1" });
+    expect(screen.queryByRole("button", { name: "编辑" })).toBeNull();
+
+    fireEvent.click(titleButton);
+    expect(pushMock).toHaveBeenCalledWith("/dash/gomtm/configs/custom1");
+
+    fireEvent.click(screen.getByRole("button", { name: "删除" }));
+
+    await waitFor(() => {
+      expect(confirmSpy).toHaveBeenCalledWith("确定要删除配置 custom1 吗？");
+      expect(deleteConfigProfile.mock.calls[0]?.[0]).toBe("custom1");
+      expect(toastSuccess).toHaveBeenCalledWith("配置已删除");
+    });
+  });
+
+  it("does not delete when confirmation is cancelled", async () => {
+    fetchConfigProfiles.mockResolvedValue({
+      items: [defaultItem],
+    });
+
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+
+    renderView();
+
+    fireEvent.click(await screen.findByRole("button", { name: "删除" }));
+
+    expect(confirmSpy).toHaveBeenCalledWith("确定要删除配置 custom1 吗？");
+    expect(deleteConfigProfile).not.toHaveBeenCalled();
+  });
+
+  it("surfaces the delete error toast message", async () => {
+    fetchConfigProfiles.mockResolvedValue({
+      items: [defaultItem],
+    });
+    deleteConfigProfile.mockRejectedValue(new Error("后端删除失败"));
+
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    renderView();
+
+    fireEvent.click(await screen.findByRole("button", { name: "删除" }));
+
+    await waitFor(() => {
+      expect(toastError).toHaveBeenCalledWith("后端删除失败");
+    });
+  });
+
+  it("disables same-row actions while delete is pending", async () => {
+    fetchConfigProfiles.mockResolvedValue({
+      items: [defaultItem],
+    });
+
+    let resolveDelete: ((value: { success: boolean }) => void) | undefined;
+    deleteConfigProfile.mockReturnValue(
+      new Promise<{ success: boolean }>((resolve) => {
+        resolveDelete = resolve;
+      }),
+    );
+
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    renderView();
+
+    const titleButton = (await screen.findByRole("button", { name: "custom1" })) as HTMLButtonElement;
+    const copyButton = screen.getByRole("button", { name: "复制启动命令" }) as HTMLButtonElement;
+    const deleteButton = screen.getByRole("button", { name: "删除" }) as HTMLButtonElement;
+
+    fireEvent.click(deleteButton);
+
+    await waitFor(() => {
+      expect(titleButton.disabled).toBe(true);
+      expect(copyButton.disabled).toBe(true);
+      expect(deleteButton.disabled).toBe(true);
+    });
+
+    fireEvent.click(titleButton);
+    fireEvent.click(copyButton);
+
+    expect(pushMock).not.toHaveBeenCalled();
+    expect(fetchStartupCommand).not.toHaveBeenCalled();
+
+    resolveDelete?.({ success: true });
+
+    await waitFor(() => {
+      expect(toastSuccess).toHaveBeenCalledWith("配置已删除");
+    });
+  });
+
+  it("disables delete while startup-command copy is pending", async () => {
+    fetchConfigProfiles.mockResolvedValue({
+      items: [defaultItem],
+    });
+
+    let resolveCopy: ((value: { command: string }) => void) | undefined;
+    fetchStartupCommand.mockReturnValue(
+      new Promise<{ command: string }>((resolve) => {
+        resolveCopy = resolve;
+      }),
+    );
+
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    renderView();
+
+    const titleButton = (await screen.findByRole("button", { name: "custom1" })) as HTMLButtonElement;
+    const copyButton = screen.getByRole("button", { name: "复制启动命令" }) as HTMLButtonElement;
+    const deleteButton = screen.getByRole("button", { name: "删除" }) as HTMLButtonElement;
+
+    fireEvent.click(copyButton);
+
+    await waitFor(() => {
+      expect(titleButton.disabled).toBe(true);
+      expect(copyButton.disabled).toBe(true);
+      expect(deleteButton.disabled).toBe(true);
+    });
+
+    fireEvent.click(deleteButton);
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(deleteConfigProfile).not.toHaveBeenCalled();
+
+    resolveCopy?.({ command: "gomtm server --config=demo" });
+
+    await waitFor(() => {
+      expect(toastSuccess).toHaveBeenCalledWith("启动命令已复制");
+    });
+  });
+
+  it("refreshes the list after a successful delete", async () => {
+    fetchConfigProfiles.mockResolvedValueOnce({
+      items: [defaultItem],
+    });
+    fetchConfigProfiles.mockResolvedValueOnce({
+      items: [],
+    });
+    deleteConfigProfile.mockResolvedValue({ success: true });
+
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    renderView();
+
+    fireEvent.click(await screen.findByRole("button", { name: "删除" }));
+
+    await waitFor(() => {
+      expect(screen.queryByText("custom1")).toBeNull();
+      expect(screen.getByText("暂无配置 profiles。")).toBeTruthy();
     });
   });
 });

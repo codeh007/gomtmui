@@ -343,6 +343,88 @@ describe("gomtm config control-plane routes", () => {
     });
   });
 
+  it("deletes a config profile through the control-plane API", async () => {
+    rpc.mockResolvedValueOnce({
+      data: [{ name: "custom1", description: "desc", config_yaml: "server:\n  listen: :8383\n" }],
+      error: null,
+    });
+    rpc.mockResolvedValueOnce({
+      data: true,
+      error: null,
+    });
+
+    const response = await app.request("http://example.com/api/cf/gomtm/config-profiles/custom1", {
+      method: "DELETE",
+      headers: trustedDashboardHeaders,
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ success: true });
+    expect(rpc).toHaveBeenNthCalledWith(1, "gomtm_config_profile_get", {
+      p_name: "custom1",
+    });
+    expect(rpc).toHaveBeenNthCalledWith(2, "gomtm_config_profile_delete", {
+      p_name: "custom1",
+    });
+  });
+
+  it("returns 404 when deleting a missing config profile", async () => {
+    rpc.mockResolvedValueOnce({
+      data: [],
+      error: null,
+    });
+
+    const response = await app.request("http://example.com/api/cf/gomtm/config-profiles/missing", {
+      method: "DELETE",
+      headers: trustedDashboardHeaders,
+    });
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: "not found" });
+    expect(rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns a stable 500 when delete lookup RPC returns multiple rows", async () => {
+    rpc.mockResolvedValueOnce({
+      data: [{ name: "custom1" }, { name: "custom1-duplicate" }],
+      error: null,
+    });
+
+    const response = await app.request("http://example.com/api/cf/gomtm/config-profiles/custom1", {
+      method: "DELETE",
+      headers: trustedDashboardHeaders,
+    });
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: "failed to delete config profile" });
+    expect(rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns 404 when delete RPC returns a falsy payload", async () => {
+    rpc.mockResolvedValueOnce({
+      data: [{ name: "custom1", description: "desc", config_yaml: "server:\n  listen: :8383\n" }],
+      error: null,
+    });
+    rpc.mockResolvedValueOnce({
+      data: false,
+      error: null,
+    });
+
+    const response = await app.request("http://example.com/api/cf/gomtm/config-profiles/custom1", {
+      method: "DELETE",
+      headers: trustedDashboardHeaders,
+    });
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: "not found" });
+    expect(rpc).toHaveBeenNthCalledWith(1, "gomtm_config_profile_get", {
+      p_name: "custom1",
+    });
+    expect(rpc).toHaveBeenNthCalledWith(2, "gomtm_config_profile_delete", {
+      p_name: "custom1",
+    });
+  });
+
   it("preserves the stored vmess wrapper_secret when saving an existing config profile", async () => {
     rpc.mockResolvedValueOnce({
       data: [{
