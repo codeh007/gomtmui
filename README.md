@@ -38,6 +38,7 @@ bun run build:worker
 
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `CLOUDFLARE_API_TOKEN`
+- `GOMTM_RUNTIME_CONFIG_SIGNING_SECRET`
 
 ## Cloudflare Secrets
 
